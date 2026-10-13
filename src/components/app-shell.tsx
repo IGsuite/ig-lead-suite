@@ -9,7 +9,6 @@ import {
   SheetContent,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -30,14 +29,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
             <p className="text-xs text-[color:var(--ink-muted)]">Ops desk</p>
           </div>
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Open menu"
+            onClick={() => setOpen(true)}
+          >
+            <Menu className="size-4" />
+          </Button>
           <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger
-              render={
-                <Button variant="outline" size="icon" aria-label="Open menu" />
-              }
-            >
-              <Menu className="size-4" />
-            </SheetTrigger>
             <SheetContent side="left" className="w-72 p-0">
               <SheetHeader className="sr-only">
                 <SheetTitle>Navigation</SheetTitle>

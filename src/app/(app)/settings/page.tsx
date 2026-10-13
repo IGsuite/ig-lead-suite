@@ -61,7 +61,7 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="Settings & providers"
-        description="One main backend. Four entity portals. Lock real domains and website API URLs under each entity, then wire Supabase / SES / Twilio."
+        description="One main backend. Five entity portals. Domains are set from your live sites — wire Supabase / SES / Twilio next."
       />
 
       <section className="mb-6 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise">

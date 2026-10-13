@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Building2,
@@ -12,6 +11,7 @@ import {
   ShieldOff,
   Users,
 } from "lucide-react";
+import { useClientPathname } from "@/hooks/use-client-pathname";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -26,7 +26,7 @@ const nav = [
 ];
 
 export function AppSidebar() {
-  const pathname = usePathname();
+  const pathname = useClientPathname();
 
   return (
     <aside className="flex h-full w-64 flex-col border-r border-[color:var(--ink-border)] bg-[color:var(--panel)]">
