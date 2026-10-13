@@ -1,0 +1,147 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-display);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --canvas: #eef3f2;
+  --panel: #ffffff;
+  --panel-hover: #e7efee;
+  --ink: #0f2a2e;
+  --ink-soft: #345055;
+  --ink-muted: #5f7478;
+  --ink-border: #d5e0de;
+  --brand-accent: #c9842a;
+  --accent-soft: #f3e2c5;
+  --background: #eef3f2;
+  --foreground: #0f2a2e;
+  --card: #ffffff;
+  --card-foreground: #0f2a2e;
+  --popover: #ffffff;
+  --popover-foreground: #0f2a2e;
+  --primary: #0f2a2e;
+  --primary-foreground: #f7fbfa;
+  --secondary: #e7efee;
+  --secondary-foreground: #0f2a2e;
+  --muted: #e7efee;
+  --muted-foreground: #5f7478;
+  --accent: #e7efee;
+  --accent-foreground: #0f2a2e;
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: #d5e0de;
+  --input: #d5e0de;
+  --ring: #0f2a2e;
+  --chart-1: #0f2a2e;
+  --chart-2: #2f6f6a;
+  --chart-3: #c9842a;
+  --chart-4: #7aa3a0;
+  --chart-5: #d8b27a;
+  --radius: 0.7rem;
+  --sidebar: #f7fbfa;
+  --sidebar-foreground: #0f2a2e;
+  --sidebar-primary: #0f2a2e;
+  --sidebar-primary-foreground: #f7fbfa;
+  --sidebar-accent: #e7efee;
+  --sidebar-accent-foreground: #0f2a2e;
+  --sidebar-border: #d5e0de;
+  --sidebar-ring: #0f2a2e;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(circle at 12% 8%, rgba(201, 132, 42, 0.12), transparent 28%),
+      radial-gradient(circle at 88% 0%, rgba(47, 111, 106, 0.14), transparent 32%),
+      linear-gradient(180deg, #f5f8f7 0%, #eef3f2 45%, #e8efed 100%);
+    background-attachment: fixed;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bar-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.animate-rise {
+  animation: rise-in 0.45s ease-out both;
+}
+
+.animate-rise-delay-1 {
+  animation: rise-in 0.5s ease-out 0.08s both;
+}
+
+.animate-rise-delay-2 {
+  animation: rise-in 0.55s ease-out 0.16s both;
+}
+
+.bar-fill {
+  transform-origin: left;
+  animation: bar-fill 0.7s ease-out both;
+}
