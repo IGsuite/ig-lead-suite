@@ -15,9 +15,9 @@ const display = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "SignalDesk — Multi-brand marketing ops",
+  title: "SignalDesk — Multi-entity outbound ops",
   description:
-    "Lead pool, brand workspaces, campaign engine, reply inbox, and source ROI for multi-brand outbound.",
+    "Shared lead pool feeding Abstract, Venture, TOAH, and Havoc portals with rotating offers.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

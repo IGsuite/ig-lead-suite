@@ -1,5 +1,7 @@
 import type { PlatformData } from "@/lib/types";
 
+export const STORE_VERSION = 2;
+
 export function createSeedData(): PlatformData {
   const now = new Date();
   const daysAgo = (n: number) =>
@@ -7,65 +9,84 @@ export function createSeedData(): PlatformData {
 
   const brands: PlatformData["brands"] = [
     {
-      id: "brand-1",
-      name: "Brand 1",
-      domain: "brand1.com",
-      sendingSubdomain: "mail.brand1.com",
+      id: "abstract",
+      name: "Abstract Capital Group",
+      shortName: "Abstract",
+      focus: "Brokerage — multiple financing programs",
+      programs: [
+        "Merchant cash advance",
+        "Unsecured financing",
+        "Secured financing",
+      ],
+      domain: "abstractcapitalgroup.com",
+      sendingSubdomain: "mail.abstractcapitalgroup.com",
+      websiteUrl: "https://abstractcapitalgroup.com",
+      websiteApiUrl: "",
       crm: "hubspot",
       status: "warming",
       phoneNumbers: ["+1 (555) 010-1001", "+1 (555) 010-1002", "+1 (555) 010-1003"],
       tenDlcStatus: "pending",
       emailAuthStatus: "partial",
       weeklySendCap: 2000,
-      notes: "Primary pilot brand. Warm-up in progress.",
+      rotationEnabled: true,
+      notes: "Pilot entity for warm-up. Full brokerage menu.",
     },
     {
-      id: "brand-2",
-      name: "Brand 2",
-      domain: "brand2.com",
-      sendingSubdomain: "mail.brand2.com",
+      id: "venture",
+      name: "Venture Business Capital",
+      shortName: "Venture",
+      focus: "Traditional financing only",
+      programs: ["Traditional term financing"],
+      domain: "venturebusinesscapital.com",
+      sendingSubdomain: "mail.venturebusinesscapital.com",
+      websiteUrl: "https://venturebusinesscapital.com",
+      websiteApiUrl: "",
       crm: "gohighlevel",
       status: "setup",
       phoneNumbers: [],
       tenDlcStatus: "not_started",
       emailAuthStatus: "missing",
       weeklySendCap: 0,
+      rotationEnabled: true,
+      notes: "Strictly traditional financing offers.",
     },
     {
-      id: "brand-3",
-      name: "Brand 3",
-      domain: "brand3.com",
-      sendingSubdomain: "mail.brand3.com",
-      crm: "salesforce",
-      status: "setup",
-      phoneNumbers: [],
-      tenDlcStatus: "not_started",
-      emailAuthStatus: "missing",
-      weeklySendCap: 0,
-    },
-    {
-      id: "brand-4",
-      name: "Brand 4",
-      domain: "brand4.com",
-      sendingSubdomain: "mail.brand4.com",
+      id: "toah",
+      name: "TOAH Marketing",
+      shortName: "TOAH",
+      focus: "SEO & marketing for business owners",
+      programs: ["SEO", "Digital marketing retainers"],
+      domain: "toahmarketing.com",
+      sendingSubdomain: "mail.toahmarketing.com",
+      websiteUrl: "https://toahmarketing.com",
+      websiteApiUrl: "",
       crm: "pipedrive",
       status: "setup",
       phoneNumbers: [],
       tenDlcStatus: "not_started",
       emailAuthStatus: "missing",
       weeklySendCap: 0,
+      rotationEnabled: true,
+      notes: "Non-lending offer — good alternate for leads that don’t fund.",
     },
     {
-      id: "brand-5",
-      name: "Brand 5",
-      domain: "brand5.com",
-      sendingSubdomain: "mail.brand5.com",
+      id: "havoc",
+      name: "Havoc Capital Group",
+      shortName: "Havoc",
+      focus: "Unsecured lending only",
+      programs: ["Unsecured business lending"],
+      domain: "havoccapitalgroup.com",
+      sendingSubdomain: "mail.havoccapitalgroup.com",
+      websiteUrl: "https://havoccapitalgroup.com",
+      websiteApiUrl: "",
       crm: "custom",
       status: "setup",
       phoneNumbers: [],
       tenDlcStatus: "not_started",
       emailAuthStatus: "missing",
       weeklySendCap: 0,
+      rotationEnabled: true,
+      notes: "Unsecured-only offer lane.",
     },
   ];
 
@@ -100,12 +121,21 @@ export function createSeedData(): PlatformData {
     "Diaz",
   ];
 
+  const entityIds = brands.map((b) => b.id);
+
   const leads: PlatformData["leads"] = [];
   for (let i = 0; i < 48; i++) {
     const src = sources[i % sources.length];
     const fn = firstNames[i % firstNames.length];
     const ln = lastNames[(i * 3) % lastNames.length];
     const optedOut = i % 17 === 0;
+    const offeredCount = optedOut ? 0 : i % 4;
+    const offeredEntityIds = entityIds.slice(0, offeredCount);
+    const lastEntityId =
+      offeredEntityIds.length > 0
+        ? offeredEntityIds[offeredEntityIds.length - 1]
+        : null;
+
     leads.push({
       id: `lead-${i + 1}`,
       email: `${fn.toLowerCase()}.${ln.toLowerCase()}${i}@example.com`,
@@ -115,12 +145,14 @@ export function createSeedData(): PlatformData {
       source: src.source,
       purchaseDate: daysAgo(10 + (i % 12)).slice(0, 10),
       costCents: src.cost,
-      brandId: i % 5 === 0 ? "brand-1" : null,
+      offeredEntityIds,
+      lastEntityId,
+      convertedEntityId: null,
       status: optedOut
         ? "opted_out"
-        : i % 9 === 0
+        : i % 11 === 0
           ? "replied"
-          : i % 4 === 0
+          : offeredCount > 0
             ? "contacted"
             : "available",
       optedOut,
@@ -132,12 +164,13 @@ export function createSeedData(): PlatformData {
   const campaigns: PlatformData["campaigns"] = [
     {
       id: "camp-1",
-      brandId: "brand-1",
-      name: "Brand 1 — March warm-up SMS",
+      brandId: "abstract",
+      name: "Abstract — MCA warm-up SMS",
       channel: "sms",
       message:
-        "Hi {{firstName}}, this is {{brand}} — quick question about your recent inquiry. Reply YES if you'd like details, or STOP to opt out.",
+        "Hi {{firstName}}, Abstract Capital Group here — working capital may be available for your business. Reply YES for options, or STOP to opt out.",
       sourceFilter: "all",
+      preferUnoffered: true,
       volume: 500,
       throttlePerHour: 80,
       status: "sending",
@@ -150,13 +183,32 @@ export function createSeedData(): PlatformData {
     },
     {
       id: "camp-2",
-      brandId: "brand-1",
-      name: "Brand 1 — Email intro A",
-      channel: "email",
-      subject: "A quick note from {{brand}}",
+      brandId: "havoc",
+      name: "Havoc — unsecured lending intro",
+      channel: "sms",
       message:
-        "Hi {{firstName}},\n\nWe help homeowners like you compare options without the pressure. Reply to this email if you want a short overview.\n\nUnsubscribe anytime.",
+        "Hi {{firstName}}, Havoc Capital Group — quick note on unsecured business funding. Reply YES if you want details, STOP to opt out.",
+      sourceFilter: "all",
+      preferUnoffered: true,
+      volume: 800,
+      throttlePerHour: 100,
+      status: "draft",
+      sentCount: 0,
+      replyCount: 0,
+      optOutCount: 0,
+      bounceCount: 0,
+      createdAt: daysAgo(1),
+    },
+    {
+      id: "camp-3",
+      brandId: "toah",
+      name: "TOAH — SEO for owners email",
+      channel: "email",
+      subject: "{{firstName}}, grow local search without guessing",
+      message:
+        "Hi {{firstName}},\n\nTOAH Marketing helps business owners win more customers through SEO. Reply if you want a short audit overview.\n\nUnsubscribe anytime.",
       sourceFilter: "LeadForge",
+      preferUnoffered: true,
       volume: 1000,
       throttlePerHour: 200,
       status: "draft",
@@ -166,13 +218,31 @@ export function createSeedData(): PlatformData {
       bounceCount: 0,
       createdAt: daysAgo(1),
     },
+    {
+      id: "camp-4",
+      brandId: "venture",
+      name: "Venture — traditional financing SMS",
+      channel: "sms",
+      message:
+        "Hi {{firstName}}, Venture Business Capital — traditional financing options for qualified businesses. Reply YES for info, STOP to opt out.",
+      sourceFilter: "all",
+      preferUnoffered: true,
+      volume: 600,
+      throttlePerHour: 90,
+      status: "draft",
+      sentCount: 0,
+      replyCount: 0,
+      optOutCount: 0,
+      bounceCount: 0,
+      createdAt: daysAgo(0),
+    },
   ];
 
   const replies: PlatformData["replies"] = [
     {
       id: "reply-1",
       campaignId: "camp-1",
-      brandId: "brand-1",
+      brandId: "abstract",
       leadId: "lead-9",
       channel: "sms",
       from: "+15551000008",
@@ -185,7 +255,7 @@ export function createSeedData(): PlatformData {
     {
       id: "reply-2",
       campaignId: "camp-1",
-      brandId: "brand-1",
+      brandId: "abstract",
       leadId: "lead-18",
       channel: "sms",
       from: "+15551000017",
@@ -198,7 +268,7 @@ export function createSeedData(): PlatformData {
     {
       id: "reply-3",
       campaignId: "camp-1",
-      brandId: "brand-1",
+      brandId: "abstract",
       leadId: "lead-27",
       channel: "sms",
       from: "+15551000026",
@@ -211,7 +281,7 @@ export function createSeedData(): PlatformData {
     {
       id: "reply-4",
       campaignId: "camp-1",
-      brandId: "brand-1",
+      brandId: "abstract",
       leadId: "lead-36",
       channel: "sms",
       from: "+15551000035",
@@ -234,31 +304,8 @@ export function createSeedData(): PlatformData {
       createdAt: l.createdAt,
     }));
 
-  const providerSpend: PlatformData["providerSpend"] = [
-    {
-      source: "LeadForge",
-      leadsPurchased: 2200,
-      costCents: 187000,
-      replies: 64,
-      conversions: 11,
-    },
-    {
-      source: "QueueData",
-      leadsPurchased: 1800,
-      costCents: 129600,
-      replies: 41,
-      conversions: 6,
-    },
-    {
-      source: "NorthList",
-      leadsPurchased: 900,
-      costCents: 85500,
-      replies: 19,
-      conversions: 2,
-    },
-  ];
-
   return {
+    version: STORE_VERSION,
     brands,
     leads,
     uploads: [
@@ -277,6 +324,34 @@ export function createSeedData(): PlatformData {
     campaigns,
     replies,
     optOuts,
-    providerSpend,
+    providerSpend: [
+      {
+        source: "LeadForge",
+        leadsPurchased: 2200,
+        costCents: 187000,
+        replies: 64,
+        conversions: 11,
+      },
+      {
+        source: "QueueData",
+        leadsPurchased: 1800,
+        costCents: 129600,
+        replies: 41,
+        conversions: 6,
+      },
+      {
+        source: "NorthList",
+        leadsPurchased: 900,
+        costCents: 85500,
+        replies: 19,
+        conversions: 2,
+      },
+    ],
+    rotation: {
+      mode: "round_robin",
+      entityOrder: ["abstract", "havoc", "venture", "toah"],
+      notes:
+        "One shared lead pool. Blasts rotate entity offers so a contact can hear from Abstract, Havoc, Venture, or TOAH — and convert with whichever fit.",
+    },
   };
 }

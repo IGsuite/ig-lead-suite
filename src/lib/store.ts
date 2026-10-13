@@ -1,6 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { createSeedData } from "@/lib/seed";
+import { STORE_VERSION, createSeedData } from "@/lib/seed";
 import type {
   Brand,
   Campaign,
@@ -8,6 +8,7 @@ import type {
   OptOut,
   PlatformData,
   Reply,
+  RotationConfig,
   UploadBatch,
 } from "@/lib/types";
 
@@ -18,7 +19,13 @@ async function ensureStore(): Promise<PlatformData> {
   await fs.mkdir(DATA_DIR, { recursive: true });
   try {
     const raw = await fs.readFile(DATA_FILE, "utf8");
-    return JSON.parse(raw) as PlatformData;
+    const parsed = JSON.parse(raw) as PlatformData;
+    if (parsed.version !== STORE_VERSION) {
+      const seed = createSeedData();
+      await writeStore(seed);
+      return seed;
+    }
+    return parsed;
   } catch {
     const seed = createSeedData();
     await fs.writeFile(DATA_FILE, JSON.stringify(seed, null, 2), "utf8");
@@ -53,8 +60,37 @@ export async function updateBrand(
   return data.brands[idx];
 }
 
+export async function updateRotation(
+  patch: Partial<RotationConfig>,
+): Promise<RotationConfig> {
+  const data = await ensureStore();
+  data.rotation = { ...data.rotation, ...patch };
+  await writeStore(data);
+  return data.rotation;
+}
+
 function normalizeContact(value?: string): string {
   return (value || "").trim().toLowerCase().replace(/[\s()-]/g, "");
+}
+
+export function isLeadEligibleForEntity(
+  lead: Lead,
+  entityId: string,
+  options: {
+    channel: Campaign["channel"];
+    sourceFilter: string;
+    preferUnoffered: boolean;
+  },
+): boolean {
+  if (lead.optedOut || lead.status === "opted_out") return false;
+  if (lead.status === "converted" || lead.convertedEntityId) return false;
+  if (options.sourceFilter !== "all" && lead.source !== options.sourceFilter)
+    return false;
+  if (options.channel === "sms" && !lead.phone) return false;
+  if (options.channel === "email" && !lead.email) return false;
+  if (options.preferUnoffered && lead.offeredEntityIds.includes(entityId))
+    return false;
+  return true;
 }
 
 export async function importLeads(input: {
@@ -121,7 +157,9 @@ export async function importLeads(input: {
       source: input.source,
       purchaseDate: input.purchaseDate,
       costCents: costPerLead,
-      brandId: null,
+      offeredEntityIds: [],
+      lastEntityId: null,
+      convertedEntityId: null,
       status: "available",
       optedOut: false,
       uploadBatchId: batchId,
@@ -197,20 +235,23 @@ export async function launchCampaign(id: string): Promise<Campaign | null> {
   const campaign = data.campaigns.find((c) => c.id === id);
   if (!campaign) return null;
 
-  const eligible = data.leads.filter((lead) => {
-    if (lead.optedOut || lead.status === "opted_out") return false;
-    if (lead.status !== "available" && lead.status !== "queued") return false;
-    if (campaign.sourceFilter !== "all" && lead.source !== campaign.sourceFilter)
-      return false;
-    if (campaign.channel === "sms" && !lead.phone) return false;
-    if (campaign.channel === "email" && !lead.email) return false;
-    return true;
-  });
+  const eligible = data.leads
+    .filter((lead) =>
+      isLeadEligibleForEntity(lead, campaign.brandId, {
+        channel: campaign.channel,
+        sourceFilter: campaign.sourceFilter,
+        preferUnoffered: campaign.preferUnoffered,
+      }),
+    )
+    .sort((a, b) => a.offeredEntityIds.length - b.offeredEntityIds.length);
 
   const toSend = eligible.slice(0, campaign.volume);
   for (const lead of toSend) {
+    if (!lead.offeredEntityIds.includes(campaign.brandId)) {
+      lead.offeredEntityIds.push(campaign.brandId);
+    }
+    lead.lastEntityId = campaign.brandId;
     lead.status = "contacted";
-    lead.brandId = campaign.brandId;
   }
 
   campaign.status = "sending";
@@ -261,6 +302,12 @@ export async function markReply(
   const reply = data.replies.find((r) => r.id === id);
   if (!reply) return null;
   Object.assign(reply, patch);
+
+  if (patch.sentiment === "interested" || reply.sentiment === "interested") {
+    const lead = data.leads.find((l) => l.id === reply.leadId);
+    if (lead) lead.status = "replied";
+  }
+
   await writeStore(data);
   return reply;
 }

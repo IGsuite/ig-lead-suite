@@ -89,8 +89,8 @@ export default function LeadsPage() {
   return (
     <div>
       <PageHeader
-        title="Lead pool"
-        description="Upload provider files with source, purchase date, and cost. Duplicates and global opt-outs are stripped before leads enter the pool."
+        title="Shared lead pool"
+        description="Upload once. These contacts can rotate through Abstract, Venture, TOAH, and Havoc offers. Duplicates and global opt-outs are stripped on import."
       />
 
       <form
@@ -191,6 +191,7 @@ export default function LeadsPage() {
               <TableRow>
                 <TableHead>Contact</TableHead>
                 <TableHead>Source</TableHead>
+                <TableHead>Offered to</TableHead>
                 <TableHead>Purchased</TableHead>
                 <TableHead>Cost</TableHead>
                 <TableHead>Status</TableHead>
@@ -209,6 +210,23 @@ export default function LeadsPage() {
                     </div>
                   </TableCell>
                   <TableCell>{lead.source}</TableCell>
+                  <TableCell>
+                    {lead.offeredEntityIds.length === 0 ? (
+                      <span className="text-xs text-[color:var(--ink-muted)]">
+                        Fresh
+                      </span>
+                    ) : (
+                      <span className="text-xs">
+                        {lead.offeredEntityIds
+                          .map(
+                            (id) =>
+                              data.brands.find((b) => b.id === id)?.shortName ||
+                              id,
+                          )
+                          .join(", ")}
+                      </span>
+                    )}
+                  </TableCell>
                   <TableCell>{relativeDay(lead.purchaseDate)}</TableCell>
                   <TableCell>{money(lead.costCents)}</TableCell>
                   <TableCell>

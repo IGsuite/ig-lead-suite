@@ -15,7 +15,7 @@ export async function GET(
   return NextResponse.json({
     brand,
     campaigns: data.campaigns.filter((c) => c.brandId === id),
-    leads: data.leads.filter((l) => l.brandId === id),
+    leads: data.leads.filter((l) => l.offeredEntityIds.includes(id)),
     replies: data.replies.filter((r) => r.brandId === id),
   });
 }

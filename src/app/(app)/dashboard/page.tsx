@@ -19,22 +19,38 @@ export default function DashboardPage() {
   const { data, loading, error, refresh } = usePlatform();
 
   if (loading) return <LoadingPanel />;
-  if (error || !data) return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
+  if (error || !data)
+    return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
 
-  const available = data.leads.filter((l) => l.status === "available").length;
+  const fresh = data.leads.filter(
+    (l) => !l.optedOut && l.offeredEntityIds.length === 0,
+  ).length;
   const optedOut = data.leads.filter((l) => l.optedOut).length;
   const unread = data.replies.filter((r) => !r.read).length;
-  const brand1 = data.brands.find((b) => b.id === "brand-1");
   const activeCampaigns = data.campaigns.filter((c) => c.status === "sending");
   const bestSource = [...data.providerSpend]
     .filter((p) => p.replies > 0)
     .sort((a, b) => a.costCents / a.replies - b.costCents / b.replies)[0];
+  const rotating = data.brands.filter((b) => b.rotationEnabled);
+
+  const entityCoverage = data.brands.map((brand) => {
+    const offered = data.leads.filter((l) =>
+      l.offeredEntityIds.includes(brand.id),
+    ).length;
+    const stillOpen = data.leads.filter(
+      (l) =>
+        !l.optedOut &&
+        l.status !== "converted" &&
+        !l.offeredEntityIds.includes(brand.id),
+    ).length;
+    return { brand, offered, stillOpen };
+  });
 
   return (
     <div>
       <PageHeader
-        title="Command overview"
-        description="Shared lead pool, Brand 1 warm-up, and source economics in one desk. Replace placeholder brand names once your five domains are locked."
+        title="Multi-entity command desk"
+        description="One shared lead pool. Four company portals — Abstract, Venture, TOAH, Havoc — each with its own offer. Same contact can rotate through different programs until they convert or opt out."
         actions={
           <>
             <Link
@@ -52,23 +68,23 @@ export default function DashboardPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 animate-rise">
         <MetricCard
-          label="Lead pool"
+          label="Shared lead pool"
           value={compactNumber(data.leads.length)}
-          hint={`${compactNumber(available)} available · ${compactNumber(optedOut)} suppressed`}
+          hint={`${compactNumber(fresh)} never offered · ${compactNumber(optedOut)} suppressed`}
         />
         <MetricCard
           label="Unread replies"
           value={compactNumber(unread)}
-          hint="Answer interested replies fast — CRM sync is mocked"
+          hint="Interested replies route to that entity’s CRM / site API"
         />
         <MetricCard
-          label="Active campaigns"
-          value={compactNumber(activeCampaigns.length)}
-          hint={
-            brand1
-              ? `${brand1.name} weekly cap ${compactNumber(brand1.weeklySendCap)}`
-              : "No pilot brand"
-          }
+          label="Rotation entities"
+          value={compactNumber(rotating.length)}
+          hint={data.rotation.entityOrder
+            .map(
+              (id) => data.brands.find((b) => b.id === id)?.shortName || id,
+            )
+            .join(" → ")}
         />
         <MetricCard
           label="Best source CPA reply"
@@ -81,60 +97,81 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-[1.2fr_0.8fr] animate-rise-delay-1">
+      <div className="mt-6 grid gap-4 xl:grid-cols-[1.15fr_0.85fr] animate-rise-delay-1">
         <section className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-[family-name:var(--font-display)] text-2xl">
-              Brand readiness
+              Entity portals
             </h2>
             <Link
               href="/brands"
               className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
             >
-              Open brands
+              Open entities
             </Link>
           </div>
+          <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
+            Each company has its own sending identity, offer, and website API
+            hook — still one backend.
+          </p>
           <div className="mt-4 space-y-3">
-            {data.brands.map((brand) => (
-              <Link
-                key={brand.id}
-                href={`/brands/${brand.id}`}
-                className="flex flex-col gap-2 rounded-xl border border-[color:var(--ink-border)] px-4 py-3 transition-colors hover:bg-[color:var(--panel-hover)] sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <div className="font-medium">{brand.name}</div>
-                  <div className="text-xs text-[color:var(--ink-muted)]">
-                    {brand.domain} · {brand.sendingSubdomain}
+            {data.brands.map((brand) => {
+              const coverage = entityCoverage.find((e) => e.brand.id === brand.id);
+              return (
+                <Link
+                  key={brand.id}
+                  href={`/brands/${brand.id}`}
+                  className="flex flex-col gap-2 rounded-xl border border-[color:var(--ink-border)] px-4 py-3 transition-colors hover:bg-[color:var(--panel-hover)] sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <div className="font-medium">{brand.name}</div>
+                    <div className="text-xs text-[color:var(--ink-muted)]">
+                      {brand.focus}
+                    </div>
+                    <div className="mt-1 text-xs text-[color:var(--ink-soft)]">
+                      {coverage
+                        ? `${compactNumber(coverage.stillOpen)} still available for this offer · ${compactNumber(coverage.offered)} already offered`
+                        : null}
+                    </div>
                   </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <StatusPill status={brand.status} />
-                  <StatusPill status={brand.tenDlcStatus} />
-                  <StatusPill status={brand.emailAuthStatus} />
-                </div>
-              </Link>
-            ))}
+                  <div className="flex flex-wrap gap-2">
+                    <StatusPill status={brand.status} />
+                    {brand.rotationEnabled ? (
+                      <span className="rounded-md border border-[color:var(--ink-border)] bg-[color:var(--accent-soft)]/50 px-2 py-0.5 text-xs">
+                        In rotation
+                      </span>
+                    ) : null}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </section>
 
         <section className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
           <h2 className="font-[family-name:var(--font-display)] text-2xl">
-            This week’s checklist
+            How the pool works
           </h2>
-          <ul className="mt-4 space-y-3 text-sm text-[color:var(--ink-soft)]">
+          <ol className="mt-4 space-y-3 text-sm text-[color:var(--ink-soft)]">
             <li className="rounded-xl bg-[color:var(--accent-soft)]/50 px-3 py-2">
-              Start / chase company 10DLC registration — longest lead time.
+              Upload once into the shared pool (source, date, cost).
             </li>
             <li className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2">
-              Lock Brand 1 domain auth (SPF/DKIM/DMARC on mail subdomain).
+              Launch an Abstract MCA blast, then later a Havoc unsecured offer,
+              then Venture or TOAH — same leads, different programs.
             </li>
             <li className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2">
-              Keep warm-up volumes low; watch bounce and opt-out rates.
+              Rotation prefers contacts who haven’t heard from that entity yet.
             </li>
             <li className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2">
-              Review cost per reply by provider before the next buy.
+              Interested reply syncs to that entity’s CRM / website API. Global
+              STOP blocks everyone.
             </li>
-          </ul>
+          </ol>
+          <p className="mt-4 text-xs text-[color:var(--ink-muted)]">
+            Active campaigns: {compactNumber(activeCampaigns.length)}. Mode:{" "}
+            {data.rotation.mode.replace("_", " ")}.
+          </p>
         </section>
       </div>
 

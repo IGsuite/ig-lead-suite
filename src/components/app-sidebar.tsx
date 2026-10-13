@@ -16,8 +16,8 @@ import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/leads", label: "Lead pool", icon: Users },
-  { href: "/brands", label: "Brands", icon: Building2 },
+  { href: "/leads", label: "Shared lead pool", icon: Users },
+  { href: "/brands", label: "Entities", icon: Building2 },
   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
   { href: "/inbox", label: "Reply inbox", icon: Inbox },
   { href: "/results", label: "Results by source", icon: BarChart3 },
@@ -36,7 +36,7 @@ export function AppSidebar() {
             SignalDesk
           </div>
           <p className="mt-1 text-xs text-[color:var(--ink-muted)]">
-            Multi-brand outbound ops
+            One backend · multi-entity offers
           </p>
         </Link>
       </div>
@@ -63,7 +63,7 @@ export function AppSidebar() {
         })}
       </nav>
       <div className="border-t border-[color:var(--ink-border)] p-4 text-xs text-[color:var(--ink-muted)]">
-        Local mock mode — Supabase, SES, Twilio, and n8n wire in later.
+        Shared pool feeds Abstract, Venture, TOAH, and Havoc portals.
       </div>
     </aside>
   );

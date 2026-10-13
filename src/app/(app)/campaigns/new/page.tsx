@@ -26,14 +26,17 @@ function CampaignBuilderInner() {
   const { data, loading, error, refresh } = usePlatform();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [brandId, setBrandId] = useState(searchParams.get("brandId") || "brand-1");
-  const [name, setName] = useState("Brand 1 — first live send");
+  const [brandId, setBrandId] = useState(
+    searchParams.get("brandId") || "abstract",
+  );
+  const [name, setName] = useState("Abstract — MCA working capital SMS");
   const [channel, setChannel] = useState<CampaignChannel>("sms");
-  const [subject, setSubject] = useState("A quick note from {{brand}}");
+  const [subject, setSubject] = useState("Working capital options from {{brand}}");
   const [message, setMessage] = useState(
-    "Hi {{firstName}}, this is {{brand}} — quick question about your recent inquiry. Reply YES if you'd like details, or STOP to opt out.",
+    "Hi {{firstName}}, {{brand}} here — working capital may be available for your business. Reply YES for options, or STOP to opt out.",
   );
   const [sourceFilter, setSourceFilter] = useState("all");
+  const [preferUnoffered, setPreferUnoffered] = useState(true);
   const [volume, setVolume] = useState(1500);
   const [throttlePerHour, setThrottlePerHour] = useState(120);
   const [saving, setSaving] = useState(false);
@@ -47,13 +50,14 @@ function CampaignBuilderInner() {
     if (!data) return 0;
     return data.leads.filter((lead) => {
       if (lead.optedOut || lead.status === "opted_out") return false;
-      if (lead.status !== "available" && lead.status !== "queued") return false;
+      if (lead.status === "converted" || lead.convertedEntityId) return false;
       if (sourceFilter !== "all" && lead.source !== sourceFilter) return false;
       if (channel === "sms" && !lead.phone) return false;
       if (channel === "email" && !lead.email) return false;
+      if (preferUnoffered && lead.offeredEntityIds.includes(brandId)) return false;
       return true;
     }).length;
-  }, [data, sourceFilter, channel]);
+  }, [data, sourceFilter, channel, preferUnoffered, brandId]);
 
   async function create(status: "draft" | "scheduled") {
     setSaving(true);
@@ -68,6 +72,7 @@ function CampaignBuilderInner() {
           subject: channel === "email" ? subject : undefined,
           message,
           sourceFilter,
+          preferUnoffered,
           volume,
           throttlePerHour,
           status,
@@ -102,7 +107,7 @@ function CampaignBuilderInner() {
     <div>
       <PageHeader
         title="Campaign builder"
-        description="Audience, creative, volume, and throttle — then draft or launch. Real SES/Twilio delivery plugs in behind this screen."
+        description="Pick an entity portal and offer. Audience comes from the shared pool — rotation prefers contacts who haven’t heard from this company yet."
         actions={
           <Link
             href="/campaigns"
@@ -123,20 +128,20 @@ function CampaignBuilderInner() {
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Brand</Label>
+              <Label>Entity portal</Label>
               <Select
                 value={brandId}
                 onValueChange={(value) => {
                   if (value) setBrandId(value);
                 }}
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {data.brands.map((brand) => (
                     <SelectItem key={brand.id} value={brand.id}>
-                      {brand.name}
+                      {brand.shortName} — {brand.focus}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -207,6 +212,15 @@ function CampaignBuilderInner() {
             </p>
           </div>
 
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={preferUnoffered}
+              onChange={(e) => setPreferUnoffered(e.target.checked)}
+            />
+            Prefer leads not yet offered this entity (rotation)
+          </label>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Volume</Label>
@@ -250,8 +264,9 @@ function CampaignBuilderInner() {
             {compactNumber(Math.min(volume, audienceCount))}
           </p>
           <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
-            contacts will be queued from {compactNumber(audienceCount)} eligible
-            leads (opt-outs excluded).
+            contacts queued from {compactNumber(audienceCount)} eligible shared-pool
+            leads
+            {preferUnoffered ? " (not yet offered this entity)" : ""}.
           </p>
           <div className="mt-6 space-y-3 text-sm text-[color:var(--ink-soft)]">
             <div className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2">
@@ -261,8 +276,8 @@ function CampaignBuilderInner() {
               </strong>
             </div>
             <div className="rounded-xl bg-[color:var(--accent-soft)]/60 px-3 py-2">
-              Warm-up tip: start at 1,000–2,000 for the first real Brand 1 campaign
-              and grow weekly while bounce/opt-out stay low.
+              Same lead can later get a different entity’s offer — Abstract MCA,
+              Havoc unsecured, Venture traditional, or TOAH SEO.
             </div>
           </div>
         </aside>

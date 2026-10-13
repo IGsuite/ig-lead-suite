@@ -34,7 +34,7 @@ export default function InboxPage() {
     return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
 
   const brandName = (id: string) =>
-    data.brands.find((b) => b.id === id)?.name || id;
+    data.brands.find((b) => b.id === id)?.shortName || id;
 
   return (
     <div>

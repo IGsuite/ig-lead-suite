@@ -40,10 +40,10 @@ function BrandWorkspaceInner() {
     setError(null);
     try {
       const res = await fetch(`/api/brands/${params.id}`, { cache: "no-store" });
-      if (!res.ok) throw new Error("Brand not found");
+      if (!res.ok) throw new Error("Entity not found");
       setPayload((await res.json()) as BrandPayload);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load brand");
+      setError(err instanceof Error ? err.message : "Failed to load entity");
     } finally {
       setLoading(false);
     }
@@ -66,7 +66,7 @@ function BrandWorkspaceInner() {
       if (!res.ok) throw new Error("Save failed");
       const brand = (await res.json()) as Brand;
       setPayload({ ...payload, brand });
-      toast.success("Brand settings saved");
+      toast.success("Entity settings saved");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Save failed");
     } finally {
@@ -74,30 +74,31 @@ function BrandWorkspaceInner() {
     }
   }
 
-  if (loading) return <LoadingPanel label="Loading brand workspace…" />;
+  if (loading) return <LoadingPanel label="Loading entity portal…" />;
   if (error || !payload)
     return <ErrorPanel message={error || "Unknown error"} onRetry={load} />;
 
-  const { brand, campaigns, leads, replies } = payload;
+  const { brand, campaigns, replies } = payload;
+  const offeredCount = payload.leads.length;
 
   return (
     <div>
       <PageHeader
         title={brand.name}
-        description={`${brand.domain} workspace — sending domain, texting numbers, CRM, and campaigns for this brand only.`}
+        description={`${brand.focus}. Own sending identity and website API — still fed from the shared lead pool.`}
         actions={
           <>
             <Link
               href="/brands"
               className={cn(buttonVariants({ variant: "outline" }))}
             >
-              All brands
+              All entities
             </Link>
             <Link
               href={`/campaigns/new?brandId=${brand.id}`}
               className={cn(buttonVariants())}
             >
-              Campaign for {brand.name}
+              Campaign for {brand.shortName}
             </Link>
           </>
         }
@@ -110,22 +111,51 @@ function BrandWorkspaceInner() {
         <span className="rounded-md border border-[color:var(--ink-border)] bg-[color:var(--panel)] px-2.5 py-1 text-xs">
           CRM: {crmLabel(brand.crm)}
         </span>
+        {brand.rotationEnabled ? (
+          <span className="rounded-md border border-[color:var(--ink-border)] bg-[color:var(--accent-soft)]/50 px-2.5 py-1 text-xs">
+            In shared rotation
+          </span>
+        ) : null}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <section className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise-delay-1">
           <h2 className="font-[family-name:var(--font-display)] text-2xl">
-            Sending setup
+            Portal setup
           </h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Brand name</Label>
+              <Label>Entity name</Label>
               <Input
                 value={brand.name}
                 onChange={(e) =>
                   setPayload({
                     ...payload,
                     brand: { ...brand, name: e.target.value },
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Short name</Label>
+              <Input
+                value={brand.shortName}
+                onChange={(e) =>
+                  setPayload({
+                    ...payload,
+                    brand: { ...brand, shortName: e.target.value },
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Focus / what this entity sells</Label>
+              <Input
+                value={brand.focus}
+                onChange={(e) =>
+                  setPayload({
+                    ...payload,
+                    brand: { ...brand, focus: e.target.value },
                   })
                 }
               />
@@ -155,6 +185,31 @@ function BrandWorkspaceInner() {
               />
             </div>
             <div className="space-y-2">
+              <Label>Website URL</Label>
+              <Input
+                value={brand.websiteUrl}
+                onChange={(e) =>
+                  setPayload({
+                    ...payload,
+                    brand: { ...brand, websiteUrl: e.target.value },
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Website / CRM API endpoint</Label>
+              <Input
+                value={brand.websiteApiUrl}
+                placeholder="https://…/api/leads"
+                onChange={(e) =>
+                  setPayload({
+                    ...payload,
+                    brand: { ...brand, websiteApiUrl: e.target.value },
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-2">
               <Label>Weekly send cap</Label>
               <Input
                 type="number"
@@ -174,17 +229,18 @@ function BrandWorkspaceInner() {
               <Label>Status</Label>
               <Select
                 value={brand.status}
-                onValueChange={(value) =>
+                onValueChange={(value) => {
+                  if (!value) return;
                   setPayload({
                     ...payload,
                     brand: {
                       ...brand,
                       status: value as Brand["status"],
                     },
-                  })
-                }
+                  });
+                }}
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -198,14 +254,15 @@ function BrandWorkspaceInner() {
               <Label>CRM</Label>
               <Select
                 value={brand.crm}
-                onValueChange={(value) =>
+                onValueChange={(value) => {
+                  if (!value) return;
                   setPayload({
                     ...payload,
                     brand: { ...brand, crm: value as Brand["crm"] },
-                  })
-                }
+                  });
+                }}
               >
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -217,6 +274,24 @@ function BrandWorkspaceInner() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+          <div className="mt-4 space-y-2">
+            <Label>Programs (comma-separated)</Label>
+            <Input
+              value={brand.programs.join(", ")}
+              onChange={(e) =>
+                setPayload({
+                  ...payload,
+                  brand: {
+                    ...brand,
+                    programs: e.target.value
+                      .split(",")
+                      .map((p) => p.trim())
+                      .filter(Boolean),
+                  },
+                })
+              }
+            />
           </div>
           <div className="mt-4 space-y-2">
             <Label>Texting numbers (one per line)</Label>
@@ -237,21 +312,34 @@ function BrandWorkspaceInner() {
               }
             />
           </div>
+          <label className="mt-4 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={brand.rotationEnabled}
+              onChange={(e) =>
+                setPayload({
+                  ...payload,
+                  brand: { ...brand, rotationEnabled: e.target.checked },
+                })
+              }
+            />
+            Include in shared-pool offer rotation
+          </label>
           <Button className="mt-4" onClick={save} disabled={saving}>
-            {saving ? "Saving…" : "Save brand settings"}
+            {saving ? "Saving…" : "Save entity settings"}
           </Button>
         </section>
 
         <section className="space-y-4 animate-rise-delay-2">
           <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
             <h2 className="font-[family-name:var(--font-display)] text-2xl">
-              Workspace pulse
+              Portal pulse
             </h2>
             <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-xl bg-[color:var(--panel-hover)] p-3">
-                <dt className="text-[color:var(--ink-muted)]">Assigned leads</dt>
+                <dt className="text-[color:var(--ink-muted)]">Offered from pool</dt>
                 <dd className="mt-1 text-2xl font-[family-name:var(--font-display)]">
-                  {compactNumber(leads.length)}
+                  {compactNumber(offeredCount)}
                 </dd>
               </div>
               <div className="rounded-xl bg-[color:var(--panel-hover)] p-3">
@@ -282,7 +370,7 @@ function BrandWorkspaceInner() {
             <div className="mt-3 space-y-2">
               {campaigns.length === 0 ? (
                 <p className="text-sm text-[color:var(--ink-muted)]">
-                  No campaigns yet for this brand.
+                  No campaigns yet for this entity.
                 </p>
               ) : (
                 campaigns.map((campaign) => (
@@ -312,7 +400,7 @@ function BrandWorkspaceInner() {
 
 export default function BrandWorkspacePage() {
   return (
-    <Suspense fallback={<LoadingPanel label="Loading brand workspace…" />}>
+    <Suspense fallback={<LoadingPanel label="Loading entity portal…" />}>
       <BrandWorkspaceInner />
     </Suspense>
   );

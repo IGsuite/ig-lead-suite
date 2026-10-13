@@ -17,6 +17,7 @@ export async function POST(request: Request) {
     subject?: string;
     message?: string;
     sourceFilter?: string;
+    preferUnoffered?: boolean;
     volume?: number;
     throttlePerHour?: number;
     status?: "draft" | "scheduled";
@@ -48,6 +49,7 @@ export async function POST(request: Request) {
     subject: body.subject,
     message: body.message,
     sourceFilter: body.sourceFilter || "all",
+    preferUnoffered: body.preferUnoffered ?? true,
     volume: body.volume,
     throttlePerHour: body.throttlePerHour,
     status: body.status || "draft",

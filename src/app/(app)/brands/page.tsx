@@ -17,19 +17,37 @@ export default function BrandsPage() {
   return (
     <div>
       <PageHeader
-        title="Brand workspaces"
-        description="Five brand slots. Pilot Brand 1 first — domain auth, 10DLC, numbers, CRM — then clone the pattern."
+        title="Entity portals"
+        description="Abstract, Venture, TOAH, and Havoc each get their own workspace — sending domain, numbers, CRM, website API — while leads stay in one shared pool."
       />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {data.brands.map((brand, index) => {
+      <div className="mb-6 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4 text-sm text-[color:var(--ink-soft)] animate-rise">
+        Rotation order:{" "}
+        <strong>
+          {data.rotation.entityOrder
+            .map((id) => data.brands.find((b) => b.id === id)?.shortName || id)
+            .join(" → ")}
+        </strong>
+        . A lead can hear from more than one entity; they convert with whichever
+        offer fits.
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {data.brands.map((brand) => {
           const campaigns = data.campaigns.filter((c) => c.brandId === brand.id)
             .length;
-          const assigned = data.leads.filter((l) => l.brandId === brand.id).length;
+          const offered = data.leads.filter((l) =>
+            l.offeredEntityIds.includes(brand.id),
+          ).length;
+          const open = data.leads.filter(
+            (l) =>
+              !l.optedOut &&
+              l.status !== "converted" &&
+              !l.offeredEntityIds.includes(brand.id),
+          ).length;
           return (
             <Link
               key={brand.id}
               href={`/brands/${brand.id}`}
-              className={`rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 transition-transform hover:-translate-y-0.5 hover:shadow-sm animate-rise${index ? `-delay-${Math.min(index, 2)}` : ""}`}
+              className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 transition-transform hover:-translate-y-0.5 hover:shadow-sm animate-rise"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -37,10 +55,20 @@ export default function BrandsPage() {
                     {brand.name}
                   </h2>
                   <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
-                    {brand.domain}
+                    {brand.focus}
                   </p>
                 </div>
                 <StatusPill status={brand.status} />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {brand.programs.map((program) => (
+                  <span
+                    key={program}
+                    className="rounded-md bg-[color:var(--panel-hover)] px-2 py-0.5 text-xs text-[color:var(--ink-soft)]"
+                  >
+                    {program}
+                  </span>
+                ))}
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                 <div>
@@ -54,20 +82,28 @@ export default function BrandsPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-[color:var(--ink-muted)]">Campaigns</dt>
-                  <dd className="font-medium">{compactNumber(campaigns)}</dd>
+                  <dt className="text-[color:var(--ink-muted)]">Open for offer</dt>
+                  <dd className="font-medium">{compactNumber(open)}</dd>
                 </div>
                 <div>
-                  <dt className="text-[color:var(--ink-muted)]">Assigned leads</dt>
-                  <dd className="font-medium">{compactNumber(assigned)}</dd>
+                  <dt className="text-[color:var(--ink-muted)]">Already offered</dt>
+                  <dd className="font-medium">{compactNumber(offered)}</dd>
                 </div>
               </dl>
               <div className="mt-4 flex flex-wrap gap-2">
                 <StatusPill status={brand.tenDlcStatus} />
                 <StatusPill status={brand.emailAuthStatus} />
+                {brand.rotationEnabled ? (
+                  <span className="rounded-md border border-[color:var(--ink-border)] bg-[color:var(--accent-soft)]/50 px-2 py-0.5 text-xs">
+                    Rotation on
+                  </span>
+                ) : null}
               </div>
               <div className="mt-4 text-sm font-medium text-[color:var(--ink)]">
-                Open workspace →
+                Open {brand.shortName} portal →
+              </div>
+              <div className="mt-1 text-xs text-[color:var(--ink-muted)]">
+                {compactNumber(campaigns)} campaigns · {brand.domain}
               </div>
             </Link>
           );

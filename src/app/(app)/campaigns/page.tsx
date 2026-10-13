@@ -41,13 +41,13 @@ export default function CampaignsPage() {
     return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
 
   const brandName = (id: string) =>
-    data.brands.find((b) => b.id === id)?.name || id;
+    data.brands.find((b) => b.id === id)?.shortName || id;
 
   return (
     <div>
       <PageHeader
         title="Campaigns"
-        description="Pick audience → write message → set volume → send with throttling. Opted-out contacts are excluded automatically."
+        description="Each campaign runs under one entity portal with that company’s offer. Audience is drawn from the shared pool with rotation."
         actions={
           <Link href="/campaigns/new" className={cn(buttonVariants())}>
             Build campaign
@@ -58,7 +58,7 @@ export default function CampaignsPage() {
       {data.campaigns.length === 0 ? (
         <EmptyPanel
           title="No campaigns yet"
-          description="Create your first Brand 1 warm-up or live send."
+          description="Create your first Abstract warm-up or live send from the shared pool."
           action={
             <Link href="/campaigns/new" className={cn(buttonVariants())}>
               Build campaign

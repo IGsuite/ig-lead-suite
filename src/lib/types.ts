@@ -29,17 +29,27 @@ export type ReplySentiment =
   | "opt_out"
   | "other";
 
+/** One company / program portal inside the shared backend. */
 export interface Brand {
   id: string;
   name: string;
+  shortName: string;
+  /** What this entity sells — MCA, traditional financing, SEO, etc. */
+  focus: string;
+  programs: string[];
   domain: string;
   sendingSubdomain: string;
+  websiteUrl: string;
+  /** Future hook for that entity’s public site / CRM API. */
+  websiteApiUrl: string;
   crm: CrmProvider;
   status: BrandStatus;
   phoneNumbers: string[];
   tenDlcStatus: TenDlcStatus;
   emailAuthStatus: EmailAuthStatus;
   weeklySendCap: number;
+  /** Whether this entity is included in shared-pool offer rotation. */
+  rotationEnabled: boolean;
   notes?: string;
 }
 
@@ -52,7 +62,13 @@ export interface Lead {
   source: string;
   purchaseDate: string;
   costCents: number;
-  brandId: string | null;
+  /**
+   * Shared pool: lead is never “owned” by one company.
+   * Tracks which entity portals have already offered them.
+   */
+  offeredEntityIds: string[];
+  lastEntityId: string | null;
+  convertedEntityId: string | null;
   status: LeadStatus;
   optedOut: boolean;
   uploadBatchId?: string;
@@ -79,6 +95,8 @@ export interface Campaign {
   subject?: string;
   message: string;
   sourceFilter: string | "all";
+  /** Prefer leads not yet offered this entity (rotation). */
+  preferUnoffered: boolean;
   volume: number;
   throttlePerHour: number;
   status: CampaignStatus;
@@ -121,7 +139,15 @@ export interface ProviderSpend {
   conversions: number;
 }
 
+export interface RotationConfig {
+  mode: "round_robin" | "manual";
+  /** Entity ids in rotation order for planning blasts. */
+  entityOrder: string[];
+  notes: string;
+}
+
 export interface PlatformData {
+  version: number;
   brands: Brand[];
   leads: Lead[];
   uploads: UploadBatch[];
@@ -129,4 +155,5 @@ export interface PlatformData {
   replies: Reply[];
   optOuts: OptOut[];
   providerSpend: ProviderSpend[];
+  rotation: RotationConfig;
 }
