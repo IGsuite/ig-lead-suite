@@ -2,16 +2,17 @@
 
 One backend for multi-entity outbound: a **shared lead pool** feeding separate company portals — each with its own offer, sending identity, and website/CRM API hook.
 
-## Entities (current)
+## Entities
 
-| Entity | Focus |
-|---|---|
-| **Abstract Capital Group** | Brokerage — MCA, unsecured, secured financing |
-| **Venture Business Capital** | Traditional financing only |
-| **TOAH Marketing** | SEO / marketing for business owners |
-| **Havoc Capital Group** | Unsecured lending only |
+| Entity | Website | Focus |
+|---|---|---|
+| **Abstract Capital Group** | [abstractcapitalgroup.com](https://abstractcapitalgroup.com/) | Small business loans brokerage (MCA, LOC, term, SBA…) |
+| **Ahava Capital** | [ahavacapital.com](https://www.ahavacapital.com/) | Working capital & merchant cash advance |
+| **Take More Funding** | [takemorefunding.com](https://takemorefunding.com/) | Independent brokerage — shops 50+ lenders |
+| **Venture Business Capital** | [venturebusinesscapital.com](https://www.venturebusinesscapital.com/) | Institutional business & real estate financing |
+| **TYH Marketing** | [tyhmarketing.com](https://www.tyhmarketing.com/) | Paid ads, LLM SEO, social, media, websites |
 
-Upload leads once. Campaigns rotate offers across entities so the same contact can hear from Abstract, then Havoc, then Venture or TOAH — and convert with whichever program fits. Global STOP blocks every entity.
+Upload leads once. Campaigns rotate offers across entities so the same contact can hear from different programs — and convert with whichever fits. Global STOP blocks every entity.
 
 ## What you can do today
 
@@ -37,12 +38,11 @@ Sample CSV: [`public/sample-leads.csv`](public/sample-leads.csv).
 ```
 Provider CSVs → Shared lead pool (one DB)
                     ↓
-     ┌──────────┬──────────┬──────────┬──────────┐
-  Abstract   Venture     TOAH      Havoc
-  portal     portal     portal    portal
-     ↓          ↓          ↓          ↓
-  site/CRM   site/CRM   site/CRM   site/CRM
-  API        API        API        API
+     ┌──────────┬──────────┬──────────┬──────────┬──────────┐
+  Abstract    Ahava    Take More   Venture     TYH
+  portal     portal     portal     portal    portal
+     ↓          ↓          ↓          ↓          ↓
+  each site / CRM API
 ```
 
 ## Reset demo data

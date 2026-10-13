@@ -276,8 +276,8 @@ function CampaignBuilderInner() {
               </strong>
             </div>
             <div className="rounded-xl bg-[color:var(--accent-soft)]/60 px-3 py-2">
-              Same lead can later get a different entity’s offer — Abstract MCA,
-              Havoc unsecured, Venture traditional, or TOAH SEO.
+              Same lead can later get a different entity’s offer — Abstract,
+              Ahava, Take More, Venture, or TYH Marketing.
             </div>
           </div>
         </aside>

@@ -46,7 +46,7 @@ export default function SettingsPage() {
         body: JSON.stringify({ action: "reset" }),
       });
       if (!res.ok) throw new Error("Reset failed");
-      toast.success("Demo data restored with your four entities");
+      toast.success("Demo data restored with your five entities");
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Reset failed");

@@ -18,7 +18,7 @@ export default function BrandsPage() {
     <div>
       <PageHeader
         title="Entity portals"
-        description="Abstract, Venture, TOAH, and Havoc each get their own workspace — sending domain, numbers, CRM, website API — while leads stay in one shared pool."
+        description="Abstract, Ahava, Take More, Venture, and TYH each get their own workspace — site, sending domain, numbers, CRM, website API — while leads stay in one shared pool."
       />
       <div className="mb-6 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4 text-sm text-[color:var(--ink-soft)] animate-rise">
         Rotation order:{" "}
@@ -103,7 +103,10 @@ export default function BrandsPage() {
                 Open {brand.shortName} portal →
               </div>
               <div className="mt-1 text-xs text-[color:var(--ink-muted)]">
-                {compactNumber(campaigns)} campaigns · {brand.domain}
+                {compactNumber(campaigns)} campaigns ·{" "}
+                <span className="underline underline-offset-2">
+                  {brand.websiteUrl.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
+                </span>
               </div>
             </Link>
           );

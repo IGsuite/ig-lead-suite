@@ -17,7 +17,7 @@ const display = Fraunces({
 export const metadata: Metadata = {
   title: "SignalDesk — Multi-entity outbound ops",
   description:
-    "Shared lead pool feeding Abstract, Venture, TOAH, and Havoc portals with rotating offers.",
+    "Shared lead pool feeding Abstract, Ahava, Take More, Venture, and TYH portals with rotating offers.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

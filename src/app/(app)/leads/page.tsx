@@ -90,7 +90,7 @@ export default function LeadsPage() {
     <div>
       <PageHeader
         title="Shared lead pool"
-        description="Upload once. These contacts can rotate through Abstract, Venture, TOAH, and Havoc offers. Duplicates and global opt-outs are stripped on import."
+        description="Upload once. These contacts can rotate through Abstract, Ahava, Take More, Venture, and TYH offers. Duplicates and global opt-outs are stripped on import."
       />
 
       <form

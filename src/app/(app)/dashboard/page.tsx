@@ -50,7 +50,7 @@ export default function DashboardPage() {
     <div>
       <PageHeader
         title="Multi-entity command desk"
-        description="One shared lead pool. Four company portals — Abstract, Venture, TOAH, Havoc — each with its own offer. Same contact can rotate through different programs until they convert or opt out."
+        description="One shared lead pool. Five company portals — Abstract, Ahava, Take More, Venture, and TYH — each with its own offer and website. Same contact can rotate through different programs until they convert or opt out."
         actions={
           <>
             <Link
@@ -157,8 +157,8 @@ export default function DashboardPage() {
               Upload once into the shared pool (source, date, cost).
             </li>
             <li className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2">
-              Launch an Abstract MCA blast, then later a Havoc unsecured offer,
-              then Venture or TOAH — same leads, different programs.
+              Launch an Abstract blast, then Ahava or Take More, then Venture
+              or TYH — same leads, different programs.
             </li>
             <li className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2">
               Rotation prefers contacts who haven’t heard from that entity yet.
