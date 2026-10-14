@@ -1,13 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 
 /** Pathname without usePathname() — avoids Cache Components Suspense hangs. */
 export function useClientPathname() {
-  const [pathname, setPathname] = useState("");
+  const [pathname, setPathname] = useState(() =>
+    typeof window !== "undefined" ? window.location.pathname : "",
+  );
 
   useEffect(() => {
-    const read = () => setPathname(window.location.pathname);
+    const read = () => {
+      const next = window.location.pathname;
+      // Defer: history patches can run inside useInsertionEffect (Next Link).
+      startTransition(() => {
+        setPathname((prev) => (prev === next ? prev : next));
+      });
+    };
+
+    // Hydration often starts as ""; sync once without blocking insertion effects.
     read();
 
     const onPop = () => read();
