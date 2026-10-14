@@ -131,10 +131,12 @@ export default function LeadsPage() {
         error?: string;
         importedCount?: number;
         duplicateCount?: number;
+        verifiedOnImport?: { valid?: number; invalid?: number; risky?: number };
       };
       if (!res.ok) throw new Error(json.error || "Upload failed");
+      const v = json.verifiedOnImport;
       toast.success(
-        `Imported ${json.importedCount} leads into ${groupName} · removed ${json.duplicateCount} duplicates`,
+        `Imported ${json.importedCount} into ${groupName} · ${json.duplicateCount} duplicates removed · verified ${v?.valid ?? 0} valid / ${v?.risky ?? 0} risky / ${v?.invalid ?? 0} invalid`,
       );
       setFile(null);
       await refresh();
@@ -182,8 +184,8 @@ export default function LeadsPage() {
   return (
     <div>
       <PageHeader
-        title="Shared lead pool"
-        description="Upload by source and group, verify email/phone before send, then rotate contacts through Abstract, Ahava, Take More, Venture, and TYH."
+        title="Shared leads"
+        description="Upload once into the main pool. Email and phone are verified on import, then Autopilot rotates contacts through each entity — never mixing brands."
       />
 
       <form
@@ -247,8 +249,9 @@ export default function LeadsPage() {
           </Button>
         </div>
         <p className="text-xs text-[color:var(--ink-muted)] md:col-span-2 xl:col-span-6">
-          Tag each buy with a source (provider) and a group (which file). Expected
-          columns: email, phone, first_name, last_name.{" "}
+          Tag each buy with a source (provider) and a group (which file). On
+          import we automatically verify email + phone format so bad contacts
+          don’t bounce. Expected columns: email, phone, first_name, last_name.{" "}
           <a className="underline underline-offset-2" href="/sample-leads.csv">
             Download sample CSV
           </a>

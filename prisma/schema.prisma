@@ -153,12 +153,15 @@ model ProviderSpend {
   conversions     Int    @default(0)
 }
 
-/// Singleton row (id = "default") for rotation config
+/// Singleton row (id = "default") for rotation + autopilot config
 model PlatformSettings {
-  id          String   @id @default("default")
-  version     Int      @default(5)
-  mode        String   @default("round_robin")
-  entityOrder String[]
-  notes       String   @default("")
-  updatedAt   DateTime @updatedAt
+  id               String    @id @default("default")
+  version          Int       @default(6)
+  mode             String    @default("round_robin")
+  entityOrder      String[]
+  notes            String    @default("")
+  autopilotEnabled Boolean   @default(false)
+  /// JSON: { quotas: EntityDailyQuota[], lastRunAt?, nextRunAt? }
+  autopilotJson    Json      @default("{}")
+  updatedAt        DateTime  @updatedAt
 }

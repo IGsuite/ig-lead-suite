@@ -1,6 +1,8 @@
+import { normalizeRotation } from "@/lib/autopilot";
 import type {
   Brand,
   Campaign,
+  EntityDailyQuota,
   Lead,
   OptOut,
   ProviderSpend,
@@ -229,14 +231,34 @@ export function mapSpend(row: {
   return { ...row };
 }
 
-export function mapRotation(row: {
-  mode: string;
-  entityOrder: string[];
-  notes: string;
-}): RotationConfig {
-  return {
-    mode: row.mode as RotationConfig["mode"],
-    entityOrder: row.entityOrder,
-    notes: row.notes,
-  };
+export function mapRotation(
+  row: {
+    mode: string;
+    entityOrder: string[];
+    notes: string;
+    autopilotEnabled?: boolean;
+    autopilotJson?: unknown;
+  },
+  brands: Brand[] = [],
+): RotationConfig {
+  const json =
+    row.autopilotJson && typeof row.autopilotJson === "object"
+      ? (row.autopilotJson as {
+          quotas?: EntityDailyQuota[];
+          lastRunAt?: string;
+          nextRunAt?: string;
+        })
+      : {};
+  return normalizeRotation(
+    {
+      mode: row.mode as RotationConfig["mode"],
+      entityOrder: row.entityOrder,
+      notes: row.notes,
+      autopilotEnabled: row.autopilotEnabled ?? false,
+      quotas: json.quotas,
+      lastRunAt: json.lastRunAt,
+      nextRunAt: json.nextRunAt,
+    },
+    brands,
+  );
 }

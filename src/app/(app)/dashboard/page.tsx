@@ -50,7 +50,7 @@ export default function DashboardPage() {
     <div>
       <PageHeader
         title="Multi-entity command desk"
-        description="One shared lead pool. Five company portals — Abstract, Ahava, Take More, Venture, and TYH — each with its own offer and website. Same contact can rotate through different programs until they convert or opt out."
+        description="Upload leads once, verify contacts, then Autopilot rotates them through Abstract, Ahava, Take More, Venture, and TYH. Each entity keeps its own campaigns and reports — nothing mixes."
         actions={
           <>
             <Link
@@ -59,8 +59,14 @@ export default function DashboardPage() {
             >
               Upload leads
             </Link>
-            <Link href="/campaigns/new" className={cn(buttonVariants())}>
-              New campaign
+            <Link
+              href="/autopilot"
+              className={cn(buttonVariants({ variant: "outline" }))}
+            >
+              Autopilot
+            </Link>
+            <Link href="/reports" className={cn(buttonVariants())}>
+              Reports
             </Link>
           </>
         }

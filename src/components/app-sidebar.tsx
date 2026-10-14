@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   BarChart3,
   Building2,
+  FerrisWheel,
   Inbox,
   LayoutDashboard,
   Megaphone,
@@ -16,11 +17,12 @@ import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/leads", label: "Shared lead pool", icon: Users },
-  { href: "/brands", label: "Entities", icon: Building2 },
+  { href: "/leads", label: "Shared leads", icon: Users },
+  { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
+  { href: "/autopilot", label: "Autopilot", icon: FerrisWheel },
+  { href: "/brands", label: "Entities", icon: Building2 },
   { href: "/inbox", label: "Reply inbox", icon: Inbox },
-  { href: "/results", label: "Results by source", icon: BarChart3 },
   { href: "/opt-outs", label: "Opt-outs", icon: ShieldOff },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -36,7 +38,7 @@ export function AppSidebar() {
             SignalDesk
           </div>
           <p className="mt-1 text-xs text-[color:var(--ink-muted)]">
-            One backend · multi-entity offers
+            Shared pool · separate portals
           </p>
         </Link>
       </div>
@@ -63,7 +65,7 @@ export function AppSidebar() {
         })}
       </nav>
       <div className="border-t border-[color:var(--ink-border)] p-4 text-xs text-[color:var(--ink-muted)]">
-        Neon-ready · shared pool for all five entities.
+        Upload once · verify · rotate · never mix brands.
       </div>
     </aside>
   );

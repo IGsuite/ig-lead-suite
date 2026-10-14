@@ -147,11 +147,24 @@ export interface ProviderSpend {
   conversions: number;
 }
 
+/** Daily send quota for one entity on the Ferris-wheel autopilot. */
+export interface EntityDailyQuota {
+  entityId: string;
+  dailyEmailVolume: number;
+  dailySmsVolume: number;
+  enabled: boolean;
+}
+
 export interface RotationConfig {
   mode: "round_robin" | "manual";
   /** Entity ids in rotation order for planning blasts. */
   entityOrder: string[];
   notes: string;
+  /** When on, SignalDesk rotates the shared pool through each portal daily. */
+  autopilotEnabled: boolean;
+  quotas: EntityDailyQuota[];
+  lastRunAt?: string;
+  nextRunAt?: string;
 }
 
 /** Source performance for one entity portal. */

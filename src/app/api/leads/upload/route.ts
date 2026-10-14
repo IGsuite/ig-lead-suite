@@ -59,9 +59,27 @@ export async function POST(request: Request) {
     rows,
   });
 
+  const valid = result.imported.filter(
+    (l) => l.emailStatus === "valid" || l.phoneStatus === "valid",
+  ).length;
+  const invalid = result.imported.filter(
+    (l) => l.emailStatus === "invalid" || l.phoneStatus === "invalid",
+  ).length;
+  const risky = result.imported.filter(
+    (l) =>
+      (l.emailStatus === "risky" || l.phoneStatus === "risky") &&
+      l.emailStatus !== "invalid" &&
+      l.phoneStatus !== "invalid",
+  ).length;
+
   return NextResponse.json({
     batch: result.batch,
     importedCount: result.imported.length,
     duplicateCount: result.duplicates,
+    verifiedOnImport: {
+      valid,
+      invalid,
+      risky,
+    },
   });
 }

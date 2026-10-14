@@ -1,4 +1,15 @@
+import {
+  entityOfferCopy,
+  normalizeRotation,
+  tomorrowIso,
+  type AutopilotRunResult,
+} from "@/lib/autopilot";
 import { getPrisma } from "@/lib/db";
+import { Prisma } from "@/generated/prisma/client";
+
+function asJson(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+}
 import { isLeadEligibleForEntity, normalizeContact } from "@/lib/eligibility";
 import {
   mapCampaign,
@@ -21,6 +32,7 @@ import type {
   RotationConfig,
   UploadBatch,
 } from "@/lib/types";
+import { applyVerification } from "@/lib/verify";
 
 async function ensureSeeded(): Promise<void> {
   const prisma = getPrisma();
@@ -175,6 +187,12 @@ async function replaceWithSeed(): Promise<PlatformData> {
         mode: seed.rotation.mode,
         entityOrder: seed.rotation.entityOrder,
         notes: seed.rotation.notes,
+        autopilotEnabled: seed.rotation.autopilotEnabled,
+        autopilotJson: asJson({
+          quotas: seed.rotation.quotas,
+          lastRunAt: seed.rotation.lastRunAt ?? null,
+          nextRunAt: seed.rotation.nextRunAt ?? null,
+        }),
       },
     });
   });
@@ -206,7 +224,7 @@ export async function getData(): Promise<PlatformData> {
     replies: replies.map(mapReply),
     optOuts: optOuts.map(mapOptOut),
     providerSpend: providerSpend.map(mapSpend),
-    rotation: mapRotation(settings),
+    rotation: mapRotation(settings, brands.map(mapEntity)),
   };
 }
 
@@ -251,15 +269,27 @@ export async function updateRotation(
 ): Promise<RotationConfig> {
   await ensureSeeded();
   const prisma = getPrisma();
+  const brands = (await prisma.entity.findMany()).map(mapEntity);
+  const current = mapRotation(
+    await prisma.platformSettings.findUniqueOrThrow({ where: { id: "default" } }),
+    brands,
+  );
+  const next = normalizeRotation({ ...current, ...patch }, brands);
   const updated = await prisma.platformSettings.update({
     where: { id: "default" },
     data: {
-      mode: patch.mode,
-      entityOrder: patch.entityOrder,
-      notes: patch.notes,
+      mode: next.mode,
+      entityOrder: next.entityOrder,
+      notes: next.notes,
+      autopilotEnabled: next.autopilotEnabled,
+      autopilotJson: asJson({
+        quotas: next.quotas,
+        lastRunAt: next.lastRunAt ?? null,
+        nextRunAt: next.nextRunAt ?? null,
+      }),
     },
   });
-  return mapRotation(updated);
+  return mapRotation(updated, brands);
 }
 
 export async function importLeads(input: {
@@ -325,7 +355,7 @@ export async function importLeads(input: {
       continue;
     }
 
-    const lead: Lead = {
+    const lead = applyVerification({
       id: `lead-${Date.now()}-${imported.length}`,
       email: row.email?.trim() || undefined,
       phone: row.phone?.trim() || undefined,
@@ -344,7 +374,7 @@ export async function importLeads(input: {
       phoneStatus: "unverified",
       uploadBatchId: batchId,
       createdAt: new Date().toISOString(),
-    };
+    });
     imported.push(lead);
     if (emailKey) existingKeys.add(emailKey);
     if (phoneKey) existingKeys.add(phoneKey);
@@ -398,6 +428,8 @@ export async function importLeads(input: {
           optedOut: l.optedOut,
           emailStatus: l.emailStatus,
           phoneStatus: l.phoneStatus,
+          verifyNotes: l.verifyNotes ?? null,
+          verifiedAt: l.verifiedAt ? new Date(l.verifiedAt) : null,
           uploadBatchId: l.uploadBatchId ?? null,
           createdAt: new Date(l.createdAt),
         })),
@@ -624,4 +656,130 @@ export async function verifyLeads(input?: {
   }
 
   return { verified, invalid, risky };
+}
+
+export async function runAutopilotDay(): Promise<AutopilotRunResult> {
+  await ensureSeeded();
+  const prisma = getPrisma();
+  const brands = (await prisma.entity.findMany()).map(mapEntity);
+  const settings = await prisma.platformSettings.findUniqueOrThrow({
+    where: { id: "default" },
+  });
+  const rotation = mapRotation(settings, brands);
+  const day = new Date().toISOString().slice(0, 10);
+  const legs: AutopilotRunResult["legs"] = [];
+
+  for (const entityId of rotation.entityOrder) {
+    const brand = brands.find((b) => b.id === entityId);
+    const quota = rotation.quotas.find((q) => q.entityId === entityId);
+    if (!brand || !quota?.enabled || !brand.rotationEnabled) continue;
+
+    const copy = entityOfferCopy(brand);
+    const channelLegs: Array<{
+      channel: "sms" | "email";
+      volume: number;
+      subject?: string;
+      message: string;
+    }> = [
+      { channel: "sms", volume: quota.dailySmsVolume, message: copy.sms },
+      {
+        channel: "email",
+        volume: quota.dailyEmailVolume,
+        subject: copy.emailSubject,
+        message: copy.emailBody,
+      },
+    ];
+
+    const leadRows = await prisma.lead.findMany();
+    const mappedLeads = leadRows.map(mapLead);
+    const alreadyOffered = new Set(
+      mappedLeads
+        .filter((l) => l.offeredEntityIds.includes(entityId))
+        .map((l) => l.id),
+    );
+
+    for (const leg of channelLegs) {
+      if (leg.volume <= 0) continue;
+      const campaignId = `camp-auto-${entityId}-${leg.channel}-${Date.now()}-${legs.length}`;
+      await prisma.campaign.create({
+        data: {
+          id: campaignId,
+          brandId: entityId,
+          name: `Autopilot · ${brand.shortName} · ${leg.channel.toUpperCase()} · ${day}`,
+          channel: leg.channel,
+          subject: leg.subject ?? null,
+          message: leg.message,
+          sourceFilter: "all",
+          groupFilter: "all",
+          preferUnoffered: true,
+          preferVerified: true,
+          volume: leg.volume,
+          throttlePerHour: Math.max(60, Math.round(leg.volume / 12)),
+          status: "draft",
+        },
+      });
+
+      const eligible = mappedLeads
+        .filter((lead) => {
+          if (alreadyOffered.has(lead.id)) return false;
+          return isLeadEligibleForEntity(lead, entityId, {
+            channel: leg.channel,
+            sourceFilter: "all",
+            groupFilter: "all",
+            preferUnoffered: false,
+            preferVerified: true,
+          });
+        })
+        .sort((a, b) => a.offeredEntityIds.length - b.offeredEntityIds.length)
+        .slice(0, leg.volume);
+
+      await prisma.$transaction(async (tx) => {
+        for (const lead of eligible) {
+          const offered = lead.offeredEntityIds.includes(entityId)
+            ? lead.offeredEntityIds
+            : [...lead.offeredEntityIds, entityId];
+          await tx.lead.update({
+            where: { id: lead.id },
+            data: {
+              offeredEntityIds: offered,
+              lastEntityId: entityId,
+              status: "contacted",
+            },
+          });
+        }
+        await tx.campaign.update({
+          where: { id: campaignId },
+          data: {
+            status: "sending",
+            sentCount: eligible.length,
+            startedAt: new Date(),
+          },
+        });
+      });
+
+      legs.push({
+        entityId,
+        channel: leg.channel,
+        campaignId,
+        sent: eligible.length,
+        volume: leg.volume,
+      });
+    }
+  }
+
+  const ranAt = new Date().toISOString();
+  const nextRunAt = tomorrowIso();
+  await prisma.platformSettings.update({
+    where: { id: "default" },
+    data: {
+      autopilotEnabled: true,
+      autopilotJson: asJson({
+        quotas: rotation.quotas,
+        lastRunAt: ranAt,
+        nextRunAt,
+      }),
+    },
+  });
+
+  return { ranAt, nextRunAt, legs };
 }

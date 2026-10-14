@@ -2,6 +2,7 @@ import { isNeonConfigured } from "@/lib/db";
 import { isLeadEligibleForEntity } from "@/lib/eligibility";
 import * as jsonStore from "@/lib/json-store";
 import * as neonStore from "@/lib/neon-store";
+import type { AutopilotRunResult } from "@/lib/autopilot";
 import type {
   Brand,
   Campaign,
@@ -85,6 +86,10 @@ export async function createCampaign(
 
 export async function launchCampaign(id: string): Promise<Campaign | null> {
   return backend().launchCampaign(id);
+}
+
+export async function runAutopilotDay(): Promise<AutopilotRunResult> {
+  return backend().runAutopilotDay();
 }
 
 export async function applyOptOut(input: {

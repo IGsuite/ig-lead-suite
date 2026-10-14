@@ -1,6 +1,7 @@
+import { defaultQuotas } from "@/lib/autopilot";
 import type { PlatformData } from "@/lib/types";
 
-export const STORE_VERSION = 5;
+export const STORE_VERSION = 6;
 
 export function createSeedData(): PlatformData {
   const now = new Date();
@@ -501,7 +502,25 @@ export function createSeedData(): PlatformData {
       mode: "round_robin",
       entityOrder: ["abstract", "ahava", "takemore", "venture", "tyh"],
       notes:
-        "One shared lead pool. Blasts rotate entity offers so a contact can hear from Abstract, Ahava, Take More, Venture, or TYH — and convert with whichever fit.",
+        "Ferris-wheel autopilot: shared pool rotates through each entity daily. Each portal keeps its own email/SMS campaigns — nothing mixes.",
+      autopilotEnabled: true,
+      quotas: defaultQuotas([
+        "abstract",
+        "ahava",
+        "takemore",
+        "venture",
+        "tyh",
+      ]),
+      nextRunAt: new Date(
+        Date.UTC(
+          new Date().getUTCFullYear(),
+          new Date().getUTCMonth(),
+          new Date().getUTCDate() + 1,
+          14,
+          0,
+          0,
+        ),
+      ).toISOString(),
     },
   };
 }

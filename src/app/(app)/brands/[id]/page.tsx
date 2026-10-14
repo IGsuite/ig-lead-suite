@@ -112,10 +112,22 @@ function BrandWorkspaceInner() {
               All entities
             </Link>
             <Link
+              href={`/reports?entity=${brand.id}`}
+              className={cn(buttonVariants({ variant: "outline" }))}
+            >
+              Reports
+            </Link>
+            <Link
+              href={`/campaigns?brandId=${brand.id}`}
+              className={cn(buttonVariants({ variant: "outline" }))}
+            >
+              Campaigns
+            </Link>
+            <Link
               href={`/campaigns/new?brandId=${brand.id}`}
               className={cn(buttonVariants())}
             >
-              Campaign for {brand.shortName}
+              New campaign
             </Link>
           </>
         }

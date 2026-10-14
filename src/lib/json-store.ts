@@ -1,5 +1,13 @@
 import { promises as fs } from "fs";
 import path from "path";
+import {
+  entityOfferCopy,
+  normalizeRotation,
+  tomorrowIso,
+  type AutopilotRunResult,
+} from "@/lib/autopilot";
+
+export type { AutopilotRunResult };
 import { isLeadEligibleForEntity, normalizeContact } from "@/lib/eligibility";
 import { STORE_VERSION, createSeedData } from "@/lib/seed";
 import type {
@@ -12,6 +20,7 @@ import type {
   RotationConfig,
   UploadBatch,
 } from "@/lib/types";
+import { applyVerification } from "@/lib/verify";
 
 const DATA_DIR = path.join(process.cwd(), ".data");
 const DATA_FILE = path.join(DATA_DIR, "platform.json");
@@ -65,7 +74,10 @@ export async function updateRotation(
   patch: Partial<RotationConfig>,
 ): Promise<RotationConfig> {
   const data = await ensureStore();
-  data.rotation = { ...data.rotation, ...patch };
+  data.rotation = normalizeRotation(
+    { ...data.rotation, ...patch },
+    data.brands,
+  );
   await writeStore(data);
   return data.rotation;
 }
@@ -127,7 +139,7 @@ export async function importLeads(input: {
       continue;
     }
 
-    const lead: Lead = {
+    const lead = applyVerification({
       id: `lead-${Date.now()}-${imported.length}`,
       email: row.email?.trim() || undefined,
       phone: row.phone?.trim() || undefined,
@@ -146,7 +158,7 @@ export async function importLeads(input: {
       phoneStatus: "unverified",
       uploadBatchId: batchId,
       createdAt: new Date().toISOString(),
-    };
+    });
     imported.push(lead);
     if (emailKey) existingKeys.add(emailKey);
     if (phoneKey) existingKeys.add(phoneKey);
@@ -301,7 +313,6 @@ export async function verifyLeads(input?: {
   leadIds?: string[];
   onlyUnverified?: boolean;
 }): Promise<{ verified: number; invalid: number; risky: number }> {
-  const { applyVerification } = await import("@/lib/verify");
   const data = await ensureStore();
   let verified = 0;
   let invalid = 0;
@@ -327,4 +338,116 @@ export async function verifyLeads(input?: {
 
   await writeStore(data);
   return { verified, invalid, risky };
+}
+
+/** One daily Ferris-wheel pass: each enabled entity gets its own SMS + email blast. */
+export async function runAutopilotDay(): Promise<AutopilotRunResult> {
+  const data = await ensureStore();
+  const rotation = normalizeRotation(data.rotation, data.brands);
+  const day = new Date().toISOString().slice(0, 10);
+  const legs: AutopilotRunResult["legs"] = [];
+
+  for (const entityId of rotation.entityOrder) {
+    const brand = data.brands.find((b) => b.id === entityId);
+    const quota = rotation.quotas.find((q) => q.entityId === entityId);
+    if (!brand || !quota?.enabled || !brand.rotationEnabled) continue;
+
+    const copy = entityOfferCopy(brand);
+    const channels: Array<{
+      channel: "sms" | "email";
+      volume: number;
+      subject?: string;
+      message: string;
+    }> = [
+      {
+        channel: "sms",
+        volume: quota.dailySmsVolume,
+        message: copy.sms,
+      },
+      {
+        channel: "email",
+        volume: quota.dailyEmailVolume,
+        subject: copy.emailSubject,
+        message: copy.emailBody,
+      },
+    ];
+
+    // Snapshot who already heard from this entity before today's pass,
+    // so SMS + email can both go out the same day without blocking each other.
+    const alreadyOffered = new Set(
+      data.leads
+        .filter((l) => l.offeredEntityIds.includes(entityId))
+        .map((l) => l.id),
+    );
+
+    for (const leg of channels) {
+      if (leg.volume <= 0) continue;
+      const campaign: Campaign = {
+        id: `camp-auto-${entityId}-${leg.channel}-${Date.now()}-${legs.length}`,
+        brandId: entityId,
+        name: `Autopilot · ${brand.shortName} · ${leg.channel.toUpperCase()} · ${day}`,
+        channel: leg.channel,
+        subject: leg.subject,
+        message: leg.message,
+        sourceFilter: "all",
+        groupFilter: "all",
+        preferUnoffered: true,
+        preferVerified: true,
+        volume: leg.volume,
+        throttlePerHour: Math.max(60, Math.round(leg.volume / 12)),
+        status: "draft",
+        sentCount: 0,
+        replyCount: 0,
+        optOutCount: 0,
+        bounceCount: 0,
+        createdAt: new Date().toISOString(),
+      };
+      data.campaigns.unshift(campaign);
+
+      const eligible = data.leads
+        .filter((lead) => {
+          if (alreadyOffered.has(lead.id)) return false;
+          return isLeadEligibleForEntity(lead, entityId, {
+            channel: leg.channel,
+            sourceFilter: "all",
+            groupFilter: "all",
+            preferUnoffered: false,
+            preferVerified: true,
+          });
+        })
+        .sort((a, b) => a.offeredEntityIds.length - b.offeredEntityIds.length)
+        .slice(0, leg.volume);
+
+      for (const lead of eligible) {
+        if (!lead.offeredEntityIds.includes(entityId)) {
+          lead.offeredEntityIds.push(entityId);
+        }
+        lead.lastEntityId = entityId;
+        lead.status = "contacted";
+      }
+
+      campaign.status = "sending";
+      campaign.sentCount = eligible.length;
+      campaign.startedAt = new Date().toISOString();
+
+      legs.push({
+        entityId,
+        channel: leg.channel,
+        campaignId: campaign.id,
+        sent: eligible.length,
+        volume: leg.volume,
+      });
+    }
+  }
+
+  const ranAt = new Date().toISOString();
+  const nextRunAt = tomorrowIso();
+  data.rotation = {
+    ...rotation,
+    lastRunAt: ranAt,
+    nextRunAt,
+    autopilotEnabled: true,
+  };
+  await writeStore(data);
+  return { ranAt, nextRunAt, legs };
 }

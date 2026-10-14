@@ -139,13 +139,13 @@ function CampaignBuilderInner() {
     <div>
       <PageHeader
         title="Campaign builder"
-        description="Pick an entity portal and offer. Audience comes from the shared pool — rotation prefers contacts who haven’t heard from this company yet."
+        description="This campaign belongs to one entity only. Audience comes from the shared pool, but the offer, domain, and tracking stay locked to that portal."
         actions={
           <Link
-            href="/campaigns"
+            href={`/campaigns?brandId=${brandId}`}
             className={cn(buttonVariants({ variant: "outline" }))}
           >
-            Back to campaigns
+            Back to {data?.brands.find((b) => b.id === brandId)?.shortName || "campaigns"}
           </Link>
         }
       />
