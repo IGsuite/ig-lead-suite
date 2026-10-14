@@ -16,6 +16,7 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const file = form.get("file");
   const source = String(form.get("source") || "").trim();
+  const groupName = String(form.get("groupName") || "General").trim();
   const purchaseDate = String(form.get("purchaseDate") || "").trim();
   const costDollars = Number(form.get("costDollars") || 0);
 
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
   const result = await importLeads({
     filename: file.name,
     source,
+    groupName,
     purchaseDate,
     costCents: Math.round(costDollars * 100),
     rows,

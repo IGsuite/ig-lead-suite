@@ -48,6 +48,7 @@ export async function updateRotation(
 export async function importLeads(input: {
   filename: string;
   source: string;
+  groupName?: string;
   purchaseDate: string;
   costCents: number;
   rows: Array<{
@@ -58,6 +59,13 @@ export async function importLeads(input: {
   }>;
 }): Promise<{ batch: UploadBatch; imported: Lead[]; duplicates: number }> {
   return backend().importLeads(input);
+}
+
+export async function verifyLeads(input?: {
+  leadIds?: string[];
+  onlyUnverified?: boolean;
+}): Promise<{ verified: number; invalid: number; risky: number }> {
+  return backend().verifyLeads(input);
 }
 
 export async function createCampaign(

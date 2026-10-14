@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { entitySourceResults } from "@/lib/analytics";
 import { getData, updateBrand } from "@/lib/store";
 import type { Brand } from "@/lib/types";
 
@@ -17,6 +18,7 @@ export async function GET(
     campaigns: data.campaigns.filter((c) => c.brandId === id),
     leads: data.leads.filter((l) => l.offeredEntityIds.includes(id)),
     replies: data.replies.filter((r) => r.brandId === id),
+    sourceResults: entitySourceResults(data, id),
   });
 }
 

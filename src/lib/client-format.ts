@@ -31,6 +31,16 @@ export function crmLabel(crm: string): string {
 }
 
 export function statusLabel(status: string): string {
+  const special: Record<string, string> = {
+    scale_up: "Scale up",
+    cut: "Cut",
+    hold: "Hold",
+    opted_out: "Opted out",
+    not_interested: "Not interested",
+    opt_out: "Opt out",
+    not_started: "Not started",
+  };
+  if (special[status]) return special[status];
   return status
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))

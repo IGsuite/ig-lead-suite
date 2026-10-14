@@ -9,6 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -22,33 +29,88 @@ import { compactNumber, money, relativeDay } from "@/lib/client-format";
 export default function LeadsPage() {
   const { data, loading, error, refresh } = usePlatform();
   const [source, setSource] = useState("LeadForge");
+  const [groupName, setGroupName] = useState("Week 13 file");
   const [purchaseDate, setPurchaseDate] = useState(
     new Date().toISOString().slice(0, 10),
   );
   const [costDollars, setCostDollars] = useState("250");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [query, setQuery] = useState("");
+  const [groupFilter, setGroupFilter] = useState("all");
+  const [verifyFilter, setVerifyFilter] = useState("all");
+
+  const groups = useMemo(() => {
+    if (!data) return [];
+    return Array.from(new Set(data.leads.map((l) => l.groupName))).sort();
+  }, [data]);
+
+  const verifyStats = useMemo(() => {
+    if (!data) return { unverified: 0, valid: 0, invalid: 0, risky: 0 };
+    return data.leads.reduce(
+      (acc, lead) => {
+        const worst =
+          lead.emailStatus === "invalid" || lead.phoneStatus === "invalid"
+            ? "invalid"
+            : lead.emailStatus === "risky" || lead.phoneStatus === "risky"
+              ? "risky"
+              : lead.emailStatus === "unverified" &&
+                  lead.phoneStatus === "unverified"
+                ? "unverified"
+                : lead.emailStatus === "valid" || lead.phoneStatus === "valid"
+                  ? "valid"
+                  : "unverified";
+        acc[worst] += 1;
+        return acc;
+      },
+      { unverified: 0, valid: 0, invalid: 0, risky: 0 },
+    );
+  }, [data]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
     const q = query.trim().toLowerCase();
-    if (!q) return data.leads;
-    return data.leads.filter((lead) =>
-      [
+    return data.leads.filter((lead) => {
+      if (groupFilter !== "all" && lead.groupName !== groupFilter) return false;
+      if (verifyFilter === "unverified") {
+        if (
+          lead.emailStatus !== "unverified" &&
+          lead.phoneStatus !== "unverified"
+        )
+          return false;
+      } else if (verifyFilter === "invalid") {
+        if (
+          lead.emailStatus !== "invalid" &&
+          lead.phoneStatus !== "invalid"
+        )
+          return false;
+      } else if (verifyFilter === "valid") {
+        if (
+          lead.emailStatus !== "valid" &&
+          lead.phoneStatus !== "valid"
+        )
+          return false;
+      } else if (verifyFilter === "risky") {
+        if (lead.emailStatus !== "risky" && lead.phoneStatus !== "risky")
+          return false;
+      }
+      if (!q) return true;
+      return [
         lead.firstName,
         lead.lastName,
         lead.email,
         lead.phone,
         lead.source,
+        lead.groupName,
         lead.status,
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
-        .includes(q),
-    );
-  }, [data, query]);
+        .includes(q);
+    });
+  }, [data, query, groupFilter, verifyFilter]);
 
   async function onUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -61,6 +123,7 @@ export default function LeadsPage() {
       const form = new FormData();
       form.set("file", file);
       form.set("source", source);
+      form.set("groupName", groupName);
       form.set("purchaseDate", purchaseDate);
       form.set("costDollars", costDollars);
       const res = await fetch("/api/leads/upload", { method: "POST", body: form });
@@ -71,7 +134,7 @@ export default function LeadsPage() {
       };
       if (!res.ok) throw new Error(json.error || "Upload failed");
       toast.success(
-        `Imported ${json.importedCount} leads · removed ${json.duplicateCount} duplicates`,
+        `Imported ${json.importedCount} leads into ${groupName} · removed ${json.duplicateCount} duplicates`,
       );
       setFile(null);
       await refresh();
@@ -79,6 +142,36 @@ export default function LeadsPage() {
       toast.error(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function onVerify(onlyUnverified = true) {
+    setVerifying(true);
+    try {
+      const res = await fetch("/api/leads/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ onlyUnverified }),
+      });
+      const json = (await res.json()) as {
+        error?: string;
+        verified?: number;
+        invalid?: number;
+        risky?: number;
+      };
+      if (!res.ok) throw new Error(json.error || "Verify failed");
+      const verified = json.verified ?? 0;
+      const invalid = json.invalid ?? 0;
+      const risky = json.risky ?? 0;
+      const valid = Math.max(0, verified - invalid - risky);
+      toast.success(
+        `Checked ${verified} · ${valid} valid · ${risky} risky · ${invalid} invalid`,
+      );
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Verify failed");
+    } finally {
+      setVerifying(false);
     }
   }
 
@@ -90,20 +183,30 @@ export default function LeadsPage() {
     <div>
       <PageHeader
         title="Shared lead pool"
-        description="Upload once. These contacts can rotate through Abstract, Ahava, Take More, Venture, and TYH offers. Duplicates and global opt-outs are stripped on import."
+        description="Upload by source and group, verify email/phone before send, then rotate contacts through Abstract, Ahava, Take More, Venture, and TYH."
       />
 
       <form
         onSubmit={onUpload}
-        className="mb-6 grid gap-4 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise md:grid-cols-2 xl:grid-cols-5"
+        className="mb-6 grid gap-4 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise md:grid-cols-2 xl:grid-cols-6"
       >
-        <div className="space-y-2 xl:col-span-1">
+        <div className="space-y-2">
           <Label htmlFor="source">Provider / source</Label>
           <Input
             id="source"
             value={source}
             onChange={(e) => setSource(e.target.value)}
             placeholder="LeadForge"
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="groupName">Group / list name</Label>
+          <Input
+            id="groupName"
+            value={groupName}
+            onChange={(e) => setGroupName(e.target.value)}
+            placeholder="Week 13 MCA file"
             required
           />
         </div>
@@ -129,7 +232,7 @@ export default function LeadsPage() {
             required
           />
         </div>
-        <div className="space-y-2 xl:col-span-1">
+        <div className="space-y-2">
           <Label htmlFor="file">CSV file</Label>
           <Input
             id="file"
@@ -143,8 +246,9 @@ export default function LeadsPage() {
             {uploading ? "Importing…" : "Import CSV"}
           </Button>
         </div>
-        <p className="text-xs text-[color:var(--ink-muted)] md:col-span-2 xl:col-span-5">
-          Expected columns (flexible names): email, phone, first_name, last_name.{" "}
+        <p className="text-xs text-[color:var(--ink-muted)] md:col-span-2 xl:col-span-6">
+          Tag each buy with a source (provider) and a group (which file). Expected
+          columns: email, phone, first_name, last_name.{" "}
           <a className="underline underline-offset-2" href="/sample-leads.csv">
             Download sample CSV
           </a>
@@ -152,28 +256,125 @@ export default function LeadsPage() {
         </p>
       </form>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search name, email, phone, source…"
-          className="max-w-md"
-        />
-        <p className="text-sm text-[color:var(--ink-muted)]">
-          Showing {compactNumber(filtered.length)} of{" "}
-          {compactNumber(data.leads.length)} leads
-        </p>
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5 animate-rise-delay-1">
+        <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
+          <div className="text-xs text-[color:var(--ink-muted)]">In pool</div>
+          <div className="mt-1 text-2xl font-[family-name:var(--font-display)]">
+            {compactNumber(data.leads.length)}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
+          <div className="text-xs text-[color:var(--ink-muted)]">Unverified</div>
+          <div className="mt-1 text-2xl font-[family-name:var(--font-display)]">
+            {compactNumber(verifyStats.unverified)}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
+          <div className="text-xs text-[color:var(--ink-muted)]">Valid</div>
+          <div className="mt-1 text-2xl font-[family-name:var(--font-display)]">
+            {compactNumber(verifyStats.valid)}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
+          <div className="text-xs text-[color:var(--ink-muted)]">Risky</div>
+          <div className="mt-1 text-2xl font-[family-name:var(--font-display)]">
+            {compactNumber(verifyStats.risky)}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4 sm:col-span-2 xl:col-span-1">
+          <div className="text-xs text-[color:var(--ink-muted)]">Invalid</div>
+          <div className="mt-1 text-2xl font-[family-name:var(--font-display)]">
+            {compactNumber(verifyStats.invalid)}
+          </div>
+        </div>
       </div>
+
+      <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-end">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name, email, phone, source, group…"
+            className="max-w-md"
+          />
+          <div className="w-full sm:w-44">
+            <Label className="mb-1.5 block text-xs">Group</Label>
+            <Select
+              value={groupFilter}
+              onValueChange={(value) => {
+                if (value) setGroupFilter(value);
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All groups</SelectItem>
+                {groups.map((group) => (
+                  <SelectItem key={group} value={group}>
+                    {group}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="w-full sm:w-44">
+            <Label className="mb-1.5 block text-xs">Verify status</Label>
+            <Select
+              value={verifyFilter}
+              onValueChange={(value) => {
+                if (value) setVerifyFilter(value);
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="unverified">Unverified</SelectItem>
+                <SelectItem value="valid">Valid</SelectItem>
+                <SelectItem value="risky">Risky</SelectItem>
+                <SelectItem value="invalid">Invalid</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={verifying}
+            onClick={() => void onVerify(true)}
+          >
+            {verifying ? "Verifying…" : "Verify unverified"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={verifying}
+            onClick={() => void onVerify(false)}
+          >
+            Re-check all
+          </Button>
+        </div>
+      </div>
+
+      <p className="mb-4 text-sm text-[color:var(--ink-muted)]">
+        Showing {compactNumber(filtered.length)} of{" "}
+        {compactNumber(data.leads.length)} leads · local format checks now;
+        NeverBounce / Twilio Lookup can plug in later.
+      </p>
 
       {data.uploads.length ? (
         <div className="mb-4 flex flex-wrap gap-2">
-          {data.uploads.slice(0, 4).map((batch) => (
+          {data.uploads.slice(0, 6).map((batch) => (
             <div
               key={batch.id}
               className="rounded-full border border-[color:var(--ink-border)] bg-[color:var(--panel)] px-3 py-1 text-xs text-[color:var(--ink-soft)]"
             >
-              {batch.filename} · {batch.source} · +{batch.importedCount} / −
-              {batch.duplicateCount} · {money(batch.costCents)}
+              {batch.filename} · {batch.source} / {batch.groupName} · +
+              {batch.importedCount} / −{batch.duplicateCount} ·{" "}
+              {money(batch.costCents)}
             </div>
           ))}
         </div>
@@ -182,18 +383,19 @@ export default function LeadsPage() {
       {filtered.length === 0 ? (
         <EmptyPanel
           title="No leads match"
-          description="Upload a provider CSV or clear the search to see the pool."
+          description="Upload a provider CSV or clear filters to see the pool."
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] animate-rise-delay-1">
+        <div className="overflow-hidden rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] animate-rise-delay-2">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Contact</TableHead>
-                <TableHead>Source</TableHead>
+                <TableHead>Source / group</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Phone</TableHead>
                 <TableHead>Offered to</TableHead>
                 <TableHead>Purchased</TableHead>
-                <TableHead>Cost</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -209,7 +411,18 @@ export default function LeadsPage() {
                       {lead.email || "—"} · {lead.phone || "—"}
                     </div>
                   </TableCell>
-                  <TableCell>{lead.source}</TableCell>
+                  <TableCell>
+                    <div>{lead.source}</div>
+                    <div className="text-xs text-[color:var(--ink-muted)]">
+                      {lead.groupName}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <StatusPill status={lead.emailStatus} />
+                  </TableCell>
+                  <TableCell>
+                    <StatusPill status={lead.phoneStatus} />
+                  </TableCell>
                   <TableCell>
                     {lead.offeredEntityIds.length === 0 ? (
                       <span className="text-xs text-[color:var(--ink-muted)]">
@@ -228,7 +441,6 @@ export default function LeadsPage() {
                     )}
                   </TableCell>
                   <TableCell>{relativeDay(lead.purchaseDate)}</TableCell>
-                  <TableCell>{money(lead.costCents)}</TableCell>
                   <TableCell>
                     <StatusPill status={lead.status} />
                   </TableCell>

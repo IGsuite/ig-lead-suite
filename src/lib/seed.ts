@@ -1,6 +1,6 @@
 import type { PlatformData } from "@/lib/types";
 
-export const STORE_VERSION = 3;
+export const STORE_VERSION = 5;
 
 export function createSeedData(): PlatformData {
   const now = new Date();
@@ -181,13 +181,27 @@ export function createSeedData(): PlatformData {
         ? offeredEntityIds[offeredEntityIds.length - 1]
         : null;
 
+    const groups = ["Week 12 file", "March MCA pack", "General"];
+    const groupName = groups[i % groups.length];
+    const email =
+      i % 13 === 0
+        ? `${fn.toLowerCase()}@mailinator.com`
+        : `${fn.toLowerCase()}.${ln.toLowerCase()}${i}@gmail.com`;
+    const phone =
+      i % 19 === 0 ? "+10000000000" : `+1555${String(2000000 + i).padStart(7, "0")}`;
+    const emailStatus =
+      i % 13 === 0 ? "invalid" : i % 7 === 0 ? "unverified" : "valid";
+    const phoneStatus =
+      i % 19 === 0 ? "invalid" : i % 7 === 0 ? "unverified" : "valid";
+
     leads.push({
       id: `lead-${i + 1}`,
-      email: `${fn.toLowerCase()}.${ln.toLowerCase()}${i}@example.com`,
-      phone: `+1555${String(1000000 + i).slice(0, 7)}`,
+      email,
+      phone,
       firstName: fn,
       lastName: ln,
       source: src.source,
+      groupName,
       purchaseDate: daysAgo(10 + (i % 12)).slice(0, 10),
       costCents: src.cost,
       offeredEntityIds,
@@ -201,6 +215,14 @@ export function createSeedData(): PlatformData {
             ? "contacted"
             : "available",
       optedOut,
+      emailStatus,
+      phoneStatus,
+      verifyNotes:
+        emailStatus === "unverified"
+          ? undefined
+          : `seed: email ${emailStatus}, phone ${phoneStatus}`,
+      verifiedAt:
+        emailStatus === "unverified" ? undefined : daysAgo(7 + (i % 3)),
       uploadBatchId: "upload-seed",
       createdAt: daysAgo(8 + (i % 6)),
     });
@@ -215,7 +237,9 @@ export function createSeedData(): PlatformData {
       message:
         "Hi {{firstName}}, Abstract Capital Group here — working capital may be available for your business. Reply YES for options, or STOP to opt out.",
       sourceFilter: "all",
+      groupFilter: "all",
       preferUnoffered: true,
+      preferVerified: true,
       volume: 500,
       throttlePerHour: 80,
       status: "sending",
@@ -234,7 +258,9 @@ export function createSeedData(): PlatformData {
       message:
         "Hi {{firstName}}, Ahava Capital — quick note on merchant cash advance / working capital. Reply YES if you want details, STOP to opt out.",
       sourceFilter: "all",
+      groupFilter: "all",
       preferUnoffered: true,
+      preferVerified: true,
       volume: 800,
       throttlePerHour: 100,
       status: "draft",
@@ -252,7 +278,9 @@ export function createSeedData(): PlatformData {
       message:
         "Hi {{firstName}}, Take More Funding shops 50+ lenders for your business. Reply YES for a free match, STOP to opt out.",
       sourceFilter: "all",
+      groupFilter: "all",
       preferUnoffered: true,
+      preferVerified: true,
       volume: 700,
       throttlePerHour: 90,
       status: "draft",
@@ -271,7 +299,9 @@ export function createSeedData(): PlatformData {
       message:
         "Hi {{firstName}},\n\nTYH Marketing helps business owners win customers through paid ads, AI search SEO, and national media placements. Reply if you want a short growth overview.\n\nUnsubscribe anytime.",
       sourceFilter: "LeadForge",
+      groupFilter: "all",
       preferUnoffered: true,
+      preferVerified: true,
       volume: 1000,
       throttlePerHour: 200,
       status: "draft",
@@ -289,7 +319,9 @@ export function createSeedData(): PlatformData {
       message:
         "Hi {{firstName}}, Venture Business Capital — institutional business & real estate financing without giving up equity. Reply YES for info, STOP to opt out.",
       sourceFilter: "all",
+      groupFilter: "all",
       preferUnoffered: true,
+      preferVerified: true,
       volume: 600,
       throttlePerHour: 90,
       status: "draft",
@@ -301,14 +333,16 @@ export function createSeedData(): PlatformData {
     },
   ];
 
+  // Diversify replies across sources so entity portals show Scale up / Cut.
+  // lead-4 LeadForge, lead-5 QueueData, lead-9 NorthList, lead-11 NorthList, lead-16 QueueData
   const replies: PlatformData["replies"] = [
     {
       id: "reply-1",
       campaignId: "camp-1",
       brandId: "abstract",
-      leadId: "lead-9",
+      leadId: "lead-4",
       channel: "sms",
-      from: "+15551000008",
+      from: "+15552000003",
       body: "YES interested, call me after 5",
       sentiment: "interested",
       crmSynced: true,
@@ -319,9 +353,9 @@ export function createSeedData(): PlatformData {
       id: "reply-2",
       campaignId: "camp-1",
       brandId: "abstract",
-      leadId: "lead-18",
+      leadId: "lead-5",
       channel: "sms",
-      from: "+15551000017",
+      from: "+15552000004",
       body: "Who is this?",
       sentiment: "neutral",
       crmSynced: false,
@@ -332,9 +366,9 @@ export function createSeedData(): PlatformData {
       id: "reply-3",
       campaignId: "camp-1",
       brandId: "abstract",
-      leadId: "lead-27",
+      leadId: "lead-9",
       channel: "sms",
-      from: "+15551000026",
+      from: "+15552000008",
       body: "STOP",
       sentiment: "opt_out",
       crmSynced: false,
@@ -345,11 +379,63 @@ export function createSeedData(): PlatformData {
       id: "reply-4",
       campaignId: "camp-1",
       brandId: "abstract",
-      leadId: "lead-36",
+      leadId: "lead-11",
       channel: "sms",
-      from: "+15551000035",
+      from: "+15552000010",
       body: "Not interested thanks",
       sentiment: "not_interested",
+      crmSynced: false,
+      createdAt: daysAgo(0),
+      read: false,
+    },
+    {
+      id: "reply-5",
+      campaignId: "camp-1",
+      brandId: "abstract",
+      leadId: "lead-16",
+      channel: "sms",
+      from: "+15552000015",
+      body: "Send me rates",
+      sentiment: "interested",
+      crmSynced: false,
+      createdAt: daysAgo(0),
+      read: false,
+    },
+    {
+      id: "reply-6",
+      campaignId: "camp-2",
+      brandId: "ahava",
+      leadId: "lead-8",
+      channel: "sms",
+      from: "+15552000007",
+      body: "YES tell me more",
+      sentiment: "interested",
+      crmSynced: false,
+      createdAt: daysAgo(0),
+      read: false,
+    },
+    {
+      id: "reply-7",
+      campaignId: "camp-2",
+      brandId: "ahava",
+      leadId: "lead-10",
+      channel: "sms",
+      from: "+15552000009",
+      body: "Already funded",
+      sentiment: "not_interested",
+      crmSynced: false,
+      createdAt: daysAgo(1),
+      read: true,
+    },
+    {
+      id: "reply-8",
+      campaignId: "camp-2",
+      brandId: "ahava",
+      leadId: "lead-15",
+      channel: "sms",
+      from: "+15552000014",
+      body: "Maybe later",
+      sentiment: "neutral",
       crmSynced: false,
       createdAt: daysAgo(0),
       read: false,
@@ -376,6 +462,7 @@ export function createSeedData(): PlatformData {
         id: "upload-seed",
         filename: "leadforge-week12.csv",
         source: "LeadForge",
+        groupName: "Week 12 file",
         purchaseDate: daysAgo(10).slice(0, 10),
         costCents: 187000,
         rowCount: 48,

@@ -36,6 +36,7 @@ type LeadRow = {
   firstName: string | null;
   lastName: string | null;
   source: string;
+  groupName: string;
   purchaseDate: Date;
   costCents: number;
   offeredEntityIds: string[];
@@ -43,6 +44,10 @@ type LeadRow = {
   convertedEntityId: string | null;
   status: string;
   optedOut: boolean;
+  emailStatus: string;
+  phoneStatus: string;
+  verifyNotes: string | null;
+  verifiedAt: Date | null;
   uploadBatchId: string | null;
   createdAt: Date;
 };
@@ -81,6 +86,7 @@ export function mapLead(row: LeadRow): Lead {
     firstName: row.firstName ?? undefined,
     lastName: row.lastName ?? undefined,
     source: row.source,
+    groupName: row.groupName,
     purchaseDate: isoDate(row.purchaseDate),
     costCents: row.costCents,
     offeredEntityIds: row.offeredEntityIds,
@@ -88,6 +94,10 @@ export function mapLead(row: LeadRow): Lead {
     convertedEntityId: row.convertedEntityId,
     status: row.status as Lead["status"],
     optedOut: row.optedOut,
+    emailStatus: row.emailStatus as Lead["emailStatus"],
+    phoneStatus: row.phoneStatus as Lead["phoneStatus"],
+    verifyNotes: row.verifyNotes ?? undefined,
+    verifiedAt: row.verifiedAt?.toISOString(),
     uploadBatchId: row.uploadBatchId ?? undefined,
     createdAt: row.createdAt.toISOString(),
   };
@@ -97,6 +107,7 @@ export function mapUpload(row: {
   id: string;
   filename: string;
   source: string;
+  groupName: string;
   purchaseDate: Date;
   costCents: number;
   rowCount: number;
@@ -108,6 +119,7 @@ export function mapUpload(row: {
     id: row.id,
     filename: row.filename,
     source: row.source,
+    groupName: row.groupName,
     purchaseDate: isoDate(row.purchaseDate),
     costCents: row.costCents,
     rowCount: row.rowCount,
@@ -125,7 +137,9 @@ export function mapCampaign(row: {
   subject: string | null;
   message: string;
   sourceFilter: string;
+  groupFilter: string;
   preferUnoffered: boolean;
+  preferVerified: boolean;
   volume: number;
   throttlePerHour: number;
   status: string;
@@ -144,7 +158,9 @@ export function mapCampaign(row: {
     subject: row.subject ?? undefined,
     message: row.message,
     sourceFilter: row.sourceFilter,
+    groupFilter: row.groupFilter,
     preferUnoffered: row.preferUnoffered,
+    preferVerified: row.preferVerified,
     volume: row.volume,
     throttlePerHour: row.throttlePerHour,
     status: row.status as Campaign["status"],

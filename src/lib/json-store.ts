@@ -73,6 +73,7 @@ export async function updateRotation(
 export async function importLeads(input: {
   filename: string;
   source: string;
+  groupName?: string;
   purchaseDate: string;
   costCents: number;
   rows: Array<{
@@ -82,6 +83,7 @@ export async function importLeads(input: {
     lastName?: string;
   }>;
 }): Promise<{ batch: UploadBatch; imported: Lead[]; duplicates: number }> {
+  const groupName = input.groupName?.trim() || "General";
   const data = await ensureStore();
   const existingKeys = new Set<string>();
   for (const lead of data.leads) {
@@ -132,6 +134,7 @@ export async function importLeads(input: {
       firstName: row.firstName?.trim() || undefined,
       lastName: row.lastName?.trim() || undefined,
       source: input.source,
+      groupName,
       purchaseDate: input.purchaseDate,
       costCents: costPerLead,
       offeredEntityIds: [],
@@ -139,6 +142,8 @@ export async function importLeads(input: {
       convertedEntityId: null,
       status: "available",
       optedOut: false,
+      emailStatus: "unverified",
+      phoneStatus: "unverified",
       uploadBatchId: batchId,
       createdAt: new Date().toISOString(),
     };
@@ -151,6 +156,7 @@ export async function importLeads(input: {
     id: batchId,
     filename: input.filename,
     source: input.source,
+    groupName,
     purchaseDate: input.purchaseDate,
     costCents: input.costCents,
     rowCount: input.rows.length,
@@ -217,7 +223,9 @@ export async function launchCampaign(id: string): Promise<Campaign | null> {
       isLeadEligibleForEntity(lead, campaign.brandId, {
         channel: campaign.channel,
         sourceFilter: campaign.sourceFilter,
+        groupFilter: campaign.groupFilter,
         preferUnoffered: campaign.preferUnoffered,
+        preferVerified: campaign.preferVerified,
       }),
     )
     .sort((a, b) => a.offeredEntityIds.length - b.offeredEntityIds.length);
@@ -287,4 +295,36 @@ export async function markReply(
 
   await writeStore(data);
   return reply;
+}
+
+export async function verifyLeads(input?: {
+  leadIds?: string[];
+  onlyUnverified?: boolean;
+}): Promise<{ verified: number; invalid: number; risky: number }> {
+  const { applyVerification } = await import("@/lib/verify");
+  const data = await ensureStore();
+  let verified = 0;
+  let invalid = 0;
+  let risky = 0;
+
+  for (const lead of data.leads) {
+    if (input?.leadIds?.length && !input.leadIds.includes(lead.id)) continue;
+    if (
+      input?.onlyUnverified !== false &&
+      lead.emailStatus !== "unverified" &&
+      lead.phoneStatus !== "unverified"
+    ) {
+      continue;
+    }
+    const next = applyVerification(lead);
+    Object.assign(lead, next);
+    verified += 1;
+    if (next.emailStatus === "invalid" || next.phoneStatus === "invalid")
+      invalid += 1;
+    else if (next.emailStatus === "risky" || next.phoneStatus === "risky")
+      risky += 1;
+  }
+
+  await writeStore(data);
+  return { verified, invalid, risky };
 }

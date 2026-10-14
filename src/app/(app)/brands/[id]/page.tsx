@@ -17,8 +17,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { compactNumber, crmLabel, relativeDay } from "@/lib/client-format";
-import type { Brand, Campaign, Lead, Reply } from "@/lib/types";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { compactNumber, crmLabel, money, relativeDay } from "@/lib/client-format";
+import type {
+  Brand,
+  Campaign,
+  EntitySourceResult,
+  Lead,
+  Reply,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type BrandPayload = {
@@ -26,6 +40,7 @@ type BrandPayload = {
   campaigns: Campaign[];
   leads: Lead[];
   replies: Reply[];
+  sourceResults: EntitySourceResult[];
 };
 
 function BrandWorkspaceInner() {
@@ -78,14 +93,16 @@ function BrandWorkspaceInner() {
   if (error || !payload)
     return <ErrorPanel message={error || "Unknown error"} onRetry={load} />;
 
-  const { brand, campaigns, replies } = payload;
+  const { brand, campaigns, replies, sourceResults } = payload;
   const offeredCount = payload.leads.length;
+  const scaleSources = sourceResults.filter((r) => r.recommendation === "scale_up");
+  const cutSources = sourceResults.filter((r) => r.recommendation === "cut");
 
   return (
     <div>
       <PageHeader
         title={brand.name}
-        description={`${brand.focus}. Own sending identity and website API — still fed from the shared lead pool.`}
+        description={`${brand.focus}. See which lead sources convert for this portal — then buy more of the winners.`}
         actions={
           <>
             <Link
@@ -392,8 +409,93 @@ function BrandWorkspaceInner() {
               )}
             </div>
           </div>
+
+          {(scaleSources.length > 0 || cutSources.length > 0) && (
+            <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
+              <h2 className="font-[family-name:var(--font-display)] text-2xl">
+                Buy more / cut
+              </h2>
+              <div className="mt-3 space-y-2 text-sm">
+                {scaleSources.map((row) => (
+                  <div
+                    key={`scale-${row.source}`}
+                    className="rounded-xl bg-emerald-50 px-3 py-2 text-emerald-950"
+                  >
+                    Scale up <strong>{row.source}</strong> —{" "}
+                    {row.costPerReply != null
+                      ? `${money(row.costPerReply)} / reply`
+                      : "best performer"}
+                  </div>
+                ))}
+                {cutSources.map((row) => (
+                  <div
+                    key={`cut-${row.source}`}
+                    className="rounded-xl bg-rose-50 px-3 py-2 text-rose-950"
+                  >
+                    Cut or renegotiate <strong>{row.source}</strong> —{" "}
+                    {row.costPerReply != null
+                      ? `${money(row.costPerReply)} / reply`
+                      : "weak replies"}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
       </div>
+
+      <section className="mt-6 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise-delay-2">
+        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="font-[family-name:var(--font-display)] text-2xl">
+              Results by lead source
+            </h2>
+            <p className="text-sm text-[color:var(--ink-muted)]">
+              For {brand.shortName} only — which providers send the best leads to
+              this business.
+            </p>
+          </div>
+        </div>
+        {sourceResults.length === 0 ? (
+          <p className="text-sm text-[color:var(--ink-muted)]">
+            No offered leads yet. Launch a campaign from the shared pool to start
+            scoring sources for this portal.
+          </p>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-[color:var(--ink-border)]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Offered</TableHead>
+                  <TableHead>Replies</TableHead>
+                  <TableHead>Interested</TableHead>
+                  <TableHead>Conversions</TableHead>
+                  <TableHead>Cost / reply</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sourceResults.map((row) => (
+                  <TableRow key={row.source}>
+                    <TableCell className="font-medium">{row.source}</TableCell>
+                    <TableCell>{compactNumber(row.offered)}</TableCell>
+                    <TableCell>{compactNumber(row.replies)}</TableCell>
+                    <TableCell>{compactNumber(row.interested)}</TableCell>
+                    <TableCell>{compactNumber(row.conversions)}</TableCell>
+                    <TableCell>
+                      {row.costPerReply != null ? money(row.costPerReply) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      <StatusPill status={row.recommendation} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

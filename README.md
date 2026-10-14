@@ -57,14 +57,22 @@ Open [http://127.0.0.1:43123](http://127.0.0.1:43123).
 
 Sample CSV: [`public/sample-leads.csv`](public/sample-leads.csv).
 
+## Lead ops flow
+
+1. **Upload** a provider CSV into the shared pool with a **source** (who sold you the list) and a **group** (which file / buy).
+2. **Verify** email + phone (local format checks now; NeverBounce / Twilio Lookup later) before campaigns so bad contacts don’t bounce.
+3. **Campaign** from an entity portal — filter by source/group, prefer unverified-for-that-entity rotation, and optionally require verified contacts.
+4. **Results** — shared pool ranking plus **per-entity** source scores so you know which providers win for Abstract vs Ahava vs the others, then buy more of the winners.
+
 ## Architecture
 
 ```
-Provider CSVs → Shared lead pool (Neon)
+Provider CSVs → Shared lead pool (Neon) → verify email/phone
                     ↓
      ┌──────────┬──────────┬──────────┬──────────┬──────────┐
   Abstract    Ahava    Take More   Venture     TYH
   portal     portal     portal     portal    portal
+  (source results per entity)
      ↓          ↓          ↓          ↓          ↓
   each site / CRM API (via n8n)
 ```

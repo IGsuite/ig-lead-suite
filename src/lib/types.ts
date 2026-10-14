@@ -15,6 +15,7 @@ export type LeadStatus =
   | "replied"
   | "opted_out"
   | "converted";
+export type VerifyStatus = "unverified" | "valid" | "invalid" | "risky";
 export type CampaignChannel = "sms" | "email";
 export type CampaignStatus =
   | "draft"
@@ -60,6 +61,7 @@ export interface Lead {
   firstName?: string;
   lastName?: string;
   source: string;
+  groupName: string;
   purchaseDate: string;
   costCents: number;
   /**
@@ -71,6 +73,10 @@ export interface Lead {
   convertedEntityId: string | null;
   status: LeadStatus;
   optedOut: boolean;
+  emailStatus: VerifyStatus;
+  phoneStatus: VerifyStatus;
+  verifyNotes?: string;
+  verifiedAt?: string;
   uploadBatchId?: string;
   createdAt: string;
 }
@@ -79,6 +85,7 @@ export interface UploadBatch {
   id: string;
   filename: string;
   source: string;
+  groupName: string;
   purchaseDate: string;
   costCents: number;
   rowCount: number;
@@ -95,8 +102,9 @@ export interface Campaign {
   subject?: string;
   message: string;
   sourceFilter: string | "all";
-  /** Prefer leads not yet offered this entity (rotation). */
+  groupFilter: string | "all";
   preferUnoffered: boolean;
+  preferVerified: boolean;
   volume: number;
   throttlePerHour: number;
   status: CampaignStatus;
@@ -144,6 +152,19 @@ export interface RotationConfig {
   /** Entity ids in rotation order for planning blasts. */
   entityOrder: string[];
   notes: string;
+}
+
+/** Source performance for one entity portal. */
+export interface EntitySourceResult {
+  source: string;
+  groupName?: string;
+  offered: number;
+  replies: number;
+  interested: number;
+  conversions: number;
+  costCents: number;
+  costPerReply: number | null;
+  recommendation: "scale_up" | "hold" | "cut";
 }
 
 export interface PlatformData {

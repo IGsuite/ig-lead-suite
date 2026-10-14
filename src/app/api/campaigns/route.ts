@@ -17,7 +17,9 @@ export async function POST(request: Request) {
     subject?: string;
     message?: string;
     sourceFilter?: string;
+    groupFilter?: string;
     preferUnoffered?: boolean;
+    preferVerified?: boolean;
     volume?: number;
     throttlePerHour?: number;
     status?: "draft" | "scheduled";
@@ -49,7 +51,9 @@ export async function POST(request: Request) {
     subject: body.subject,
     message: body.message,
     sourceFilter: body.sourceFilter || "all",
+    groupFilter: body.groupFilter || "all",
     preferUnoffered: body.preferUnoffered ?? true,
+    preferVerified: body.preferVerified ?? true,
     volume: body.volume,
     throttlePerHour: body.throttlePerHour,
     status: body.status || "draft",

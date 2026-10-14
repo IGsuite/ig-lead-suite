@@ -72,6 +72,7 @@ async function replaceWithSeed(): Promise<PlatformData> {
         id: u.id,
         filename: u.filename,
         source: u.source,
+        groupName: u.groupName,
         purchaseDate: new Date(u.purchaseDate),
         costCents: u.costCents,
         rowCount: u.rowCount,
@@ -89,6 +90,7 @@ async function replaceWithSeed(): Promise<PlatformData> {
         firstName: l.firstName ?? null,
         lastName: l.lastName ?? null,
         source: l.source,
+        groupName: l.groupName,
         purchaseDate: new Date(l.purchaseDate),
         costCents: l.costCents,
         offeredEntityIds: l.offeredEntityIds,
@@ -96,6 +98,10 @@ async function replaceWithSeed(): Promise<PlatformData> {
         convertedEntityId: l.convertedEntityId,
         status: l.status,
         optedOut: l.optedOut,
+        emailStatus: l.emailStatus,
+        phoneStatus: l.phoneStatus,
+        verifyNotes: l.verifyNotes ?? null,
+        verifiedAt: l.verifiedAt ? new Date(l.verifiedAt) : null,
         uploadBatchId: l.uploadBatchId ?? null,
         createdAt: new Date(l.createdAt),
       })),
@@ -110,7 +116,9 @@ async function replaceWithSeed(): Promise<PlatformData> {
         subject: c.subject ?? null,
         message: c.message,
         sourceFilter: c.sourceFilter,
+        groupFilter: c.groupFilter,
         preferUnoffered: c.preferUnoffered,
+        preferVerified: c.preferVerified,
         volume: c.volume,
         throttlePerHour: c.throttlePerHour,
         status: c.status,
@@ -257,6 +265,7 @@ export async function updateRotation(
 export async function importLeads(input: {
   filename: string;
   source: string;
+  groupName?: string;
   purchaseDate: string;
   costCents: number;
   rows: Array<{
@@ -268,6 +277,7 @@ export async function importLeads(input: {
 }): Promise<{ batch: UploadBatch; imported: Lead[]; duplicates: number }> {
   await ensureSeeded();
   const prisma = getPrisma();
+  const groupName = input.groupName?.trim() || "General";
   const [existingLeads, optOuts] = await Promise.all([
     prisma.lead.findMany({ select: { email: true, phone: true } }),
     prisma.optOut.findMany({ select: { contact: true } }),
@@ -322,6 +332,7 @@ export async function importLeads(input: {
       firstName: row.firstName?.trim() || undefined,
       lastName: row.lastName?.trim() || undefined,
       source: input.source,
+      groupName,
       purchaseDate: input.purchaseDate,
       costCents: costPerLead,
       offeredEntityIds: [],
@@ -329,6 +340,8 @@ export async function importLeads(input: {
       convertedEntityId: null,
       status: "available",
       optedOut: false,
+      emailStatus: "unverified",
+      phoneStatus: "unverified",
       uploadBatchId: batchId,
       createdAt: new Date().toISOString(),
     };
@@ -341,6 +354,7 @@ export async function importLeads(input: {
     id: batchId,
     filename: input.filename,
     source: input.source,
+    groupName,
     purchaseDate: input.purchaseDate,
     costCents: input.costCents,
     rowCount: input.rows.length,
@@ -355,6 +369,7 @@ export async function importLeads(input: {
         id: batch.id,
         filename: batch.filename,
         source: batch.source,
+        groupName: batch.groupName,
         purchaseDate: new Date(batch.purchaseDate),
         costCents: batch.costCents,
         rowCount: batch.rowCount,
@@ -373,6 +388,7 @@ export async function importLeads(input: {
           firstName: l.firstName ?? null,
           lastName: l.lastName ?? null,
           source: l.source,
+          groupName: l.groupName,
           purchaseDate: new Date(l.purchaseDate),
           costCents: l.costCents,
           offeredEntityIds: l.offeredEntityIds,
@@ -380,6 +396,8 @@ export async function importLeads(input: {
           convertedEntityId: l.convertedEntityId,
           status: l.status,
           optedOut: l.optedOut,
+          emailStatus: l.emailStatus,
+          phoneStatus: l.phoneStatus,
           uploadBatchId: l.uploadBatchId ?? null,
           createdAt: new Date(l.createdAt),
         })),
@@ -436,7 +454,9 @@ export async function createCampaign(
       subject: input.subject ?? null,
       message: input.message,
       sourceFilter: input.sourceFilter,
+      groupFilter: input.groupFilter,
       preferUnoffered: input.preferUnoffered,
+      preferVerified: input.preferVerified,
       volume: input.volume,
       throttlePerHour: input.throttlePerHour,
       status: input.status,
@@ -459,7 +479,9 @@ export async function launchCampaign(id: string): Promise<Campaign | null> {
       isLeadEligibleForEntity(lead, campaign.brandId, {
         channel: campaign.channel,
         sourceFilter: campaign.sourceFilter,
+        groupFilter: campaign.groupFilter,
         preferUnoffered: campaign.preferUnoffered,
+        preferVerified: campaign.preferVerified,
       }),
     )
     .sort((a, b) => a.offeredEntityIds.length - b.offeredEntityIds.length)
@@ -558,4 +580,48 @@ export async function markReply(
   }
 
   return mapReply(updated);
+}
+
+export async function verifyLeads(input?: {
+  leadIds?: string[];
+  onlyUnverified?: boolean;
+}): Promise<{ verified: number; invalid: number; risky: number }> {
+  await ensureSeeded();
+  const prisma = getPrisma();
+  const { verifyContact } = await import("@/lib/verify");
+  const leads = await prisma.lead.findMany();
+  let verified = 0;
+  let invalid = 0;
+  let risky = 0;
+
+  for (const lead of leads) {
+    if (input?.leadIds?.length && !input.leadIds.includes(lead.id)) continue;
+    if (
+      input?.onlyUnverified !== false &&
+      lead.emailStatus !== "unverified" &&
+      lead.phoneStatus !== "unverified"
+    ) {
+      continue;
+    }
+    const result = verifyContact({
+      email: lead.email ?? undefined,
+      phone: lead.phone ?? undefined,
+    });
+    await prisma.lead.update({
+      where: { id: lead.id },
+      data: {
+        emailStatus: result.emailStatus,
+        phoneStatus: result.phoneStatus,
+        verifyNotes: result.verifyNotes,
+        verifiedAt: new Date(),
+      },
+    });
+    verified += 1;
+    if (result.emailStatus === "invalid" || result.phoneStatus === "invalid")
+      invalid += 1;
+    else if (result.emailStatus === "risky" || result.phoneStatus === "risky")
+      risky += 1;
+  }
+
+  return { verified, invalid, risky };
 }

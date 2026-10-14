@@ -28,6 +28,13 @@ const toneMap: Record<string, string> = {
   not_interested: "bg-orange-100 text-orange-950 border-orange-200",
   opt_out: "bg-rose-100 text-rose-950 border-rose-200",
   other: "bg-slate-100 text-slate-700 border-slate-200",
+  valid: "bg-emerald-100 text-emerald-900 border-emerald-200",
+  invalid: "bg-rose-100 text-rose-950 border-rose-200",
+  risky: "bg-amber-100 text-amber-950 border-amber-200",
+  unverified: "bg-slate-100 text-slate-700 border-slate-200",
+  scale_up: "bg-emerald-100 text-emerald-900 border-emerald-200",
+  hold: "bg-slate-100 text-slate-700 border-slate-200",
+  cut: "bg-rose-100 text-rose-950 border-rose-200",
 };
 
 export function StatusPill({

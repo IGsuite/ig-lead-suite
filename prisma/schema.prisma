@@ -36,34 +36,44 @@ model Entity {
 }
 
 model Lead {
-  id                String   @id
+  id                String    @id
   email             String?
   phone             String?
   firstName         String?
   lastName          String?
   source            String
-  purchaseDate      DateTime @db.Date
+  /// Optional buy/list group within a source (e.g. "Week 12 MCA file")
+  groupName         String    @default("General")
+  purchaseDate      DateTime  @db.Date
   costCents         Int
   offeredEntityIds  String[]
   lastEntityId      String?
   convertedEntityId String?
   status            String
-  optedOut          Boolean  @default(false)
+  optedOut          Boolean   @default(false)
+  emailStatus       String    @default("unverified")
+  phoneStatus       String    @default("unverified")
+  verifyNotes       String?
+  verifiedAt        DateTime?
   uploadBatchId     String?
-  createdAt         DateTime @default(now())
+  createdAt         DateTime  @default(now())
 
   uploadBatch UploadBatch? @relation(fields: [uploadBatchId], references: [id])
   replies     Reply[]
 
   @@index([source])
+  @@index([groupName])
   @@index([status])
   @@index([optedOut])
+  @@index([emailStatus])
+  @@index([phoneStatus])
 }
 
 model UploadBatch {
   id             String   @id
   filename       String
   source         String
+  groupName      String   @default("General")
   purchaseDate   DateTime @db.Date
   costCents      Int
   rowCount       Int
@@ -82,7 +92,10 @@ model Campaign {
   subject         String?
   message         String
   sourceFilter    String    @default("all")
+  groupFilter     String    @default("all")
   preferUnoffered Boolean   @default(true)
+  /// Only queue leads with valid (or risky) verified contacts for the channel
+  preferVerified  Boolean   @default(true)
   volume          Int
   throttlePerHour Int
   status          String
@@ -143,7 +156,7 @@ model ProviderSpend {
 /// Singleton row (id = "default") for rotation config
 model PlatformSettings {
   id          String   @id @default("default")
-  version     Int      @default(3)
+  version     Int      @default(5)
   mode        String   @default("round_robin")
   entityOrder String[]
   notes       String   @default("")

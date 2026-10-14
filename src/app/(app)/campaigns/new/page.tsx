@@ -36,7 +36,9 @@ function CampaignBuilderInner() {
     "Hi {{firstName}}, {{brand}} here — working capital may be available for your business. Reply YES for options, or STOP to opt out.",
   );
   const [sourceFilter, setSourceFilter] = useState("all");
+  const [groupFilter, setGroupFilter] = useState("all");
   const [preferUnoffered, setPreferUnoffered] = useState(true);
+  const [preferVerified, setPreferVerified] = useState(true);
   const [volume, setVolume] = useState(1500);
   const [throttlePerHour, setThrottlePerHour] = useState(120);
   const [saving, setSaving] = useState(false);
@@ -46,18 +48,46 @@ function CampaignBuilderInner() {
     return Array.from(new Set(data.leads.map((l) => l.source))).sort();
   }, [data]);
 
+  const groups = useMemo(() => {
+    if (!data) return [];
+    return Array.from(new Set(data.leads.map((l) => l.groupName))).sort();
+  }, [data]);
+
   const audienceCount = useMemo(() => {
     if (!data) return 0;
     return data.leads.filter((lead) => {
       if (lead.optedOut || lead.status === "opted_out") return false;
       if (lead.status === "converted" || lead.convertedEntityId) return false;
       if (sourceFilter !== "all" && lead.source !== sourceFilter) return false;
+      if (groupFilter !== "all" && lead.groupName !== groupFilter) return false;
       if (channel === "sms" && !lead.phone) return false;
       if (channel === "email" && !lead.email) return false;
       if (preferUnoffered && lead.offeredEntityIds.includes(brandId)) return false;
+      if (preferVerified) {
+        if (channel === "email") {
+          if (
+            lead.emailStatus !== "valid" &&
+            lead.emailStatus !== "risky"
+          )
+            return false;
+        } else if (
+          lead.phoneStatus !== "valid" &&
+          lead.phoneStatus !== "risky"
+        ) {
+          return false;
+        }
+      }
       return true;
     }).length;
-  }, [data, sourceFilter, channel, preferUnoffered, brandId]);
+  }, [
+    data,
+    sourceFilter,
+    groupFilter,
+    channel,
+    preferUnoffered,
+    preferVerified,
+    brandId,
+  ]);
 
   async function create(status: "draft" | "scheduled") {
     setSaving(true);
@@ -72,7 +102,9 @@ function CampaignBuilderInner() {
           subject: channel === "email" ? subject : undefined,
           message,
           sourceFilter,
+          groupFilter,
           preferUnoffered,
+          preferVerified,
           volume,
           throttlePerHour,
           status,
@@ -169,26 +201,49 @@ function CampaignBuilderInner() {
             <Input value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
 
-          <div className="space-y-2">
-            <Label>Audience source</Label>
-            <Select
-              value={sourceFilter}
-              onValueChange={(value) => {
-                if (value) setSourceFilter(value);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All sources</SelectItem>
-                {sources.map((source) => (
-                  <SelectItem key={source} value={source}>
-                    {source}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Audience source</Label>
+              <Select
+                value={sourceFilter}
+                onValueChange={(value) => {
+                  if (value) setSourceFilter(value);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All sources</SelectItem>
+                  {sources.map((source) => (
+                    <SelectItem key={source} value={source}>
+                      {source}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Audience group</Label>
+              <Select
+                value={groupFilter}
+                onValueChange={(value) => {
+                  if (value) setGroupFilter(value);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All groups</SelectItem>
+                  {groups.map((group) => (
+                    <SelectItem key={group} value={group}>
+                      {group}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {channel === "email" ? (
@@ -219,6 +274,15 @@ function CampaignBuilderInner() {
               onChange={(e) => setPreferUnoffered(e.target.checked)}
             />
             Prefer leads not yet offered this entity (rotation)
+          </label>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={preferVerified}
+              onChange={(e) => setPreferVerified(e.target.checked)}
+            />
+            Only queue verified (valid/risky) contacts — skip invalids to cut bounces
           </label>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -266,7 +330,8 @@ function CampaignBuilderInner() {
           <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
             contacts queued from {compactNumber(audienceCount)} eligible shared-pool
             leads
-            {preferUnoffered ? " (not yet offered this entity)" : ""}.
+            {preferUnoffered ? " · fresh for this entity" : ""}
+            {preferVerified ? " · verified only" : ""}.
           </p>
           <div className="mt-6 space-y-3 text-sm text-[color:var(--ink-soft)]">
             <div className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2">
