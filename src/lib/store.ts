@@ -4,6 +4,8 @@ import * as jsonStore from "@/lib/json-store";
 import * as neonStore from "@/lib/neon-store";
 import type { AutopilotRunResult } from "@/lib/autopilot";
 import type {
+  AdAsset,
+  AdFolder,
   Brand,
   Campaign,
   CostEntry,
@@ -150,6 +152,40 @@ export async function updateMessageTemplate(
 
 export async function deleteMessageTemplate(id: string): Promise<boolean> {
   return backend().deleteMessageTemplate(id);
+}
+
+export async function createAdFolder(
+  input: Omit<AdFolder, "id" | "createdAt" | "updatedAt">,
+): Promise<AdFolder> {
+  return backend().createAdFolder(input);
+}
+
+export async function updateAdFolder(
+  id: string,
+  patch: Partial<Omit<AdFolder, "id" | "createdAt" | "updatedAt">>,
+): Promise<AdFolder | null> {
+  return backend().updateAdFolder(id, patch);
+}
+
+export async function deleteAdFolder(id: string): Promise<boolean> {
+  return backend().deleteAdFolder(id);
+}
+
+export async function createAdAsset(
+  input: Omit<AdAsset, "id" | "createdAt" | "updatedAt">,
+): Promise<AdAsset> {
+  return backend().createAdAsset(input);
+}
+
+export async function updateAdAsset(
+  id: string,
+  patch: Partial<Omit<AdAsset, "id" | "createdAt" | "updatedAt">>,
+): Promise<AdAsset | null> {
+  return backend().updateAdAsset(id, patch);
+}
+
+export async function deleteAdAsset(id: string): Promise<boolean> {
+  return backend().deleteAdAsset(id);
 }
 
 export function costPerReply(spend: {

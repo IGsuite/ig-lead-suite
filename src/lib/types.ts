@@ -143,7 +143,34 @@ export interface Campaign {
   startedAt?: string;
 }
 
-/** Reusable SMS / email blast copy (Creatives library). */
+/** Folder in an entity (or shared) Ads library. */
+export interface AdFolder {
+  id: string;
+  name: string;
+  /** null = shared across entities; otherwise one portal. */
+  brandId: string | null;
+  parentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Uploaded marketing file — bytes under `.data/ad-assets/`. */
+export interface AdAsset {
+  id: string;
+  /** null = shared across entities; otherwise one portal. */
+  brandId: string | null;
+  folderId: string | null;
+  name: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  /** Relative path under `.data/ad-assets/`. */
+  storagePath: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Reusable SMS / email blast copy (Ads library). */
 export interface MessageTemplate {
   id: string;
   name: string;
@@ -152,6 +179,8 @@ export interface MessageTemplate {
   body: string;
   /** null = shared across entities; otherwise one portal. */
   brandId: string | null;
+  /** Optional folder within that entity's Ads library. */
+  folderId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -348,5 +377,7 @@ export interface PlatformData {
   providerSpend: ProviderSpend[];
   costEntries: CostEntry[];
   messageTemplates: MessageTemplate[];
+  adFolders: AdFolder[];
+  adAssets: AdAsset[];
   rotation: RotationConfig;
 }

@@ -94,19 +94,16 @@ npm run dev
 
 Open [http://127.0.0.1:43123](http://127.0.0.1:43123).
 
-## Creatives (ads development)
+## Ads (creators · copy, templates & files)
 
-Open **Creatives** in the sidebar (`/creatives`):
+Yes — **creators work here**. Open **Ads** in the sidebar (`/creatives`):
 
-1. **Creative assistant** (top panel) — pick a mode chip:
-   - **Create new** — brief / offer / tone / CTA → 2–3 variations.
-   - **Improve existing** — dropdown of saved creatives → AI rewrite (or use **Improve with AI** on a library card).
-   - **Suggest from winners** — remixes top-performing campaign messages + recent templates for that entity/channel.
-   - **Quick tips** — short SMS/email coaching for the selected entity.
-2. After a draft: **Shorter** / **Stronger CTA** / **Softer / compliance-safe** / **More variants** iterates from the selected option.
-3. **Use in form** or **Save as template**, then pick the template from the campaign builder.
-4. Compliance-minded prompts (no guaranteed funding; SMS samples include STOP). Works in **demo mode** without an AI key.
-5. Image-heavy email design stays in **Smartlead** for now — this library is copy, not a Canva clone.
+1. **Pick a company first** (Shared, Abstract, Ahava, …). You only see that company’s library — folders, templates, and files never mix across entities.
+2. **Folders + templates + files** — organize SMS/email templates in folders; upload images/docs (stored under `.data/ad-assets/{entityId}/…`, metadata in Neon/JSON).
+3. **AI wording** (Create / Improve / Winners / Tips) is scoped to the selected company. After a draft: **Shorter** / **Stronger CTA** / **Softer** / **More variants**.
+4. **Use in form** or **Save as template**, then **Campaigns → Use template** for that entity.
+5. ACL: members only see entities they can access; shared library edits are admin-only.
+6. Not a Canva clone — image-heavy email layouts stay in **Smartlead**.
 
 AI keys (any one):
 
@@ -123,9 +120,9 @@ Without a key the UI still works with demo drafts.
 ## Lead ops flow
 
 1. **Leads** — Upload a provider CSV (source + group). Email and phone are **verified on import**.
-2. **Creatives** — Draft SMS/email copy (AI optional) and save templates.
+2. **Ads** — Pick a company, organize folders/templates/files, draft SMS/email copy with AI, save templates.
 3. **Reports** — Performance scorecards, best message ranking, Improve (source + timing + copy), Sources, Send timing, Costs & ROI — always filterable per company.
-4. **Campaigns / Autopilot** — Build or spin daily volumes **in Master Marketing CRM** with send windows. SMS → Telnyx; email → Smartlead/Instantly. Use Creatives templates in the builder.
+4. **Campaigns / Autopilot** — Build or spin daily volumes **in Master Marketing CRM** with send windows. SMS → Telnyx; email → Smartlead/Instantly. Use Ads templates in the builder.
 5. **Inbox** — Replies land in that entity’s inbox only. Good lead → Email team.
 6. **Users** — Give Ahava staff Ahava-only access, etc.
 

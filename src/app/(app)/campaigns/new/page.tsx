@@ -318,11 +318,11 @@ function CampaignBuilderInner() {
                 if (tpl.channel === "email" && tpl.subject) {
                   setSubject(tpl.subject);
                 }
-                toast.message(`Loaded “${tpl.name}” from Creatives`);
+                toast.message(`Loaded “${tpl.name}” from Ads`);
               }}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Pick from Creatives library" />
+                <SelectValue placeholder="Pick from Ads library" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">Write from scratch</SelectItem>
@@ -336,10 +336,10 @@ function CampaignBuilderInner() {
             </Select>
             <p className="text-xs text-[color:var(--ink-muted)]">
               {usableTemplates.length
-                ? "Shared + this entity’s templates for the selected channel."
-                : "No matching templates — create some under Creatives."}{" "}
+                ? "Shared + this company's Ads templates for the selected channel."
+                : "No matching templates — create some under Ads."}{" "}
               <Link href="/creatives" className="underline underline-offset-2">
-                Open Creatives
+                Open Ads
               </Link>
             </p>
           </div>

@@ -17,6 +17,7 @@ type CreativeBody = {
   subject?: string;
   body?: string;
   brandId?: string | null;
+  folderId?: string | null;
 };
 
 export async function GET() {
@@ -89,6 +90,7 @@ export async function POST(request: Request) {
       subject: payload.subject,
       body: payload.body,
       brandId: payload.brandId === undefined ? undefined : payload.brandId,
+      folderId: payload.folderId === undefined ? undefined : payload.folderId,
     });
     if (!updated) {
       return NextResponse.json({ error: "Template not found" }, { status: 404 });
@@ -109,6 +111,11 @@ export async function POST(request: Request) {
     if (!gate.ok) {
       return NextResponse.json({ error: gate.error }, { status: gate.status });
     }
+  } else if (!isAdminSession(session)) {
+    return NextResponse.json(
+      { error: "Only admins can create shared templates" },
+      { status: 403 },
+    );
   }
 
   const template = await createMessageTemplate({
@@ -120,6 +127,7 @@ export async function POST(request: Request) {
         : undefined,
     body: payload.body.trim(),
     brandId,
+    folderId: payload.folderId ?? null,
   });
 
   return NextResponse.json(template);

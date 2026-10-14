@@ -81,7 +81,7 @@ export default function DashboardPage() {
               href="/creatives"
               className={cn(buttonVariants({ variant: "outline" }))}
             >
-              Creatives
+              Ads
             </Link>
             <Link href="/campaigns" className={cn(buttonVariants())}>
               Campaigns
@@ -194,7 +194,7 @@ export default function DashboardPage() {
             { href: "/leads", label: "Leads" },
             { href: "/reports", label: "Reports" },
             { href: "/campaigns", label: "Campaigns" },
-            { href: "/creatives", label: "Creatives" },
+            { href: "/creatives", label: "Ads" },
             { href: "/autopilot", label: "Autopilot" },
             { href: "/brands", label: "Entities" },
             { href: "/setup", label: "Go live" },

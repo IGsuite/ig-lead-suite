@@ -1,7 +1,8 @@
 import { defaultQuotas } from "@/lib/autopilot";
+import { writeSeedAdAssetFile } from "@/lib/ad-assets-fs";
 import type { PlatformData } from "@/lib/types";
 
-export const STORE_VERSION = 10;
+export const STORE_VERSION = 11;
 
 export function createSeedData(): PlatformData {
   const now = new Date();
@@ -726,6 +727,73 @@ export function createSeedData(): PlatformData {
       createdAt: l.createdAt,
     }));
 
+  const adFolders: PlatformData["adFolders"] = [
+    {
+      id: "fold-shared-sms",
+      name: "SMS openers",
+      brandId: null,
+      parentId: null,
+      createdAt: daysAgo(7),
+      updatedAt: daysAgo(7),
+    },
+    {
+      id: "fold-shared-email",
+      name: "Email openers",
+      brandId: null,
+      parentId: null,
+      createdAt: daysAgo(7),
+      updatedAt: daysAgo(7),
+    },
+    {
+      id: "fold-abstract-mca",
+      name: "MCA",
+      brandId: "abstract",
+      parentId: null,
+      createdAt: daysAgo(5),
+      updatedAt: daysAgo(5),
+    },
+    {
+      id: "fold-abstract-followups",
+      name: "Follow-ups",
+      brandId: "abstract",
+      parentId: null,
+      createdAt: daysAgo(5),
+      updatedAt: daysAgo(5),
+    },
+    {
+      id: "fold-ahava-wc",
+      name: "Working capital",
+      brandId: "ahava",
+      parentId: null,
+      createdAt: daysAgo(4),
+      updatedAt: daysAgo(4),
+    },
+    {
+      id: "fold-takemore-broker",
+      name: "Brokerage openers",
+      brandId: "takemore",
+      parentId: null,
+      createdAt: daysAgo(3),
+      updatedAt: daysAgo(3),
+    },
+    {
+      id: "fold-tyh-ads",
+      name: "Paid ads & SEO",
+      brandId: "tyh",
+      parentId: null,
+      createdAt: daysAgo(3),
+      updatedAt: daysAgo(3),
+    },
+    {
+      id: "fold-venture-inst",
+      name: "Institutional",
+      brandId: "venture",
+      parentId: null,
+      createdAt: daysAgo(3),
+      updatedAt: daysAgo(3),
+    },
+  ];
+
   const messageTemplates: PlatformData["messageTemplates"] = [
     {
       id: "tpl-sms-wc-shared",
@@ -733,6 +801,7 @@ export function createSeedData(): PlatformData {
       channel: "sms",
       body: "Hi {{firstName}}, {{brand}} here — working capital may be available for your business. Reply YES for options, or STOP to opt out.",
       brandId: null,
+      folderId: "fold-shared-sms",
       createdAt: daysAgo(6),
       updatedAt: daysAgo(6),
     },
@@ -743,6 +812,7 @@ export function createSeedData(): PlatformData {
       subject: "Working capital options from {{brand}}",
       body: "Hi {{firstName}},\n\n{{brand}} here — working capital may be available for your business. Reply if you want options.\n\nUnsubscribe anytime.",
       brandId: null,
+      folderId: "fold-shared-email",
       createdAt: daysAgo(6),
       updatedAt: daysAgo(6),
     },
@@ -752,6 +822,7 @@ export function createSeedData(): PlatformData {
       channel: "sms",
       body: "Hi {{firstName}}, Abstract Capital — flexible MCA / working capital for qualified businesses. Reply YES to talk, STOP to opt out.",
       brandId: "abstract",
+      folderId: "fold-abstract-mca",
       createdAt: daysAgo(4),
       updatedAt: daysAgo(4),
     },
@@ -762,8 +833,19 @@ export function createSeedData(): PlatformData {
       subject: "{{firstName}}, capital options from Abstract",
       body: "Hi {{firstName}},\n\nAbstract Capital Group helps small businesses shop MCA, LOC, and term options.\n\nReply to this email if you want a quick look at what may fit.\n\nUnsubscribe anytime.",
       brandId: "abstract",
+      folderId: "fold-abstract-mca",
       createdAt: daysAgo(4),
       updatedAt: daysAgo(4),
+    },
+    {
+      id: "tpl-sms-abstract-fu",
+      name: "Abstract soft follow-up",
+      channel: "sms",
+      body: "Hi {{firstName}}, Abstract again — still exploring capital options? Reply YES and we’ll send a short checklist. STOP to opt out.",
+      brandId: "abstract",
+      folderId: "fold-abstract-followups",
+      createdAt: daysAgo(2),
+      updatedAt: daysAgo(2),
     },
     {
       id: "tpl-sms-ahava",
@@ -771,6 +853,56 @@ export function createSeedData(): PlatformData {
       channel: "sms",
       body: "Hi {{firstName}}, Ahava Capital here — working capital with a human touch. Reply YES for options, STOP to opt out.",
       brandId: "ahava",
+      folderId: "fold-ahava-wc",
+      createdAt: daysAgo(3),
+      updatedAt: daysAgo(3),
+    },
+    {
+      id: "tpl-sms-takemore",
+      name: "Take More shop-the-market",
+      channel: "sms",
+      body: "Hi {{firstName}}, Take More Funding — we shop 50+ lenders for working capital. Reply YES for options, STOP to opt out.",
+      brandId: "takemore",
+      folderId: "fold-takemore-broker",
+      createdAt: daysAgo(2),
+      updatedAt: daysAgo(2),
+    },
+  ];
+
+  const adAssets: PlatformData["adAssets"] = [
+    {
+      id: "asset-shared-guide",
+      brandId: null,
+      folderId: "fold-shared-email",
+      name: "Shared compliance notes",
+      originalName: "shared-compliance-notes.txt",
+      mimeType: "text/plain",
+      sizeBytes: 0,
+      storagePath: "shared/shared-compliance-notes.txt",
+      createdAt: daysAgo(6),
+      updatedAt: daysAgo(6),
+    },
+    {
+      id: "asset-abstract-brief",
+      brandId: "abstract",
+      folderId: "fold-abstract-mca",
+      name: "Abstract MCA brief",
+      originalName: "abstract-mca-brief.txt",
+      mimeType: "text/plain",
+      sizeBytes: 0,
+      storagePath: "abstract/abstract-mca-brief.txt",
+      createdAt: daysAgo(4),
+      updatedAt: daysAgo(4),
+    },
+    {
+      id: "asset-ahava-tone",
+      brandId: "ahava",
+      folderId: "fold-ahava-wc",
+      name: "Ahava tone sheet",
+      originalName: "ahava-tone-sheet.txt",
+      mimeType: "text/plain",
+      sizeBytes: 0,
+      storagePath: "ahava/ahava-tone-sheet.txt",
       createdAt: daysAgo(3),
       updatedAt: daysAgo(3),
     },
@@ -798,6 +930,8 @@ export function createSeedData(): PlatformData {
     replies,
     optOuts,
     messageTemplates,
+    adFolders,
+    adAssets,
     providerSpend: [
       {
         source: "LeadForge",
@@ -972,4 +1106,39 @@ export function createSeedData(): PlatformData {
       ).toISOString(),
     },
   };
+}
+
+/** Write demo asset bytes under `.data/ad-assets/` and fill sizeBytes. */
+export async function materializeSeedAdAssets(
+  data: PlatformData,
+): Promise<PlatformData> {
+  const samples: Record<string, string> = {
+    "shared/shared-compliance-notes.txt":
+      "Shared Ads notes\n\n- No guaranteed funding language\n- SMS samples keep STOP\n- Keep entity libraries separate\n",
+    "abstract/abstract-mca-brief.txt":
+      "Abstract MCA brief\n\nTone: professional, clear CTA.\nOffer: MCA / working capital for qualified SMBs.\n",
+    "ahava/ahava-tone-sheet.txt":
+      "Ahava tone sheet\n\nWarm, human, capital with love — still compliance-safe.\n",
+  };
+
+  const adAssets = await Promise.all(
+    (data.adAssets || []).map(async (asset) => {
+      const contents =
+        samples[asset.storagePath] ||
+        `${asset.name}\n\nDemo marketing asset for ${asset.brandId || "shared"}.\n`;
+      const relativeName = asset.storagePath.split("/").pop() || asset.originalName;
+      const written = await writeSeedAdAssetFile({
+        brandId: asset.brandId,
+        relativeName,
+        contents,
+      });
+      return {
+        ...asset,
+        storagePath: written.storagePath,
+        sizeBytes: written.sizeBytes,
+      };
+    }),
+  );
+
+  return { ...data, adAssets };
 }

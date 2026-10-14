@@ -1,5 +1,7 @@
 import { normalizeRotation } from "@/lib/autopilot";
 import type {
+  AdAsset,
+  AdFolder,
   Brand,
   Campaign,
   CampaignChannel,
@@ -277,6 +279,7 @@ export function mapMessageTemplate(row: {
   subject: string | null;
   body: string;
   brandId: string | null;
+  folderId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }): MessageTemplate {
@@ -287,6 +290,51 @@ export function mapMessageTemplate(row: {
     subject: row.subject ?? undefined,
     body: row.body,
     brandId: row.brandId,
+    folderId: row.folderId ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export function mapAdFolder(row: {
+  id: string;
+  name: string;
+  brandId: string | null;
+  parentId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): AdFolder {
+  return {
+    id: row.id,
+    name: row.name,
+    brandId: row.brandId,
+    parentId: row.parentId,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export function mapAdAsset(row: {
+  id: string;
+  brandId: string | null;
+  folderId: string | null;
+  name: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storagePath: string;
+  createdAt: Date;
+  updatedAt: Date;
+}): AdAsset {
+  return {
+    id: row.id,
+    brandId: row.brandId,
+    folderId: row.folderId,
+    name: row.name,
+    originalName: row.originalName,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes,
+    storagePath: row.storagePath,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

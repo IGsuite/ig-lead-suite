@@ -9,8 +9,15 @@ import {
 
 export type { AutopilotRunResult };
 import { isLeadEligibleForEntity, normalizeContact } from "@/lib/eligibility";
-import { STORE_VERSION, createSeedData } from "@/lib/seed";
+import { deleteAdAssetFile } from "@/lib/ad-assets-fs";
+import {
+  STORE_VERSION,
+  createSeedData,
+  materializeSeedAdAssets,
+} from "@/lib/seed";
 import type {
+  AdAsset,
+  AdFolder,
   Brand,
   Campaign,
   CostEntry,
@@ -46,12 +53,17 @@ async function ensureStore(): Promise<PlatformData> {
     const raw = await fs.readFile(DATA_FILE, "utf8");
     const parsed = JSON.parse(raw) as PlatformData;
     if (parsed.version !== STORE_VERSION) {
-      const seed = createSeedData();
+      const seed = await materializeSeedAdAssets(createSeedData());
       await writeStore(seed);
       return seed;
     }
     if (!parsed.costEntries) parsed.costEntries = [];
     if (!parsed.messageTemplates) parsed.messageTemplates = [];
+    if (!parsed.adFolders) parsed.adFolders = [];
+    if (!parsed.adAssets) parsed.adAssets = [];
+    for (const t of parsed.messageTemplates) {
+      if (t.folderId === undefined) t.folderId = null;
+    }
     for (const c of parsed.campaigns || []) {
       if (!c.sendWindowPreset) {
         Object.assign(c, normalizeSendWindow(c));
@@ -59,7 +71,7 @@ async function ensureStore(): Promise<PlatformData> {
     }
     return parsed;
   } catch {
-    const seed = createSeedData();
+    const seed = await materializeSeedAdAssets(createSeedData());
     await fs.writeFile(DATA_FILE, JSON.stringify(seed, null, 2), "utf8");
     return seed;
   }
@@ -75,7 +87,7 @@ export async function getData(): Promise<PlatformData> {
 }
 
 export async function resetData(): Promise<PlatformData> {
-  const seed = createSeedData();
+  const seed = await materializeSeedAdAssets(createSeedData());
   await writeStore(seed);
   return seed;
 }
@@ -533,6 +545,7 @@ export async function createMessageTemplate(
   const now = new Date().toISOString();
   const template: MessageTemplate = {
     ...input,
+    folderId: input.folderId ?? null,
     id: `tpl-${Date.now()}`,
     createdAt: now,
     updatedAt: now,
@@ -570,6 +583,107 @@ export async function deleteMessageTemplate(id: string): Promise<boolean> {
   );
   await writeStore(data);
   return (data.messageTemplates?.length || 0) < before;
+}
+
+export async function createAdFolder(
+  input: Omit<AdFolder, "id" | "createdAt" | "updatedAt">,
+): Promise<AdFolder> {
+  const data = await ensureStore();
+  const now = new Date().toISOString();
+  const folder: AdFolder = {
+    ...input,
+    id: `fold-${Date.now()}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  data.adFolders = data.adFolders || [];
+  data.adFolders.unshift(folder);
+  await writeStore(data);
+  return folder;
+}
+
+export async function updateAdFolder(
+  id: string,
+  patch: Partial<Omit<AdFolder, "id" | "createdAt" | "updatedAt">>,
+): Promise<AdFolder | null> {
+  const data = await ensureStore();
+  const idx = (data.adFolders || []).findIndex((f) => f.id === id);
+  if (idx < 0) return null;
+  data.adFolders[idx] = {
+    ...data.adFolders[idx],
+    ...patch,
+    id,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeStore(data);
+  return data.adFolders[idx];
+}
+
+export async function deleteAdFolder(id: string): Promise<boolean> {
+  const data = await ensureStore();
+  const folders = data.adFolders || [];
+  const toRemove = new Set<string>();
+  function collect(fid: string) {
+    toRemove.add(fid);
+    for (const child of folders.filter((f) => f.parentId === fid)) {
+      collect(child.id);
+    }
+  }
+  if (!folders.some((f) => f.id === id)) return false;
+  collect(id);
+  data.adFolders = folders.filter((f) => !toRemove.has(f.id));
+  data.messageTemplates = (data.messageTemplates || []).map((t) =>
+    t.folderId && toRemove.has(t.folderId) ? { ...t, folderId: null } : t,
+  );
+  data.adAssets = (data.adAssets || []).map((a) =>
+    a.folderId && toRemove.has(a.folderId) ? { ...a, folderId: null } : a,
+  );
+  await writeStore(data);
+  return true;
+}
+
+export async function createAdAsset(
+  input: Omit<AdAsset, "id" | "createdAt" | "updatedAt">,
+): Promise<AdAsset> {
+  const data = await ensureStore();
+  const now = new Date().toISOString();
+  const asset: AdAsset = {
+    ...input,
+    id: `asset-${Date.now()}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  data.adAssets = data.adAssets || [];
+  data.adAssets.unshift(asset);
+  await writeStore(data);
+  return asset;
+}
+
+export async function updateAdAsset(
+  id: string,
+  patch: Partial<Omit<AdAsset, "id" | "createdAt" | "updatedAt">>,
+): Promise<AdAsset | null> {
+  const data = await ensureStore();
+  const idx = (data.adAssets || []).findIndex((a) => a.id === id);
+  if (idx < 0) return null;
+  data.adAssets[idx] = {
+    ...data.adAssets[idx],
+    ...patch,
+    id,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeStore(data);
+  return data.adAssets[idx];
+}
+
+export async function deleteAdAsset(id: string): Promise<boolean> {
+  const data = await ensureStore();
+  const existing = (data.adAssets || []).find((a) => a.id === id);
+  if (!existing) return false;
+  await deleteAdAssetFile(existing.storagePath);
+  data.adAssets = (data.adAssets || []).filter((a) => a.id !== id);
+  await writeStore(data);
+  return true;
 }
 
 /** One daily Ferris-wheel pass: each enabled entity gets its own SMS + email blast. */

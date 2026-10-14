@@ -120,6 +120,46 @@ model Campaign {
   @@index([status])
 }
 
+/// Per-entity (or shared) folder in the Ads library
+model AdFolder {
+  id        String   @id
+  name      String
+  /// null = shared library; otherwise one entity portal
+  brandId   String?
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent    AdFolder?         @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  AdFolder[]        @relation("FolderTree")
+  templates MessageTemplate[]
+  assets    AdAsset[]
+
+  @@index([brandId])
+  @@index([parentId])
+}
+
+/// Uploaded marketing file (image/doc) — bytes live under .data/ad-assets/
+model AdAsset {
+  id           String   @id
+  /// null = shared library; otherwise one entity portal
+  brandId      String?
+  folderId     String?
+  name         String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  /// Relative path under .data/ad-assets/ (e.g. abstract/folder/file.png)
+  storagePath  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  folder AdFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  @@index([brandId])
+  @@index([folderId])
+}
+
 /// Reusable SMS / email copy — write once, pull into campaigns
 model MessageTemplate {
   id        String   @id
@@ -129,11 +169,16 @@ model MessageTemplate {
   body      String
   /// null = shared library; otherwise scoped to one entity portal
   brandId   String?
+  /// Optional folder within that entity's Ads library
+  folderId  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  folder AdFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
   @@index([channel])
   @@index([brandId])
+  @@index([folderId])
 }
 
 /// Ops users — admin sees all entities; member only allowedEntityIds

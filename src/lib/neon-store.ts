@@ -11,7 +11,10 @@ function asJson(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 }
 import { isLeadEligibleForEntity, normalizeContact } from "@/lib/eligibility";
+import { deleteAdAssetFile } from "@/lib/ad-assets-fs";
 import {
+  mapAdAsset,
+  mapAdFolder,
   mapCampaign,
   mapCostEntry,
   mapEntity,
@@ -23,8 +26,14 @@ import {
   mapSpend,
   mapUpload,
 } from "@/lib/mappers";
-import { STORE_VERSION, createSeedData } from "@/lib/seed";
+import {
+  STORE_VERSION,
+  createSeedData,
+  materializeSeedAdAssets,
+} from "@/lib/seed";
 import type {
+  AdAsset,
+  AdFolder,
   Brand,
   Campaign,
   CostEntry,
@@ -62,12 +71,14 @@ async function ensureSeeded(): Promise<void> {
 
 async function replaceWithSeed(): Promise<PlatformData> {
   const prisma = getPrisma();
-  const seed = createSeedData();
+  const seed = await materializeSeedAdAssets(createSeedData());
 
   await prisma.$transaction(async (tx) => {
     await tx.reply.deleteMany();
     await tx.campaign.deleteMany();
     await tx.messageTemplate.deleteMany();
+    await tx.adAsset.deleteMany();
+    await tx.adFolder.deleteMany();
     await tx.lead.deleteMany();
     await tx.uploadBatch.deleteMany();
     await tx.optOut.deleteMany();
@@ -223,6 +234,19 @@ async function replaceWithSeed(): Promise<PlatformData> {
       });
     }
 
+    if (seed.adFolders?.length) {
+      await tx.adFolder.createMany({
+        data: seed.adFolders.map((f) => ({
+          id: f.id,
+          name: f.name,
+          brandId: f.brandId,
+          parentId: f.parentId,
+          createdAt: new Date(f.createdAt),
+          updatedAt: new Date(f.updatedAt),
+        })),
+      });
+    }
+
     if (seed.messageTemplates?.length) {
       await tx.messageTemplate.createMany({
         data: seed.messageTemplates.map((t) => ({
@@ -232,8 +256,26 @@ async function replaceWithSeed(): Promise<PlatformData> {
           subject: t.subject ?? null,
           body: t.body,
           brandId: t.brandId,
+          folderId: t.folderId ?? null,
           createdAt: new Date(t.createdAt),
           updatedAt: new Date(t.updatedAt),
+        })),
+      });
+    }
+
+    if (seed.adAssets?.length) {
+      await tx.adAsset.createMany({
+        data: seed.adAssets.map((a) => ({
+          id: a.id,
+          brandId: a.brandId,
+          folderId: a.folderId,
+          name: a.name,
+          originalName: a.originalName,
+          mimeType: a.mimeType,
+          sizeBytes: a.sizeBytes,
+          storagePath: a.storagePath,
+          createdAt: new Date(a.createdAt),
+          updatedAt: new Date(a.updatedAt),
         })),
       });
     }
@@ -271,6 +313,8 @@ export async function getData(): Promise<PlatformData> {
     providerSpend,
     costEntries,
     messageTemplates,
+    adFolders,
+    adAssets,
     settings,
   ] = await Promise.all([
     prisma.entity.findMany({ orderBy: { name: "asc" } }),
@@ -282,6 +326,8 @@ export async function getData(): Promise<PlatformData> {
     prisma.providerSpend.findMany({ orderBy: { source: "asc" } }),
     prisma.costEntry.findMany({ orderBy: { incurredAt: "desc" } }),
     prisma.messageTemplate.findMany({ orderBy: { updatedAt: "desc" } }),
+    prisma.adFolder.findMany({ orderBy: { name: "asc" } }),
+    prisma.adAsset.findMany({ orderBy: { updatedAt: "desc" } }),
     prisma.platformSettings.findUniqueOrThrow({ where: { id: "default" } }),
   ]);
 
@@ -296,6 +342,8 @@ export async function getData(): Promise<PlatformData> {
     providerSpend: providerSpend.map(mapSpend),
     costEntries: costEntries.map(mapCostEntry),
     messageTemplates: messageTemplates.map(mapMessageTemplate),
+    adFolders: adFolders.map(mapAdFolder),
+    adAssets: adAssets.map(mapAdAsset),
     rotation: mapRotation(settings, brands.map(mapEntity)),
   };
 }
@@ -1120,6 +1168,7 @@ export async function createMessageTemplate(
       subject: input.subject ?? null,
       body: input.body,
       brandId: input.brandId,
+      folderId: input.folderId ?? null,
     },
   });
   return mapMessageTemplate(row);
@@ -1144,6 +1193,8 @@ export async function updateMessageTemplate(
       body: patch.body ?? existing.body,
       brandId:
         patch.brandId === undefined ? existing.brandId : patch.brandId,
+      folderId:
+        patch.folderId === undefined ? existing.folderId : patch.folderId,
     },
   });
   return mapMessageTemplate(row);
@@ -1157,4 +1208,101 @@ export async function deleteMessageTemplate(id: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function createAdFolder(
+  input: Omit<AdFolder, "id" | "createdAt" | "updatedAt">,
+): Promise<AdFolder> {
+  const prisma = getPrisma();
+  const id = `fold-${Date.now()}`;
+  const row = await prisma.adFolder.create({
+    data: {
+      id,
+      name: input.name,
+      brandId: input.brandId,
+      parentId: input.parentId,
+    },
+  });
+  return mapAdFolder(row);
+}
+
+export async function updateAdFolder(
+  id: string,
+  patch: Partial<Omit<AdFolder, "id" | "createdAt" | "updatedAt">>,
+): Promise<AdFolder | null> {
+  const prisma = getPrisma();
+  const existing = await prisma.adFolder.findUnique({ where: { id } });
+  if (!existing) return null;
+  const row = await prisma.adFolder.update({
+    where: { id },
+    data: {
+      name: patch.name ?? existing.name,
+      brandId: patch.brandId === undefined ? existing.brandId : patch.brandId,
+      parentId:
+        patch.parentId === undefined ? existing.parentId : patch.parentId,
+    },
+  });
+  return mapAdFolder(row);
+}
+
+export async function deleteAdFolder(id: string): Promise<boolean> {
+  const prisma = getPrisma();
+  try {
+    await prisma.adFolder.delete({ where: { id } });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function createAdAsset(
+  input: Omit<AdAsset, "id" | "createdAt" | "updatedAt">,
+): Promise<AdAsset> {
+  const prisma = getPrisma();
+  const id = `asset-${Date.now()}`;
+  const row = await prisma.adAsset.create({
+    data: {
+      id,
+      brandId: input.brandId,
+      folderId: input.folderId,
+      name: input.name,
+      originalName: input.originalName,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
+      storagePath: input.storagePath,
+    },
+  });
+  return mapAdAsset(row);
+}
+
+export async function updateAdAsset(
+  id: string,
+  patch: Partial<Omit<AdAsset, "id" | "createdAt" | "updatedAt">>,
+): Promise<AdAsset | null> {
+  const prisma = getPrisma();
+  const existing = await prisma.adAsset.findUnique({ where: { id } });
+  if (!existing) return null;
+  const row = await prisma.adAsset.update({
+    where: { id },
+    data: {
+      brandId: patch.brandId === undefined ? existing.brandId : patch.brandId,
+      folderId:
+        patch.folderId === undefined ? existing.folderId : patch.folderId,
+      name: patch.name ?? existing.name,
+      originalName: patch.originalName ?? existing.originalName,
+      mimeType: patch.mimeType ?? existing.mimeType,
+      sizeBytes: patch.sizeBytes ?? existing.sizeBytes,
+      storagePath: patch.storagePath ?? existing.storagePath,
+    },
+  });
+  return mapAdAsset(row);
+}
+
+export async function deleteAdAsset(id: string): Promise<boolean> {
+  const prisma = getPrisma();
+  const existing = await prisma.adAsset.findUnique({ where: { id } });
+  if (!existing) return false;
+  await deleteAdAssetFile(existing.storagePath);
+  await prisma.adAsset.delete({ where: { id } });
+  return true;
 }

@@ -31,7 +31,8 @@ function recentLibraryExamples(
   return templates
     .filter((t) => {
       if (t.channel !== channel) return false;
-      if (brandId) return t.brandId === brandId || t.brandId === null;
+      // Entity-first: only that company's library (Shared = brandId null)
+      if (brandId) return t.brandId === brandId;
       return t.brandId === null;
     })
     .sort(
