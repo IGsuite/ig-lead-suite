@@ -27,6 +27,8 @@ model Entity {
   emailAuthStatus  String
   weeklySendCap    Int      @default(0)
   rotationEnabled  Boolean  @default(true)
+  /// JSON SocialLinks: website, facebook, instagram, tiktok, linkedin, youtube, x, other
+  socialLinks      Json     @default("{}")
   notes            String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -35,6 +37,7 @@ model Entity {
   replies          Reply[]
   socialCampaigns  SocialCampaign[]
   socialConnections SocialConnection[]
+  sendEvents       LeadSendEvent[]
 }
 
 model Lead {
@@ -62,6 +65,7 @@ model Lead {
 
   uploadBatch UploadBatch? @relation(fields: [uploadBatchId], references: [id])
   replies     Reply[]
+  sendEvents  LeadSendEvent[]
 
   @@index([source])
   @@index([groupName])
@@ -69,6 +73,33 @@ model Lead {
   @@index([optedOut])
   @@index([emailStatus])
   @@index([phoneStatus])
+}
+
+/// Durable send / assignment history for fair Auto wheel + Own campaign rotation
+model LeadSendEvent {
+  id                  String   @id
+  leadId              String
+  entityId            String
+  campaignId          String
+  /// sms | email
+  channel             String
+  messageFingerprint  String
+  /// auto | own
+  mode                String   @default("own")
+  sentAt              DateTime @default(now())
+
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([entityId])
+  @@index([campaignId])
+  @@index([channel])
+  @@index([messageFingerprint])
+  @@index([sentAt])
+  @@index([leadId, messageFingerprint])
+  @@index([leadId, channel, sentAt])
 }
 
 model UploadBatch {
@@ -98,6 +129,8 @@ model Campaign {
   preferUnoffered Boolean   @default(true)
   /// Only queue leads with valid (or risky) verified contacts for the channel
   preferVerified  Boolean   @default(true)
+  /// auto | own — Auto = Ferris wheel; Own = standalone entity campaign
+  mode            String    @default("own")
   volume          Int
   throttlePerHour Int
   /// morning | afternoon | evening | custom | any
@@ -115,11 +148,13 @@ model Campaign {
   createdAt       DateTime  @default(now())
   startedAt       DateTime?
 
-  entity  Entity  @relation(fields: [brandId], references: [id])
-  replies Reply[]
+  entity     Entity          @relation(fields: [brandId], references: [id])
+  replies    Reply[]
+  sendEvents LeadSendEvent[]
 
   @@index([brandId])
   @@index([status])
+  @@index([mode])
 }
 
 /// Per-entity (or shared) folder in the Ads library
@@ -314,12 +349,12 @@ model SocialConnection {
 /// Singleton row (id = "default") for rotation + autopilot config
 model PlatformSettings {
   id               String    @id @default("default")
-  version          Int       @default(8)
+  version          Int       @default(13)
   mode             String    @default("round_robin")
   entityOrder      String[]
   notes            String    @default("")
   autopilotEnabled Boolean   @default(false)
-  /// JSON: { quotas: EntityDailyQuota[], lastRunAt?, nextRunAt? }
+  /// JSON: { quotas, lastRunAt?, nextRunAt?, poolCursor? }
   autopilotJson    Json      @default("{}")
   updatedAt        DateTime  @updatedAt
 }

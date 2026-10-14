@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { assertEntityAccess, canAccessEntity } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
 import { createCampaign, getData, launchCampaign } from "@/lib/store";
-import type { CampaignChannel, SendWindowPreset } from "@/lib/types";
+import type {
+  CampaignChannel,
+  CampaignPoolMode,
+  SendWindowPreset,
+} from "@/lib/types";
 import { normalizeSendWindow } from "@/lib/send-window";
 
 export async function GET() {
@@ -28,6 +32,7 @@ export async function POST(request: Request) {
     groupFilter?: string;
     preferUnoffered?: boolean;
     preferVerified?: boolean;
+    mode?: CampaignPoolMode;
     volume?: number;
     throttlePerHour?: number;
     sendWindowPreset?: SendWindowPreset;
@@ -92,6 +97,7 @@ export async function POST(request: Request) {
     groupFilter: body.groupFilter || "all",
     preferUnoffered: body.preferUnoffered ?? true,
     preferVerified: body.preferVerified ?? true,
+    mode: body.mode === "auto" ? "auto" : "own",
     volume: body.volume,
     throttlePerHour: body.throttlePerHour,
     sendWindowPreset: win.sendWindowPreset,

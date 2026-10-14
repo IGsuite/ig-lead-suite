@@ -5,10 +5,12 @@ import type {
   Brand,
   Campaign,
   CampaignChannel,
+  CampaignPoolMode,
   CostCategory,
   CostEntry,
   EntityDailyQuota,
   Lead,
+  LeadSendEvent,
   MessageTemplate,
   OptOut,
   ProviderSpend,
@@ -17,9 +19,29 @@ import type {
   SocialCampaign,
   SocialConnection,
   SocialConnectionStatus,
+  SocialLinks,
   SocialPlatform,
   UploadBatch,
 } from "@/lib/types";
+
+export function normalizeSocialLinks(raw: unknown): SocialLinks {
+  if (!raw || typeof raw !== "object") {
+    return {};
+  }
+  const o = raw as Record<string, unknown>;
+  const pick = (k: string) =>
+    typeof o[k] === "string" && o[k].trim() ? String(o[k]).trim() : undefined;
+  return {
+    website: pick("website"),
+    facebook: pick("facebook"),
+    instagram: pick("instagram"),
+    tiktok: pick("tiktok"),
+    linkedin: pick("linkedin"),
+    youtube: pick("youtube"),
+    x: pick("x"),
+    other: pick("other"),
+  };
+}
 
 type EntityRow = {
   id: string;
@@ -38,6 +60,7 @@ type EntityRow = {
   emailAuthStatus: string;
   weeklySendCap: number;
   rotationEnabled: boolean;
+  socialLinks?: unknown;
   notes: string | null;
 };
 
@@ -69,6 +92,10 @@ function isoDate(d: Date): string {
 }
 
 export function mapEntity(row: EntityRow): Brand {
+  const links = normalizeSocialLinks(row.socialLinks);
+  if (!links.website && row.websiteUrl) {
+    links.website = row.websiteUrl;
+  }
   return {
     id: row.id,
     name: row.name,
@@ -86,6 +113,7 @@ export function mapEntity(row: EntityRow): Brand {
     emailAuthStatus: row.emailAuthStatus as Brand["emailAuthStatus"],
     weeklySendCap: row.weeklySendCap,
     rotationEnabled: row.rotationEnabled,
+    socialLinks: links,
     notes: row.notes ?? undefined,
   };
 }
@@ -152,6 +180,7 @@ export function mapCampaign(row: {
   groupFilter: string;
   preferUnoffered: boolean;
   preferVerified: boolean;
+  mode?: string | null;
   volume: number;
   throttlePerHour: number;
   sendWindowPreset?: string | null;
@@ -166,6 +195,10 @@ export function mapCampaign(row: {
   createdAt: Date;
   startedAt: Date | null;
 }): Campaign {
+  const mode: CampaignPoolMode =
+    row.mode === "auto" || String(row.name || "").startsWith("Autopilot ·")
+      ? "auto"
+      : "own";
   return {
     id: row.id,
     brandId: row.brandId,
@@ -177,6 +210,7 @@ export function mapCampaign(row: {
     groupFilter: row.groupFilter,
     preferUnoffered: row.preferUnoffered,
     preferVerified: row.preferVerified,
+    mode,
     volume: row.volume,
     throttlePerHour: row.throttlePerHour,
     sendWindowPreset: (row.sendWindowPreset ||
@@ -191,6 +225,28 @@ export function mapCampaign(row: {
     bounceCount: row.bounceCount,
     createdAt: row.createdAt.toISOString(),
     startedAt: row.startedAt?.toISOString(),
+  };
+}
+
+export function mapLeadSendEvent(row: {
+  id: string;
+  leadId: string;
+  entityId: string;
+  campaignId: string;
+  channel: string;
+  messageFingerprint: string;
+  mode: string;
+  sentAt: Date;
+}): LeadSendEvent {
+  return {
+    id: row.id,
+    leadId: row.leadId,
+    entityId: row.entityId,
+    campaignId: row.campaignId,
+    channel: row.channel as LeadSendEvent["channel"],
+    messageFingerprint: row.messageFingerprint,
+    mode: row.mode === "auto" ? "auto" : "own",
+    sentAt: row.sentAt.toISOString(),
   };
 }
 
@@ -442,6 +498,7 @@ export function mapRotation(
           quotas?: EntityDailyQuota[];
           lastRunAt?: string;
           nextRunAt?: string;
+          poolCursor?: number;
         })
       : {};
   return normalizeRotation(
@@ -453,6 +510,7 @@ export function mapRotation(
       quotas: json.quotas,
       lastRunAt: json.lastRunAt,
       nextRunAt: json.nextRunAt,
+      poolCursor: json.poolCursor ?? 0,
     },
     brands,
   );

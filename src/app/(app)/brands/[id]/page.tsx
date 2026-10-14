@@ -32,8 +32,20 @@ import type {
   EntitySourceResult,
   Lead,
   Reply,
+  SocialLinks,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+const SOCIAL_FIELDS: Array<{ key: keyof SocialLinks; label: string }> = [
+  { key: "website", label: "Website" },
+  { key: "facebook", label: "Facebook" },
+  { key: "instagram", label: "Instagram" },
+  { key: "tiktok", label: "TikTok" },
+  { key: "linkedin", label: "LinkedIn" },
+  { key: "youtube", label: "YouTube" },
+  { key: "x", label: "X" },
+  { key: "other", label: "Other" },
+];
 
 type BrandPayload = {
   brand: Brand;
@@ -134,6 +146,12 @@ function BrandWorkspaceInner() {
               className={cn(buttonVariants({ variant: "outline" }))}
             >
               Email campaigns
+            </Link>
+            <Link
+              href={`/social?entity=${brand.id}`}
+              className={cn(buttonVariants({ variant: "outline" }))}
+            >
+              Social hub
             </Link>
             <Link
               href={`/campaigns/new?brandId=${brand.id}&channel=sms`}
@@ -364,8 +382,43 @@ function BrandWorkspaceInner() {
                 })
               }
             />
-            Include in shared-pool offer rotation
+            Include in Auto wheel (shared-pool daily volume)
           </label>
+          <div className="mt-6">
+            <h3 className="font-[family-name:var(--font-display)] text-lg">
+              Brand social links
+            </h3>
+            <p className="mt-1 text-xs text-[color:var(--ink-muted)]">
+              Shown on Social Media when this entity is selected.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {SOCIAL_FIELDS.map((f) => (
+                <div key={f.key} className="space-y-1.5">
+                  <Label>{f.label}</Label>
+                  <Input
+                    type="url"
+                    value={brand.socialLinks?.[f.key] || ""}
+                    onChange={(e) =>
+                      setPayload({
+                        ...payload,
+                        brand: {
+                          ...brand,
+                          socialLinks: {
+                            ...(brand.socialLinks || {}),
+                            [f.key]: e.target.value,
+                          },
+                          websiteUrl:
+                            f.key === "website"
+                              ? e.target.value || brand.websiteUrl
+                              : brand.websiteUrl,
+                        },
+                      })
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
           <Button className="mt-4" onClick={save} disabled={saving}>
             {saving ? "Saving…" : "Save entity settings"}
           </Button>

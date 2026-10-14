@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { ErrorPanel, LoadingPanel } from "@/components/state-panels";
@@ -10,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { usePlatform } from "@/hooks/use-platform";
 import { DEFAULT_DAILY_EMAIL, DEFAULT_DAILY_SMS } from "@/lib/autopilot";
 import { compactNumber, relativeDay } from "@/lib/client-format";
+import { wheelVisibility } from "@/lib/rotation-select";
 import type {
   EntityDailyQuota,
   RotationConfig,
@@ -32,6 +34,16 @@ export default function AutopilotPage() {
   useEffect(() => {
     if (data) setRotation(data.rotation);
   }, [data]);
+
+  const visibility = useMemo(() => {
+    if (!data || !rotation) return null;
+    return wheelVisibility({
+      brands: data.brands,
+      rotation,
+      sendEvents: data.sendEvents || [],
+      leads: data.leads,
+    });
+  }, [data, rotation]);
 
   function updateQuota(
     entityId: string,
@@ -83,7 +95,7 @@ export default function AutopilotPage() {
       if (!res.ok) throw new Error(json.error || "Run failed");
       const sent = (json.legs || []).reduce((s, l) => s + l.sent, 0);
       toast.success(
-        `Ferris-wheel pass complete · ${json.legs?.length || 0} entity campaigns · ${compactNumber(sent)} contacts queued`,
+        `Auto wheel pass complete · ${json.legs?.length || 0} entity campaigns · ${compactNumber(sent)} contacts queued`,
       );
       await refresh();
     } catch (err) {
@@ -109,7 +121,7 @@ export default function AutopilotPage() {
     <div>
       <PageHeader
         title="Autopilot"
-        description="Ferris-wheel rotation: the shared pool turns through each entity every day. Each portal gets its own email + SMS volume — offers never mix."
+        description="Auto wheel: each day, every entity on the wheel pulls its daily volume from the shared pool with fair rotation — not the same slice every day. Own campaigns stay on Campaigns."
         actions={
           <>
             <Button variant="outline" disabled={saving || running} onClick={save}>
@@ -164,10 +176,10 @@ export default function AutopilotPage() {
               setRotation({ ...rotation, autopilotEnabled: e.target.checked })
             }
           />
-          Autopilot enabled — rotate verified leads through each portal daily
+          Auto wheel enabled — rotate verified leads through each portal daily
         </label>
         <p className="mt-3 text-sm text-[color:var(--ink-muted)]">
-          Order:{" "}
+          Schedule order:{" "}
           <strong>
             {rotation.entityOrder
               .map(
@@ -179,13 +191,83 @@ export default function AutopilotPage() {
           {rotation.lastRunAt ? relativeDay(rotation.lastRunAt) : "never"} ·
           Next:{" "}
           {rotation.nextRunAt ? relativeDay(rotation.nextRunAt) : "not scheduled"}
+          · Pool cursor: {rotation.poolCursor ?? 0}
         </p>
         <p className="mt-2 text-sm text-[color:var(--ink-soft)]">
           Default target: {compactNumber(DEFAULT_DAILY_EMAIL)} emails +{" "}
-          {compactNumber(DEFAULT_DAILY_SMS)} texts per entity per day. Actual
-          sends use verified contacts not yet offered that entity.
+          {compactNumber(DEFAULT_DAILY_SMS)} texts per entity per day. Selection
+          skips global opt-outs, same-message fingerprints (no next-day repeat),
+          and advances the pool cursor so volumes walk the list.
         </p>
       </section>
+
+      {visibility ? (
+        <section className="mb-6 grid gap-4 lg:grid-cols-2 animate-rise-delay-1">
+          <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
+            <h2 className="font-[family-name:var(--font-display)] text-xl">
+              Wheel schedule / last sent
+            </h2>
+            <ul className="mt-3 space-y-2 text-sm">
+              {visibility.order.map((row, i) => (
+                <li
+                  key={row.entityId}
+                  className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--ink-border)] pb-2 last:border-0"
+                >
+                  <span>
+                    <span className="text-[color:var(--ink-muted)]">
+                      {i + 1}.
+                    </span>{" "}
+                    <strong>{row.shortName}</strong>
+                    {!row.enabled ? (
+                      <span className="ml-2 text-xs text-[color:var(--ink-muted)]">
+                        off wheel
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="text-xs text-[color:var(--ink-muted)]">
+                    {compactNumber(row.dailySmsVolume)} SMS /{" "}
+                    {compactNumber(row.dailyEmailVolume)} email · last{" "}
+                    {row.lastSentAt
+                      ? `${relativeDay(row.lastSentAt)} (${compactNumber(row.lastSentCount)})`
+                      : "never"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
+            <h2 className="font-[family-name:var(--font-display)] text-xl">
+              Next up in pool
+            </h2>
+            <p className="mt-1 text-xs text-[color:var(--ink-muted)]">
+              Least-recently messaged eligible leads (preview). Cursor{" "}
+              {visibility.poolCursor}.
+            </p>
+            {visibility.nextUpLeads.length === 0 ? (
+              <p className="mt-3 text-sm text-[color:var(--ink-muted)]">
+                No eligible leads in the pool yet.
+              </p>
+            ) : (
+              <ul className="mt-3 space-y-2 text-sm">
+                {visibility.nextUpLeads.map((l) => (
+                  <li key={l.id}>
+                    <Link
+                      href={`/leads/${l.id}`}
+                      className="font-medium underline-offset-2 hover:underline"
+                    >
+                      {l.name}
+                    </Link>
+                    <span className="text-[color:var(--ink-muted)]">
+                      {" "}
+                      · {l.email || "—"} · {l.phone || "—"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      ) : null}
 
       <section className="space-y-3 animate-rise-delay-2">
         {rotation.quotas.map((quota) => {
@@ -202,7 +284,8 @@ export default function AutopilotPage() {
                     {brand.name}
                   </h2>
                   <p className="text-xs text-[color:var(--ink-muted)]">
-                    {brand.focus} · campaigns stay under {brand.shortName} only
+                    Daily volume on the Auto wheel · Own campaigns stay under
+                    Campaigns
                   </p>
                 </div>
                 <label className="flex items-center gap-2 text-sm">

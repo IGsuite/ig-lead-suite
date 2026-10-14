@@ -43,7 +43,7 @@ export default function OptOutsPage() {
         body: JSON.stringify({ contact, channel, reason }),
       });
       if (!res.ok) throw new Error("Could not add opt-out");
-      toast.success("Contact suppressed across all brands");
+      toast.success("Global opt-out saved — blocked across all entities & channels");
       setContact("");
       await refresh();
     } catch (err) {
@@ -63,6 +63,13 @@ export default function OptOutsPage() {
         title="Global opt-outs"
         description="STOP texts and unsubscribe clicks block the contact everywhere. Manual suppressions work the same way."
       />
+
+      <p className="mb-4 rounded-xl border border-red-200/80 bg-red-50 px-4 py-3 text-sm text-red-900 animate-rise">
+        <strong>Global opt-out</strong> blocks the person across{" "}
+        <strong>all entities and channels</strong> — SMS and email for Abstract,
+        Ahava, Take More, Venture, TYH, and every other portal. Autopilot and Own
+        campaigns both respect this list.
+      </p>
 
       <form
         onSubmit={onSubmit}

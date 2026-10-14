@@ -86,6 +86,9 @@ export function scopePlatformData(
   const socialConnections = (data.socialConnections || []).filter((c) =>
     brandSet.has(c.entityId),
   );
+  const sendEvents = (data.sendEvents || []).filter((e) =>
+    brandSet.has(e.entityId),
+  );
   const rotation = {
     ...data.rotation,
     entityOrder: data.rotation.entityOrder.filter((id) => brandSet.has(id)),
@@ -106,6 +109,7 @@ export function scopePlatformData(
     adAssets,
     socialCampaigns,
     socialConnections,
+    sendEvents,
     rotation,
     currentUser: session,
   };

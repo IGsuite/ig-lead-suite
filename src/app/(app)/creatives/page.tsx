@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FileText,
@@ -12,7 +13,7 @@ import {
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/state-panels";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -30,7 +31,17 @@ import type {
   AdFolder,
   CampaignChannel,
   MessageTemplate,
+  SocialLinks,
 } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+const LINK_LABELS: Array<{ key: keyof SocialLinks; label: string }> = [
+  { key: "website", label: "Website" },
+  { key: "facebook", label: "Facebook" },
+  { key: "instagram", label: "Instagram" },
+  { key: "tiktok", label: "TikTok" },
+  { key: "linkedin", label: "LinkedIn" },
+];
 
 const emptyForm = {
   name: "",
@@ -141,11 +152,14 @@ export default function AdsPage() {
     (data?.brands[0]?.id ?? (data ? "shared" : ""));
 
   const brandId = brandKeyToId(resolvedEntityKey || "shared");
+  const selectedBrand =
+    resolvedEntityKey === "shared"
+      ? null
+      : data?.brands.find((b) => b.id === resolvedEntityKey) || null;
   const entityLabel =
     resolvedEntityKey === "shared"
       ? "Shared"
-      : data?.brands.find((b) => b.id === resolvedEntityKey)?.shortName ||
-        resolvedEntityKey;
+      : selectedBrand?.shortName || resolvedEntityKey;
 
   function selectEntity(key: string) {
     setEntityKey(key);
@@ -589,6 +603,43 @@ export default function AdsPage() {
             </Button>
           ))}
         </div>
+        {selectedBrand ? (
+          <div className="mt-4 rounded-xl border border-[color:var(--ink-border)] px-3 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium">
+                {selectedBrand.shortName} brand links
+              </p>
+              <Link
+                href={`/social?entity=${selectedBrand.id}`}
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                )}
+              >
+                Social hub
+              </Link>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {LINK_LABELS.filter((f) => selectedBrand.socialLinks?.[f.key]).map(
+                (f) => (
+                  <a
+                    key={f.key}
+                    href={selectedBrand.socialLinks?.[f.key]}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs underline underline-offset-2"
+                  >
+                    {f.label}
+                  </a>
+                ),
+              )}
+              {!LINK_LABELS.some((f) => selectedBrand.socialLinks?.[f.key]) ? (
+                <span className="text-xs text-[color:var(--ink-muted)]">
+                  No links yet — edit on Social Media or the entity portal.
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="mb-6 space-y-4 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise">

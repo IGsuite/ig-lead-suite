@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
@@ -32,9 +33,21 @@ import type {
   SocialCampaignStatus,
   SocialConnection,
   SocialConnectionStatus,
+  SocialLinks,
   SocialPlatform,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+const SOCIAL_LINK_FIELDS: Array<{ key: keyof SocialLinks; label: string }> = [
+  { key: "website", label: "Website" },
+  { key: "facebook", label: "Facebook" },
+  { key: "instagram", label: "Instagram" },
+  { key: "tiktok", label: "TikTok" },
+  { key: "linkedin", label: "LinkedIn" },
+  { key: "youtube", label: "YouTube" },
+  { key: "x", label: "X (Twitter)" },
+  { key: "other", label: "Other" },
+];
 
 const OBJECTIVES = [
   "Lead generation",
@@ -83,15 +96,20 @@ function centsToDollarsInput(cents: number | null | undefined): string {
   return (cents / 100).toFixed(cents % 100 === 0 ? 0 : 2);
 }
 
-export default function SocialMediaPage() {
+function SocialMediaInner() {
   const { data, loading, error, refresh } = usePlatform();
-  const [entityId, setEntityId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const [entityId, setEntityId] = useState<string | null>(
+    searchParams.get("entity") || searchParams.get("brandId") || null,
+  );
   const [platform, setPlatform] = useState<SocialPlatform>("meta");
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [connSaving, setConnSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [linksDraft, setLinksDraft] = useState<SocialLinks | null>(null);
+  const [linksSaving, setLinksSaving] = useState(false);
 
   const resolvedEntityId =
     entityId || data?.brands[0]?.id || "";
@@ -145,6 +163,7 @@ export default function SocialMediaPage() {
   }, [data, resolvedEntityId]);
 
   const brand = data?.brands.find((b) => b.id === resolvedEntityId);
+  const socialLinks: SocialLinks = linksDraft || brand?.socialLinks || {};
 
   function selectEntity(id: string) {
     setEntityId(id);
@@ -152,6 +171,33 @@ export default function SocialMediaPage() {
     setForm(emptyForm);
     setShowForm(false);
     setConnForm(null);
+    setLinksDraft(null);
+  }
+
+  async function saveSocialLinks(e: React.FormEvent) {
+    e.preventDefault();
+    if (!resolvedEntityId || !brand) return;
+    setLinksSaving(true);
+    try {
+      const res = await fetch(`/api/brands/${resolvedEntityId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...brand,
+          socialLinks,
+          websiteUrl: socialLinks.website || brand.websiteUrl,
+        }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error || "Could not save brand links");
+      toast.success(`Brand links saved for ${brand.shortName}`);
+      setLinksDraft(null);
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setLinksSaving(false);
+    }
   }
 
   function selectPlatform(p: SocialPlatform) {
@@ -312,7 +358,7 @@ export default function SocialMediaPage() {
     <div>
       <PageHeader
         title="Social Media"
-        description="Per-entity Meta and TikTok campaigns — setup and planning stay isolated. Live publish needs API keys later; this slice stores campaigns, connection status, and metrics placeholders."
+        description="Entity social hub — brand page links, Meta/TikTok connection, and social campaigns for one portal. Nothing mixes across entities."
         actions={
           <Button type="button" onClick={startCreate}>
             New {platform === "meta" ? "Meta" : "TikTok"} campaign
@@ -365,6 +411,71 @@ export default function SocialMediaPage() {
           mixed with other portals. Shared lead pool stays shared.
         </p>
       </div>
+
+      {/* Brand social links hub */}
+      <section className="mb-8 rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-[family-name:var(--font-display)] text-lg text-[color:var(--ink)]">
+              {brand?.shortName || "Entity"} brand links
+            </h2>
+            <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
+              Public pages for this portal — open them while you plan Meta /
+              TikTok work. Edit and save here.
+            </p>
+          </div>
+          <Link
+            href={`/brands/${resolvedEntityId}`}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+          >
+            Entity portal
+          </Link>
+        </div>
+        <div className="mb-4 flex flex-wrap gap-2">
+          {SOCIAL_LINK_FIELDS.filter((f) => socialLinks[f.key]).map((f) => (
+            <a
+              key={f.key}
+              href={socialLinks[f.key]}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-full border border-[color:var(--ink-border)] bg-[color:var(--accent-soft)]/40 px-3 py-1 text-xs font-medium underline-offset-2 hover:underline"
+            >
+              {f.label}
+            </a>
+          ))}
+          {!SOCIAL_LINK_FIELDS.some((f) => socialLinks[f.key]) ? (
+            <span className="text-sm text-[color:var(--ink-muted)]">
+              No links yet — add them below.
+            </span>
+          ) : null}
+        </div>
+        <form
+          onSubmit={(e) => void saveSocialLinks(e)}
+          className="grid gap-3 sm:grid-cols-2"
+        >
+          {SOCIAL_LINK_FIELDS.map((f) => (
+            <div key={f.key} className="space-y-1.5">
+              <Label>{f.label}</Label>
+              <Input
+                type="url"
+                placeholder={`https://…`}
+                value={socialLinks[f.key] || ""}
+                onChange={(e) =>
+                  setLinksDraft({
+                    ...socialLinks,
+                    [f.key]: e.target.value,
+                  })
+                }
+              />
+            </div>
+          ))}
+          <div className="sm:col-span-2">
+            <Button type="submit" disabled={linksSaving}>
+              {linksSaving ? "Saving…" : "Save brand links"}
+            </Button>
+          </div>
+        </form>
+      </section>
 
       {/* Connection panel */}
       <section className="mb-8 rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise">
@@ -826,5 +937,13 @@ export default function SocialMediaPage() {
         </p>
       </section>
     </div>
+  );
+}
+
+export default function SocialMediaPage() {
+  return (
+    <Suspense fallback={<LoadingPanel />}>
+      <SocialMediaInner />
+    </Suspense>
   );
 }

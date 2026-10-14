@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
@@ -185,8 +186,14 @@ export default function LeadsPage() {
     <div>
       <PageHeader
         title="Leads"
-        description="Shared pool for every entity. Upload once, verify contacts, then Autopilot rotates offers through each portal — never mixing brands."
+        description="Shared pool for every entity. Upload once, verify contacts, then Autopilot rotates offers through each portal — never mixing brands. Click a lead for the full history page."
       />
+
+      <p className="mb-4 rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] px-4 py-3 text-sm text-[color:var(--ink-soft)] animate-rise">
+        <strong className="text-[color:var(--ink)]">Global opt-out</strong>{" "}
+        blocks a person across <strong>all entities and channels</strong> (SMS +
+        email). Manage suppressions under Opt-outs.
+      </p>
 
       <form
         onSubmit={onUpload}
@@ -410,13 +417,21 @@ export default function LeadsPage() {
               {filtered.slice(0, 100).map((lead) => (
                 <TableRow key={lead.id}>
                   <TableCell>
-                    <div className="font-medium">
+                    <Link
+                      href={`/leads/${lead.id}`}
+                      className="font-medium underline-offset-2 hover:underline"
+                    >
                       {[lead.firstName, lead.lastName].filter(Boolean).join(" ") ||
                         "Unknown"}
-                    </div>
+                    </Link>
                     <div className="text-xs text-[color:var(--ink-muted)]">
                       {lead.email || "—"} · {lead.phone || "—"}
                     </div>
+                    {lead.optedOut ? (
+                      <div className="mt-1 text-[10px] uppercase tracking-wide text-red-700">
+                        Global opt-out · all entities & channels
+                      </div>
+                    ) : null}
                   </TableCell>
                   <TableCell>
                     <div>{lead.source}</div>

@@ -26,6 +26,7 @@ function InboxInner() {
   const [entityId, setEntityId] = useState(
     searchParams.get("entity") || searchParams.get("brandId") || "abstract",
   );
+  const leadIdFilter = searchParams.get("leadId") || "";
   const [channelFilter, setChannelFilter] = useState<"all" | "sms" | "email">(
     "all",
   );
@@ -37,6 +38,7 @@ function InboxInner() {
     if (!data) return [];
     return data.replies.filter((reply) => {
       if (reply.brandId !== entityId) return false;
+      if (leadIdFilter && reply.leadId !== leadIdFilter) return false;
       if (channelFilter !== "all" && reply.channel !== channelFilter)
         return false;
       if (statusFilter === "unread" && reply.read) return false;
@@ -45,7 +47,7 @@ function InboxInner() {
       if (statusFilter === "forwarded" && !reply.manualForwarded) return false;
       return true;
     });
-  }, [data, entityId, channelFilter, statusFilter]);
+  }, [data, entityId, channelFilter, statusFilter, leadIdFilter]);
 
   async function patch(
     id: string,
@@ -143,6 +145,19 @@ function InboxInner() {
         (not another brand). You review → mark interested →{" "}
         <em>Email team</em> to forward manually. Later, the same “interested”
         flag drives n8n → CRM automatically.
+        {leadIdFilter ? (
+          <>
+            {" "}
+            Showing one lead —{" "}
+            <Link
+              href={`/leads/${leadIdFilter}`}
+              className="underline underline-offset-2"
+            >
+              open full lead page
+            </Link>
+            .
+          </>
+        ) : null}
       </div>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3 animate-rise">

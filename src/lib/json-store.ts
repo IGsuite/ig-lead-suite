@@ -8,13 +8,19 @@ import {
 } from "@/lib/autopilot";
 
 export type { AutopilotRunResult };
-import { isLeadEligibleForEntity, normalizeContact } from "@/lib/eligibility";
+import { normalizeContact } from "@/lib/eligibility";
 import { deleteAdAssetFile } from "@/lib/ad-assets-fs";
+import { normalizeSocialLinks } from "@/lib/mappers";
 import {
   STORE_VERSION,
   createSeedData,
   materializeSeedAdAssets,
 } from "@/lib/seed";
+import {
+  buildSendEvents,
+  messageFingerprint,
+  selectLeadsForSend,
+} from "@/lib/rotation-select";
 import type {
   AdAsset,
   AdFolder,
@@ -56,6 +62,7 @@ function softMigratePlatformData(parsed: PlatformData): PlatformData {
   if (!Array.isArray(parsed.adAssets)) parsed.adAssets = [];
   if (!Array.isArray(parsed.socialCampaigns)) parsed.socialCampaigns = [];
   if (!Array.isArray(parsed.socialConnections)) parsed.socialConnections = [];
+  if (!Array.isArray(parsed.sendEvents)) parsed.sendEvents = [];
   for (const t of parsed.messageTemplates) {
     if (t.folderId === undefined) t.folderId = null;
     if (t.brandId === undefined) t.brandId = null;
@@ -68,10 +75,25 @@ function softMigratePlatformData(parsed: PlatformData): PlatformData {
     if (a.brandId === undefined) a.brandId = null;
     if (a.folderId === undefined) a.folderId = null;
   }
+  for (const b of parsed.brands || []) {
+    b.socialLinks = normalizeSocialLinks({
+      website: b.websiteUrl,
+      ...b.socialLinks,
+    });
+  }
   for (const c of parsed.campaigns || []) {
     if (!c.sendWindowPreset) {
       Object.assign(c, normalizeSendWindow(c));
     }
+    if (!c.mode) {
+      c.mode =
+        c.name?.startsWith("Autopilot ·") || c.id?.startsWith("camp-auto-")
+          ? "auto"
+          : "own";
+    }
+  }
+  if (parsed.rotation && parsed.rotation.poolCursor == null) {
+    parsed.rotation.poolCursor = 0;
   }
   return parsed;
 }
@@ -274,6 +296,7 @@ export async function createCampaign(
   const campaign: Campaign = {
     ...input,
     ...win,
+    mode: input.mode || "own",
     id: `camp-${Date.now()}`,
     sentCount: 0,
     replyCount: 0,
@@ -307,19 +330,34 @@ export async function launchCampaign(id: string): Promise<LaunchResult | null> {
     };
   }
 
-  const eligible = data.leads
-    .filter((lead) =>
-      isLeadEligibleForEntity(lead, campaign.brandId, {
-        channel: campaign.channel,
-        sourceFilter: campaign.sourceFilter,
-        groupFilter: campaign.groupFilter,
-        preferUnoffered: campaign.preferUnoffered,
-        preferVerified: campaign.preferVerified,
-      }),
-    )
-    .sort((a, b) => a.offeredEntityIds.length - b.offeredEntityIds.length);
+  if (!campaign.mode) {
+    campaign.mode =
+      campaign.name?.startsWith("Autopilot ·") ||
+      campaign.id?.startsWith("camp-auto-")
+        ? "auto"
+        : "own";
+  }
 
-  const toSend = eligible.slice(0, campaign.volume);
+  const fingerprint = messageFingerprint(
+    campaign.channel,
+    campaign.message,
+    campaign.subject,
+  );
+  const pick = selectLeadsForSend({
+    leads: data.leads,
+    sendEvents: data.sendEvents || [],
+    entityId: campaign.brandId,
+    channel: campaign.channel,
+    volume: campaign.volume,
+    mode: campaign.mode,
+    messageFingerprint: fingerprint,
+    sourceFilter: campaign.sourceFilter,
+    groupFilter: campaign.groupFilter,
+    preferVerified: campaign.preferVerified,
+    preferUnoffered: campaign.preferUnoffered,
+    poolCursor: data.rotation?.poolCursor ?? 0,
+  });
+  const toSend = pick.selected;
   const brand = data.brands.find((b) => b.id === campaign.brandId);
   if (brand && toSend.length) {
     await deliverCampaignBatch({ campaign, brand, leads: toSend });
@@ -331,6 +369,23 @@ export async function launchCampaign(id: string): Promise<LaunchResult | null> {
     }
     lead.lastEntityId = campaign.brandId;
     lead.status = "contacted";
+  }
+
+  const events = buildSendEvents({
+    leads: toSend,
+    entityId: campaign.brandId,
+    campaignId: campaign.id,
+    channel: campaign.channel,
+    messageFingerprint: fingerprint,
+    mode: campaign.mode,
+  });
+  data.sendEvents = [...events, ...(data.sendEvents || [])].slice(0, 50_000);
+
+  if (campaign.mode === "auto" && data.rotation) {
+    data.rotation = {
+      ...data.rotation,
+      poolCursor: pick.nextCursor,
+    };
   }
 
   campaign.status = "sending";
@@ -805,6 +860,8 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
   const rotation = normalizeRotation(data.rotation, data.brands);
   const day = new Date().toISOString().slice(0, 10);
   const legs: AutopilotRunResult["legs"] = [];
+  let poolCursor = rotation.poolCursor ?? 0;
+  if (!Array.isArray(data.sendEvents)) data.sendEvents = [];
 
   for (const entityId of rotation.entityOrder) {
     const brand = data.brands.find((b) => b.id === entityId);
@@ -839,14 +896,6 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
       },
     ];
 
-    // Snapshot who already heard from this entity before today's pass,
-    // so SMS + email can both go out the same day without blocking each other.
-    const alreadyOffered = new Set(
-      data.leads
-        .filter((l) => l.offeredEntityIds.includes(entityId))
-        .map((l) => l.id),
-    );
-
     for (const leg of channels) {
       if (leg.volume <= 0) continue;
       const campaign: Campaign = {
@@ -858,8 +907,9 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
         message: leg.message,
         sourceFilter: "all",
         groupFilter: "all",
-        preferUnoffered: true,
+        preferUnoffered: false,
         preferVerified: true,
+        mode: "auto",
         volume: leg.volume,
         throttlePerHour: Math.max(60, Math.round(leg.volume / 12)),
         sendWindowPreset: win.sendWindowPreset,
@@ -886,19 +936,27 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
         continue;
       }
 
-      const eligible = data.leads
-        .filter((lead) => {
-          if (alreadyOffered.has(lead.id)) return false;
-          return isLeadEligibleForEntity(lead, entityId, {
-            channel: leg.channel,
-            sourceFilter: "all",
-            groupFilter: "all",
-            preferUnoffered: false,
-            preferVerified: true,
-          });
-        })
-        .sort((a, b) => a.offeredEntityIds.length - b.offeredEntityIds.length)
-        .slice(0, leg.volume);
+      const fingerprint = messageFingerprint(
+        leg.channel,
+        leg.message,
+        leg.subject,
+      );
+      const pick = selectLeadsForSend({
+        leads: data.leads,
+        sendEvents: data.sendEvents,
+        entityId,
+        channel: leg.channel,
+        volume: leg.volume,
+        mode: "auto",
+        messageFingerprint: fingerprint,
+        sourceFilter: "all",
+        groupFilter: "all",
+        preferVerified: true,
+        preferUnoffered: false,
+        poolCursor,
+      });
+      poolCursor = pick.nextCursor;
+      const eligible = pick.selected;
 
       if (eligible.length) {
         await deliverCampaignBatch({
@@ -915,6 +973,16 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
         lead.lastEntityId = entityId;
         lead.status = "contacted";
       }
+
+      const events = buildSendEvents({
+        leads: eligible,
+        entityId,
+        campaignId: campaign.id,
+        channel: leg.channel,
+        messageFingerprint: fingerprint,
+        mode: "auto",
+      });
+      data.sendEvents = [...events, ...data.sendEvents].slice(0, 50_000);
 
       campaign.status = "sending";
       campaign.sentCount = eligible.length;
@@ -937,6 +1005,7 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
     lastRunAt: ranAt,
     nextRunAt,
     autopilotEnabled: true,
+    poolCursor,
   };
   await writeStore(data);
   return { ranAt, nextRunAt, legs };

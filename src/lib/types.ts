@@ -25,6 +25,8 @@ export type CampaignStatus =
   | "sending"
   | "paused"
   | "completed";
+/** Auto = shared-pool Ferris wheel; Own = standalone entity campaign. */
+export type CampaignPoolMode = "auto" | "own";
 export type ReplySentiment =
   | "interested"
   | "neutral"
@@ -38,6 +40,33 @@ export type SendWindowPreset =
   | "custom"
   | "any";
 export type UserRole = "admin" | "member";
+
+/** Public social / brand page links for an entity hub. */
+export interface SocialLinks {
+  website?: string;
+  facebook?: string;
+  instagram?: string;
+  tiktok?: string;
+  linkedin?: string;
+  youtube?: string;
+  x?: string;
+  other?: string;
+}
+
+/**
+ * Durable send / assignment history for fair pool rotation.
+ * Blocks re-sending the same message fingerprint too soon.
+ */
+export interface LeadSendEvent {
+  id: string;
+  leadId: string;
+  entityId: string;
+  campaignId: string;
+  channel: CampaignChannel;
+  messageFingerprint: string;
+  mode: CampaignPoolMode;
+  sentAt: string;
+}
 
 /** Paid social platforms managed per entity portal. */
 export type SocialPlatform = "meta" | "tiktok";
@@ -128,6 +157,8 @@ export interface Brand {
   weeklySendCap: number;
   /** Whether this entity is included in shared-pool offer rotation. */
   rotationEnabled: boolean;
+  /** Brand social page links shown on Social Media / entity hub. */
+  socialLinks: SocialLinks;
   notes?: string;
 }
 
@@ -182,6 +213,8 @@ export interface Campaign {
   groupFilter: string | "all";
   preferUnoffered: boolean;
   preferVerified: boolean;
+  /** Auto wheel leg vs standalone Own campaign. */
+  mode: CampaignPoolMode;
   volume: number;
   throttlePerHour: number;
   /** When sends are allowed (local time in `timezone`). */
@@ -330,6 +363,11 @@ export interface RotationConfig {
   quotas: EntityDailyQuota[];
   lastRunAt?: string;
   nextRunAt?: string;
+  /**
+   * Cursor into the fair-ordered eligible pool for Auto wheel walks.
+   * Advances after each Autopilot pass so the same slice is not reused daily.
+   */
+  poolCursor: number;
 }
 
 /** Source performance for one entity portal. */
@@ -436,5 +474,7 @@ export interface PlatformData {
   adAssets: AdAsset[];
   socialCampaigns: SocialCampaign[];
   socialConnections: SocialConnection[];
+  /** Durable send history for Auto wheel / Own campaign rotation. */
+  sendEvents: LeadSendEvent[];
   rotation: RotationConfig;
 }

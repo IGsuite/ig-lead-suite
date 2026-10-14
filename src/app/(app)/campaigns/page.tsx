@@ -97,16 +97,35 @@ function CampaignsInner() {
     <div>
       <PageHeader
         title="Campaigns"
-        description="SMS and email stay separate. Pick a channel, then an entity portal — Ahava never sends under Abstract."
+        description="SMS and email stay separate. Pick a channel, then an entity portal — Ahava never sends under Abstract. Auto = Ferris-wheel daily volume; Own = standalone campaign outside the wheel."
         actions={
           <Link
             href={`/campaigns/new?brandId=${entityId}&channel=${channel}`}
             className={cn(buttonVariants())}
           >
-            Build {channelLabel} for {brand?.shortName || "entity"}
+            Build Own {channelLabel} for {brand?.shortName || "entity"}
           </Link>
         }
       />
+
+      <div className="mb-4 flex flex-wrap gap-3 text-sm animate-rise">
+        <div className="rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] px-3 py-2">
+          <span className="font-medium">Auto</span>
+          <span className="text-[color:var(--ink-muted)]">
+            {" "}
+            — Autopilot wheel pulls this entity’s daily volume from the shared
+            pool with fair rotation.
+          </span>
+        </div>
+        <div className="rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] px-3 py-2">
+          <span className="font-medium">Own</span>
+          <span className="text-[color:var(--ink-muted)]">
+            {" "}
+            — Standalone campaign you build here; still respects opt-outs and
+            message cooldowns.
+          </span>
+        </div>
+      </div>
 
       <div className="mb-4 flex flex-wrap gap-2 animate-rise">
         <Button
@@ -183,6 +202,7 @@ function CampaignsInner() {
             <TableHeader>
               <TableRow>
                 <TableHead>Campaign</TableHead>
+                <TableHead>Mode</TableHead>
                 <TableHead>Progress</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead />
@@ -201,6 +221,17 @@ function CampaignsInner() {
                         ? ` ${campaign.sendWindowStart}–${campaign.sendWindowEnd}`
                         : ""}
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={
+                        campaign.mode === "auto"
+                          ? "rounded-md bg-[color:var(--accent-soft)]/60 px-2 py-0.5 text-xs font-medium"
+                          : "rounded-md border border-[color:var(--ink-border)] px-2 py-0.5 text-xs font-medium"
+                      }
+                    >
+                      {campaign.mode === "auto" ? "Auto" : "Own"}
+                    </span>
                   </TableCell>
                   <TableCell>
                     {compactNumber(campaign.sentCount)} /{" "}

@@ -2,7 +2,7 @@ import { defaultQuotas } from "@/lib/autopilot";
 import { writeSeedAdAssetFile } from "@/lib/ad-assets-fs";
 import type { PlatformData } from "@/lib/types";
 
-export const STORE_VERSION = 12;
+export const STORE_VERSION = 13;
 
 export function createSeedData(): PlatformData {
   const now = new Date();
@@ -34,6 +34,13 @@ export function createSeedData(): PlatformData {
       emailAuthStatus: "partial",
       weeklySendCap: 2000,
       rotationEnabled: true,
+      socialLinks: {
+        website: "https://abstractcapitalgroup.com/",
+        facebook: "https://www.facebook.com/abstract",
+        instagram: "https://www.instagram.com/abstract",
+        linkedin: "https://www.linkedin.com/company/abstract",
+        tiktok: "https://www.tiktok.com/@abstract",
+      },
       notes:
         "Pilot entity. Telnyx 10DLC Brand OK (TCR BNHCFPV) — register 10DLC Campaign next for volume SMS.",
     },
@@ -58,6 +65,13 @@ export function createSeedData(): PlatformData {
       emailAuthStatus: "missing",
       weeklySendCap: 0,
       rotationEnabled: true,
+      socialLinks: {
+        website: "https://www.ahavacapital.com/",
+        facebook: "https://www.facebook.com/ahava",
+        instagram: "https://www.instagram.com/ahava",
+        linkedin: "https://www.linkedin.com/company/ahava",
+        tiktok: "https://www.tiktok.com/@ahava",
+      },
       notes: "Unsecured-style MCA / working capital lane.",
     },
     {
@@ -84,6 +98,13 @@ export function createSeedData(): PlatformData {
       emailAuthStatus: "missing",
       weeklySendCap: 0,
       rotationEnabled: true,
+      socialLinks: {
+        website: "https://takemorefunding.com/",
+        facebook: "https://www.facebook.com/takemore",
+        instagram: "https://www.instagram.com/takemore",
+        linkedin: "https://www.linkedin.com/company/takemore",
+        tiktok: "https://www.tiktok.com/@takemore",
+      },
       notes: "Brokerage positioning — one app, many lender offers.",
     },
     {
@@ -110,6 +131,13 @@ export function createSeedData(): PlatformData {
       emailAuthStatus: "missing",
       weeklySendCap: 0,
       rotationEnabled: true,
+      socialLinks: {
+        website: "https://www.tyhmarketing.com/",
+        facebook: "https://www.facebook.com/tyh",
+        instagram: "https://www.instagram.com/tyh",
+        linkedin: "https://www.linkedin.com/company/tyh",
+        tiktok: "https://www.tiktok.com/@tyh",
+      },
       notes: "Non-lending offer — strong alternate for leads that don’t fund.",
     },
     {
@@ -134,6 +162,13 @@ export function createSeedData(): PlatformData {
       emailAuthStatus: "missing",
       weeklySendCap: 0,
       rotationEnabled: true,
+      socialLinks: {
+        website: "https://www.venturebusinesscapital.com/",
+        facebook: "https://www.facebook.com/venture",
+        instagram: "https://www.instagram.com/venture",
+        linkedin: "https://www.linkedin.com/company/venture",
+        tiktok: "https://www.tiktok.com/@venture",
+      },
       notes: "Traditional / institutional financing + real estate capital.",
     },
   ];
@@ -250,6 +285,7 @@ export function createSeedData(): PlatformData {
       groupFilter: "all",
       preferUnoffered: true,
       preferVerified: true,
+      mode: "own",
       volume: 500,
       throttlePerHour: 80,
       ...windowDefaults,
@@ -272,6 +308,7 @@ export function createSeedData(): PlatformData {
       groupFilter: "all",
       preferUnoffered: true,
       preferVerified: true,
+      mode: "own",
       volume: 200,
       throttlePerHour: 60,
       ...windowDefaults,
@@ -297,6 +334,7 @@ export function createSeedData(): PlatformData {
       groupFilter: "all",
       preferUnoffered: true,
       preferVerified: true,
+      mode: "own",
       volume: 800,
       throttlePerHour: 100,
       ...windowDefaults,
@@ -322,6 +360,7 @@ export function createSeedData(): PlatformData {
       groupFilter: "all",
       preferUnoffered: true,
       preferVerified: true,
+      mode: "own",
       volume: 700,
       throttlePerHour: 90,
       ...windowDefaults,
@@ -344,6 +383,7 @@ export function createSeedData(): PlatformData {
       groupFilter: "all",
       preferUnoffered: true,
       preferVerified: true,
+      mode: "own",
       volume: 1000,
       throttlePerHour: 200,
       ...windowDefaults,
@@ -370,6 +410,7 @@ export function createSeedData(): PlatformData {
       groupFilter: "all",
       preferUnoffered: true,
       preferVerified: true,
+      mode: "own",
       volume: 400,
       throttlePerHour: 120,
       ...windowDefaults,
@@ -393,6 +434,7 @@ export function createSeedData(): PlatformData {
       groupFilter: "all",
       preferUnoffered: true,
       preferVerified: true,
+      mode: "own",
       volume: 600,
       throttlePerHour: 90,
       ...windowDefaults,
@@ -415,6 +457,7 @@ export function createSeedData(): PlatformData {
       groupFilter: "all",
       preferUnoffered: true,
       preferVerified: true,
+      mode: "own",
       volume: 350,
       throttlePerHour: 100,
       ...windowDefaults,
@@ -1191,12 +1234,14 @@ export function createSeedData(): PlatformData {
         createdAt: daysAgo(10),
       },
     ],
+    sendEvents: [],
     rotation: {
       mode: "round_robin",
       entityOrder: ["abstract", "ahava", "takemore", "venture", "tyh"],
       notes:
         "Ferris-wheel autopilot: shared pool rotates through each entity daily. Each portal keeps its own email/SMS campaigns — nothing mixes.",
       autopilotEnabled: true,
+      poolCursor: 0,
       quotas: defaultQuotas([
         "abstract",
         "ahava",

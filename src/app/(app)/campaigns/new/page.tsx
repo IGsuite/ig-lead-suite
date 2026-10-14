@@ -19,7 +19,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { usePlatform } from "@/hooks/use-platform";
 import { compactNumber } from "@/lib/client-format";
-import type { CampaignChannel, SendWindowPreset } from "@/lib/types";
+import type {
+  CampaignChannel,
+  CampaignPoolMode,
+  SendWindowPreset,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function CampaignBuilderInner() {
@@ -32,6 +36,7 @@ function CampaignBuilderInner() {
   const initialChannel: CampaignChannel =
     searchParams.get("channel") === "email" ? "email" : "sms";
   const [channel, setChannel] = useState<CampaignChannel>(initialChannel);
+  const [mode, setMode] = useState<CampaignPoolMode>("own");
   const [name, setName] = useState(
     initialChannel === "email"
       ? "Abstract — working capital email"
@@ -127,6 +132,7 @@ function CampaignBuilderInner() {
           groupFilter,
           preferUnoffered,
           preferVerified,
+          mode,
           volume,
           throttlePerHour,
           sendWindowPreset,
@@ -365,13 +371,41 @@ function CampaignBuilderInner() {
             </p>
           </div>
 
+          <div className="space-y-2">
+            <Label>Campaign mode</Label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={mode === "own" ? "default" : "outline"}
+                onClick={() => setMode("own")}
+              >
+                Own campaign
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={mode === "auto" ? "default" : "outline"}
+                onClick={() => setMode("auto")}
+              >
+                Auto wheel
+              </Button>
+            </div>
+            <p className="text-xs text-[color:var(--ink-muted)]">
+              {mode === "own"
+                ? "Standalone blast for this entity — outside daily Autopilot volumes. Still respects global opt-outs and same-message cooldowns."
+                : "Marks this campaign as an Auto wheel leg (fair pool cursor + channel cooldown). Prefer Autopilot page for daily volumes."}
+            </p>
+          </div>
+
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={preferUnoffered}
               onChange={(e) => setPreferUnoffered(e.target.checked)}
+              disabled={mode === "auto"}
             />
-            Prefer leads not yet offered this entity (rotation)
+            Prefer leads not yet offered this entity (Own mode)
           </label>
 
           <label className="flex items-center gap-2 text-sm">

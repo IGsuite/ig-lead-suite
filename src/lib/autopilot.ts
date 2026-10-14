@@ -65,6 +65,7 @@ export function normalizeRotation(
     quotas,
     lastRunAt: rotation.lastRunAt,
     nextRunAt: rotation.nextRunAt,
+    poolCursor: Math.max(0, Math.floor(rotation.poolCursor ?? 0)),
   };
 }
 
