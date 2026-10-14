@@ -1,9 +1,11 @@
 /**
- * Cold-email delivery via Instantly (preferred) or Smartlead.
+ * Cold-email delivery via Smartlead (preferred here) or Instantly.
  * Without API keys, sends are mocked.
  *
- * Instantly: adds the lead into a campaign (campaign sends on its schedule/warmup).
- * Docs: https://developer.instantly.ai/
+ * Instantly wins if INSTANTLY_API_KEY is set; otherwise SMARTLEAD_API_KEY.
+ * Both add the lead into a campaign (sends on that tool’s schedule/warmup).
+ * Smartlead docs: https://api.smartlead.ai/
+ * Instantly docs: https://developer.instantly.ai/
  */
 
 export type EmailSendResult = {

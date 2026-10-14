@@ -706,6 +706,10 @@ export async function ingestReply(input: {
   }
 
   const campaigns = await prisma.campaign.findMany();
+  // Ignore external ids (e.g. Smartlead campaign_id) that are not ours
+  if (campaignId && !campaigns.some((c) => c.id === campaignId)) {
+    campaignId = undefined;
+  }
   if (!campaignId && brandId) {
     campaignId = campaigns.find(
       (c) =>

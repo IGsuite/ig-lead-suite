@@ -364,6 +364,10 @@ export async function ingestReply(input: {
   if (!brandId && lead?.offeredEntityIds.length) {
     brandId = lead.offeredEntityIds[lead.offeredEntityIds.length - 1];
   }
+  // Ignore external ids (e.g. Smartlead campaign_id) that are not ours
+  if (campaignId && !data.campaigns.some((c) => c.id === campaignId)) {
+    campaignId = undefined;
+  }
   if (!campaignId && brandId) {
     const camp = data.campaigns.find(
       (c) =>

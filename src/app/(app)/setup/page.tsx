@@ -11,13 +11,21 @@ type ProviderStatus = {
   neon: string;
   telnyx: string;
   email: string;
+  publicAppUrl?: string | null;
+  webhooks?: { telnyx: string; email: string } | null;
+  checklist?: {
+    coldEmailCampaign?: boolean;
+    publicUrl?: boolean;
+  };
 };
+
+type LiveStatusKey = "neon" | "telnyx" | "email";
 
 const steps: Array<{
   id: string;
   title: string;
   youDo: string;
-  statusKey?: keyof ProviderStatus;
+  statusKey?: LiveStatusKey;
   href?: string;
   hrefLabel?: string;
 }> = [
@@ -38,18 +46,18 @@ const steps: Array<{
   },
   {
     id: "email",
-    title: "3. Instantly or Smartlead (cold email)",
+    title: "3. Smartlead (cold email) — do now",
     youDo:
-      "Create Instantly or Smartlead → connect/warm domains → create campaigns → INSTANTLY_API_KEY + INSTANTLY_CAMPAIGN_ID (or Smartlead equivalents).",
+      "Create Smartlead → connect/warm domains → create a campaign → paste SMARTLEAD_API_KEY + SMARTLEAD_CAMPAIGN_ID into .env. Point Smartlead EMAIL_REPLY webhook to /api/webhooks/email. (Instantly still works via INSTANTLY_* if you prefer.)",
     statusKey: "email",
-    href: "https://instantly.ai",
-    hrefLabel: "Open Instantly",
+    href: "https://app.smartlead.ai",
+    hrefLabel: "Open Smartlead",
   },
   {
     id: "host",
     title: "4. Public URL for webhooks",
     youDo:
-      "Deploy SignalDesk (Vercel etc.) or use a tunnel. Point Telnyx messaging webhook to /api/webhooks/telnyx and email replies to /api/webhooks/email.",
+      "Use Cloudflare Tunnel (cloudflared) for local tests, or deploy to Vercel. Set PUBLIC_APP_URL. Point Telnyx messaging profile → /api/webhooks/telnyx and Smartlead → /api/webhooks/email. Quick tunnels change URL when restarted.",
   },
   {
     id: "numbers",
@@ -60,16 +68,24 @@ const steps: Array<{
     hrefLabel: "Open entities",
   },
   {
-    id: "smoke",
-    title: "6. Smoke test",
+    id: "tendlc",
+    title: "6. 10DLC Brand (waiting on Telnyx)",
     youDo:
-      "Upload 2–3 leads (your phone/email) → tiny campaign → reply → triage in Inbox → Email team.",
+      "Brand registration is pending (up to ~48h). After approval, finish the 10DLC Campaign, then scale SMS. Low-volume tests may still work before then.",
+    href: "https://portal.telnyx.com",
+    hrefLabel: "Telnyx Mission Control",
+  },
+  {
+    id: "smoke",
+    title: "7. Smoke test",
+    youDo:
+      "Upload 2–3 leads (your phone/email) → tiny campaign → reply → triage in Inbox → Email team. Repeat with a Smartlead self-send when email is keyed.",
     href: "/leads",
     hrefLabel: "Upload leads",
   },
   {
     id: "crm",
-    title: "7. CRM / n8n (not today)",
+    title: "8. CRM / n8n (not today)",
     youDo:
       "Skip for now. Use Inbox → Good lead → Email team. Wire n8n when you’re ready.",
   },
@@ -85,7 +101,7 @@ export default function SetupPage() {
       .catch(() => undefined);
   }, []);
 
-  function pill(key?: keyof ProviderStatus) {
+  function pill(key?: LiveStatusKey) {
     if (!key || !status) return "setup";
     const v = status[key];
     if (key === "neon") return v === "live" ? "verified" : "partial";
@@ -93,18 +109,18 @@ export default function SetupPage() {
     return "partial";
   }
 
-  function label(key?: keyof ProviderStatus) {
+  function label(key?: LiveStatusKey) {
     if (!key || !status) return "pending";
     if (key === "neon") return status.neon === "live" ? "live" : "local";
     if (key === "email") return status.email;
-    return status[key];
+    return status.telnyx;
   }
 
   return (
     <div>
       <PageHeader
         title="Go live today"
-        description="SignalDesk ops are ready. Finish Telnyx + Instantly/Smartlead + a public webhook URL. Full 20k/day volume waits on 10DLC and domain warmup."
+        description="Neon + Telnyx keys are live. Next: Smartlead API keys + a public webhook URL. Scaled SMS waits on 10DLC Brand approval; cold email warmup can start as soon as Smartlead is keyed."
         actions={
           <Link
             href="/settings"
@@ -115,7 +131,7 @@ export default function SetupPage() {
         }
       />
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-3 animate-rise">
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 animate-rise">
         <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
           <div className="text-xs text-[color:var(--ink-muted)]">Neon</div>
           <div className="mt-1 font-[family-name:var(--font-display)] text-xl">
@@ -133,6 +149,23 @@ export default function SetupPage() {
           <div className="mt-1 font-[family-name:var(--font-display)] text-xl">
             {status?.email || "…"}
           </div>
+        </div>
+        <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
+          <div className="text-xs text-[color:var(--ink-muted)]">Public URL</div>
+          <div className="mt-1 font-[family-name:var(--font-display)] text-xl">
+            {status?.publicAppUrl ? "set" : "needed"}
+          </div>
+          {status?.webhooks ? (
+            <p className="mt-2 break-all text-[10px] leading-snug text-[color:var(--ink-muted)]">
+              SMS: {status.webhooks.telnyx}
+              <br />
+              Email: {status.webhooks.email}
+            </p>
+          ) : (
+            <p className="mt-2 text-[10px] text-[color:var(--ink-muted)]">
+              Set PUBLIC_APP_URL after tunnel/deploy
+            </p>
+          )}
         </div>
       </div>
 

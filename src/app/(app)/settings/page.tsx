@@ -196,8 +196,10 @@ export default function SettingsPage() {
         </div>
         <p className="mt-4 text-xs text-[color:var(--ink-muted)]">
           Set <code>TELNYX_API_KEY</code> + <code>TELNYX_FROM_NUMBER</code> in{" "}
-          <code>.env</code> (or Cloud Agent Secrets) to go live on SMS. Cold email:
-          Instantly or Smartlead — not Amazon SES / SendGrid for cold lead blasts.
+          <code>.env</code> (or Cloud Agent Secrets) for SMS. Cold email: paste{" "}
+          <code>SMARTLEAD_API_KEY</code> + <code>SMARTLEAD_CAMPAIGN_ID</code>{" "}
+          (or Instantly equivalents). Set <code>PUBLIC_APP_URL</code> for webhook
+          URLs shown on Go live. Not Amazon SES / SendGrid for cold lead blasts.
         </p>
       </section>
 

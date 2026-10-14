@@ -28,7 +28,9 @@ Without `DATABASE_URL`, the app uses a local JSON store under `.data/` so you ca
 
 ## Go live
 
-See **[SETUP.md](SETUP.md)** and the in-app **Go live** page (`/setup`) for today’s checklist: Telnyx, Instantly/Smartlead, public webhooks.
+See **[SETUP.md](SETUP.md)** and the in-app **Go live** page (`/setup`).
+
+**Current:** Neon live · Telnyx SMS keyed (10DLC Brand pending) · **next = Smartlead** + public HTTPS for webhooks (`PUBLIC_APP_URL`).
 
 ## Connect Neon
 
@@ -93,9 +95,21 @@ TELNYX_FROM_NUMBER=+1...
 
 Without a key, SMS runs in **mock** mode (safe for demos).
 
-### Cold email (not SES / SendGrid)
+### Cold email — Smartlead (or Instantly)
 
-Amazon SES and SendGrid are built for transactional / opted-in marketing. For **cold lead outreach**, use **Instantly** or **Smartlead** (warmup, rotation, better inbox placement). SES is fine later for transactional mail from your sites — not as the cold engine.
+Amazon SES and SendGrid are built for transactional / opted-in marketing. For **cold lead outreach**, use **Smartlead** or **Instantly** (warmup, rotation, better inbox placement). SES is fine later for transactional mail from your sites — not as the cold engine.
+
+```bash
+# .env — Smartlead first
+SMARTLEAD_API_KEY=...
+SMARTLEAD_CAMPAIGN_ID=...
+PUBLIC_APP_URL=https://your-public-host   # tunnel or Vercel
+# Webhooks:
+#   Telnyx  → ${PUBLIC_APP_URL}/api/webhooks/telnyx
+#   Smartlead EMAIL_REPLY → ${PUBLIC_APP_URL}/api/webhooks/email
+```
+
+Without Smartlead/Instantly keys, email runs in **mock** mode.
 
 ## Architecture
 
