@@ -1,45 +1,16 @@
 "use client";
 
-import { startTransition, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 
-/** Pathname without usePathname() — avoids Cache Components Suspense hangs. */
+/**
+ * Active pathname for client nav highlighting.
+ *
+ * Uses next/navigation usePathname — Cache Components was the original hang
+ * source (Suspense around AppShell + usePathname). That mode is off and the
+ * shell no longer wraps in Suspense, so the framework hook is safe and avoids
+ * history.pushState/replaceState monkey-patches that conflict with Next Link
+ * useInsertionEffect ("must not schedule updates").
+ */
 export function useClientPathname() {
-  const [pathname, setPathname] = useState(() =>
-    typeof window !== "undefined" ? window.location.pathname : "",
-  );
-
-  useEffect(() => {
-    const read = () => {
-      const next = window.location.pathname;
-      // Defer: history patches can run inside useInsertionEffect (Next Link).
-      startTransition(() => {
-        setPathname((prev) => (prev === next ? prev : next));
-      });
-    };
-
-    // Hydration often starts as ""; sync once without blocking insertion effects.
-    read();
-
-    const onPop = () => read();
-    window.addEventListener("popstate", onPop);
-
-    const origPush = history.pushState.bind(history);
-    const origReplace = history.replaceState.bind(history);
-    history.pushState = (...args) => {
-      origPush(...args);
-      read();
-    };
-    history.replaceState = (...args) => {
-      origReplace(...args);
-      read();
-    };
-
-    return () => {
-      window.removeEventListener("popstate", onPop);
-      history.pushState = origPush;
-      history.replaceState = origReplace;
-    };
-  }, []);
-
-  return pathname;
+  return usePathname();
 }
