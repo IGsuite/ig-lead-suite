@@ -15,6 +15,8 @@ import type {
   PlatformData,
   Reply,
   RotationConfig,
+  SocialCampaign,
+  SocialConnection,
   UploadBatch,
 } from "@/lib/types";
 
@@ -186,6 +188,31 @@ export async function updateAdAsset(
 
 export async function deleteAdAsset(id: string): Promise<boolean> {
   return backend().deleteAdAsset(id);
+}
+
+export async function createSocialCampaign(
+  input: Omit<SocialCampaign, "id" | "createdAt" | "updatedAt">,
+): Promise<SocialCampaign> {
+  return backend().createSocialCampaign(input);
+}
+
+export async function updateSocialCampaign(
+  id: string,
+  patch: Partial<Omit<SocialCampaign, "id" | "createdAt" | "updatedAt">>,
+): Promise<SocialCampaign | null> {
+  return backend().updateSocialCampaign(id, patch);
+}
+
+export async function deleteSocialCampaign(id: string): Promise<boolean> {
+  return backend().deleteSocialCampaign(id);
+}
+
+export async function upsertSocialConnection(
+  input: Omit<SocialConnection, "id" | "createdAt" | "updatedAt"> & {
+    id?: string;
+  },
+): Promise<SocialConnection> {
+  return backend().upsertSocialConnection(input);
 }
 
 export function costPerReply(spend: {

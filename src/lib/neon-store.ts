@@ -23,6 +23,8 @@ import {
   mapOptOut,
   mapReply,
   mapRotation,
+  mapSocialCampaign,
+  mapSocialConnection,
   mapSpend,
   mapUpload,
 } from "@/lib/mappers";
@@ -43,6 +45,8 @@ import type {
   PlatformData,
   Reply,
   RotationConfig,
+  SocialCampaign,
+  SocialConnection,
   UploadBatch,
 } from "@/lib/types";
 import { deliverCampaignBatch } from "@/lib/send";
@@ -105,6 +109,14 @@ async function ensureSeeded(): Promise<void> {
         safeFindMany(() => prisma.messageTemplate.findMany({ take: 1 }), "MessageTemplate"),
         safeFindMany(() => prisma.adFolder.findMany({ take: 1 }), "AdFolder"),
         safeFindMany(() => prisma.adAsset.findMany({ take: 1 }), "AdAsset"),
+        safeFindMany(
+          () => prisma.socialCampaign.findMany({ take: 1 }),
+          "SocialCampaign",
+        ),
+        safeFindMany(
+          () => prisma.socialConnection.findMany({ take: 1 }),
+          "SocialConnection",
+        ),
       ]);
       await prisma.platformSettings.update({
         where: { id: "default" },
@@ -129,6 +141,8 @@ async function replaceWithSeed(): Promise<PlatformData> {
   await prisma.$transaction(async (tx) => {
     await tx.reply.deleteMany();
     await tx.campaign.deleteMany();
+    await tx.socialCampaign.deleteMany();
+    await tx.socialConnection.deleteMany();
     await tx.messageTemplate.deleteMany();
     await tx.adAsset.deleteMany();
     await tx.adFolder.deleteMany();
@@ -333,6 +347,53 @@ async function replaceWithSeed(): Promise<PlatformData> {
       });
     }
 
+    if (seed.socialCampaigns?.length) {
+      await tx.socialCampaign.createMany({
+        data: seed.socialCampaigns.map((c) => ({
+          id: c.id,
+          entityId: c.entityId,
+          platform: c.platform,
+          name: c.name,
+          status: c.status,
+          objective: c.objective,
+          budgetCents: c.budgetCents ?? null,
+          dailyBudgetCents: c.dailyBudgetCents ?? null,
+          targetingNotes: c.targetingNotes ?? null,
+          primaryText: c.primaryText ?? null,
+          cta: c.cta ?? null,
+          landingUrl: c.landingUrl ?? null,
+          notes: c.notes ?? null,
+          creativeAssetId: c.creativeAssetId ?? null,
+          creativeTemplateId: c.creativeTemplateId ?? null,
+          scheduleStart: c.scheduleStart ? new Date(c.scheduleStart) : null,
+          scheduleEnd: c.scheduleEnd ? new Date(c.scheduleEnd) : null,
+          impressions: c.impressions,
+          clicks: c.clicks,
+          leads: c.leads,
+          spendCents: c.spendCents,
+          createdAt: new Date(c.createdAt),
+          updatedAt: new Date(c.updatedAt),
+        })),
+      });
+    }
+
+    if (seed.socialConnections?.length) {
+      await tx.socialConnection.createMany({
+        data: seed.socialConnections.map((c) => ({
+          id: c.id,
+          entityId: c.entityId,
+          platform: c.platform,
+          status: c.status,
+          adAccountId: c.adAccountId || null,
+          pixelOrEventsId: c.pixelOrEventsId || null,
+          accessTokenNote: c.accessTokenNote || null,
+          notes: c.notes || null,
+          createdAt: new Date(c.createdAt),
+          updatedAt: new Date(c.updatedAt),
+        })),
+      });
+    }
+
     await tx.platformSettings.create({
       data: {
         id: "default",
@@ -368,6 +429,8 @@ export async function getData(): Promise<PlatformData> {
     messageTemplates,
     adFolders,
     adAssets,
+    socialCampaigns,
+    socialConnections,
     settings,
   ] = await Promise.all([
     prisma.entity.findMany({ orderBy: { name: "asc" } }),
@@ -390,6 +453,16 @@ export async function getData(): Promise<PlatformData> {
       () => prisma.adAsset.findMany({ orderBy: { updatedAt: "desc" } }),
       "AdAsset",
     ),
+    safeFindMany(
+      () =>
+        prisma.socialCampaign.findMany({ orderBy: { updatedAt: "desc" } }),
+      "SocialCampaign",
+    ),
+    safeFindMany(
+      () =>
+        prisma.socialConnection.findMany({ orderBy: { updatedAt: "desc" } }),
+      "SocialConnection",
+    ),
     prisma.platformSettings.findUniqueOrThrow({ where: { id: "default" } }),
   ]);
 
@@ -406,6 +479,8 @@ export async function getData(): Promise<PlatformData> {
     messageTemplates: messageTemplates.map(mapMessageTemplate),
     adFolders: adFolders.map(mapAdFolder),
     adAssets: adAssets.map(mapAdAsset),
+    socialCampaigns: socialCampaigns.map(mapSocialCampaign),
+    socialConnections: socialConnections.map(mapSocialConnection),
     rotation: mapRotation(settings, brands.map(mapEntity)),
   };
 }
@@ -1367,4 +1442,153 @@ export async function deleteAdAsset(id: string): Promise<boolean> {
   await deleteAdAssetFile(existing.storagePath);
   await prisma.adAsset.delete({ where: { id } });
   return true;
+}
+
+export async function createSocialCampaign(
+  input: Omit<SocialCampaign, "id" | "createdAt" | "updatedAt">,
+): Promise<SocialCampaign> {
+  const prisma = getPrisma();
+  const id = `soc-${Date.now()}`;
+  const row = await prisma.socialCampaign.create({
+    data: {
+      id,
+      entityId: input.entityId,
+      platform: input.platform,
+      name: input.name,
+      status: input.status,
+      objective: input.objective || "",
+      budgetCents: input.budgetCents ?? null,
+      dailyBudgetCents: input.dailyBudgetCents ?? null,
+      targetingNotes: input.targetingNotes ?? null,
+      primaryText: input.primaryText ?? null,
+      cta: input.cta ?? null,
+      landingUrl: input.landingUrl ?? null,
+      notes: input.notes ?? null,
+      creativeAssetId: input.creativeAssetId ?? null,
+      creativeTemplateId: input.creativeTemplateId ?? null,
+      scheduleStart: input.scheduleStart
+        ? new Date(input.scheduleStart)
+        : null,
+      scheduleEnd: input.scheduleEnd ? new Date(input.scheduleEnd) : null,
+      impressions: input.impressions ?? 0,
+      clicks: input.clicks ?? 0,
+      leads: input.leads ?? 0,
+      spendCents: input.spendCents ?? 0,
+    },
+  });
+  return mapSocialCampaign(row);
+}
+
+export async function updateSocialCampaign(
+  id: string,
+  patch: Partial<Omit<SocialCampaign, "id" | "createdAt" | "updatedAt">>,
+): Promise<SocialCampaign | null> {
+  const prisma = getPrisma();
+  const existing = await prisma.socialCampaign.findUnique({ where: { id } });
+  if (!existing) return null;
+  const row = await prisma.socialCampaign.update({
+    where: { id },
+    data: {
+      entityId: patch.entityId ?? existing.entityId,
+      platform: patch.platform ?? existing.platform,
+      name: patch.name ?? existing.name,
+      status: patch.status ?? existing.status,
+      objective: patch.objective ?? existing.objective,
+      budgetCents:
+        patch.budgetCents === undefined
+          ? existing.budgetCents
+          : patch.budgetCents,
+      dailyBudgetCents:
+        patch.dailyBudgetCents === undefined
+          ? existing.dailyBudgetCents
+          : patch.dailyBudgetCents,
+      targetingNotes:
+        patch.targetingNotes === undefined
+          ? existing.targetingNotes
+          : patch.targetingNotes ?? null,
+      primaryText:
+        patch.primaryText === undefined
+          ? existing.primaryText
+          : patch.primaryText ?? null,
+      cta: patch.cta === undefined ? existing.cta : patch.cta ?? null,
+      landingUrl:
+        patch.landingUrl === undefined
+          ? existing.landingUrl
+          : patch.landingUrl ?? null,
+      notes: patch.notes === undefined ? existing.notes : patch.notes ?? null,
+      creativeAssetId:
+        patch.creativeAssetId === undefined
+          ? existing.creativeAssetId
+          : patch.creativeAssetId,
+      creativeTemplateId:
+        patch.creativeTemplateId === undefined
+          ? existing.creativeTemplateId
+          : patch.creativeTemplateId,
+      scheduleStart:
+        patch.scheduleStart === undefined
+          ? existing.scheduleStart
+          : patch.scheduleStart
+            ? new Date(patch.scheduleStart)
+            : null,
+      scheduleEnd:
+        patch.scheduleEnd === undefined
+          ? existing.scheduleEnd
+          : patch.scheduleEnd
+            ? new Date(patch.scheduleEnd)
+            : null,
+      impressions: patch.impressions ?? existing.impressions,
+      clicks: patch.clicks ?? existing.clicks,
+      leads: patch.leads ?? existing.leads,
+      spendCents: patch.spendCents ?? existing.spendCents,
+    },
+  });
+  return mapSocialCampaign(row);
+}
+
+export async function deleteSocialCampaign(id: string): Promise<boolean> {
+  const prisma = getPrisma();
+  try {
+    await prisma.socialCampaign.delete({ where: { id } });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function upsertSocialConnection(
+  input: Omit<SocialConnection, "id" | "createdAt" | "updatedAt"> & {
+    id?: string;
+  },
+): Promise<SocialConnection> {
+  const prisma = getPrisma();
+  const existing = await prisma.socialConnection.findFirst({
+    where: { entityId: input.entityId, platform: input.platform },
+  });
+  if (existing) {
+    const row = await prisma.socialConnection.update({
+      where: { id: existing.id },
+      data: {
+        status: input.status,
+        adAccountId: input.adAccountId || null,
+        pixelOrEventsId: input.pixelOrEventsId || null,
+        accessTokenNote: input.accessTokenNote || null,
+        notes: input.notes || null,
+      },
+    });
+    return mapSocialConnection(row);
+  }
+  const id = input.id || `sconn-${input.entityId}-${input.platform}-${Date.now()}`;
+  const row = await prisma.socialConnection.create({
+    data: {
+      id,
+      entityId: input.entityId,
+      platform: input.platform,
+      status: input.status,
+      adAccountId: input.adAccountId || null,
+      pixelOrEventsId: input.pixelOrEventsId || null,
+      accessTokenNote: input.accessTokenNote || null,
+      notes: input.notes || null,
+    },
+  });
+  return mapSocialConnection(row);
 }

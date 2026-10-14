@@ -39,6 +39,61 @@ export type SendWindowPreset =
   | "any";
 export type UserRole = "admin" | "member";
 
+/** Paid social platforms managed per entity portal. */
+export type SocialPlatform = "meta" | "tiktok";
+export type SocialCampaignStatus =
+  | "draft"
+  | "active"
+  | "paused"
+  | "archived";
+export type SocialConnectionStatus =
+  | "not_connected"
+  | "connected"
+  | "needs_setup";
+
+/** Per-entity Meta / TikTok campaign (planning + metrics placeholders). */
+export interface SocialCampaign {
+  id: string;
+  entityId: string;
+  platform: SocialPlatform;
+  name: string;
+  status: SocialCampaignStatus;
+  objective: string;
+  budgetCents?: number | null;
+  dailyBudgetCents?: number | null;
+  targetingNotes?: string;
+  primaryText?: string;
+  cta?: string;
+  landingUrl?: string;
+  notes?: string;
+  /** Optional Ads library file. */
+  creativeAssetId?: string | null;
+  /** Optional Ads library message template. */
+  creativeTemplateId?: string | null;
+  scheduleStart?: string | null;
+  scheduleEnd?: string | null;
+  impressions: number;
+  clicks: number;
+  leads: number;
+  spendCents: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Per-entity platform connection (local/mock until real OAuth). */
+export interface SocialConnection {
+  id: string;
+  entityId: string;
+  platform: SocialPlatform;
+  status: SocialConnectionStatus;
+  adAccountId?: string;
+  pixelOrEventsId?: string;
+  accessTokenNote?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppUser {
   id: string;
   email: string;
@@ -379,5 +434,7 @@ export interface PlatformData {
   messageTemplates: MessageTemplate[];
   adFolders: AdFolder[];
   adAssets: AdAsset[];
+  socialCampaigns: SocialCampaign[];
+  socialConnections: SocialConnection[];
   rotation: RotationConfig;
 }

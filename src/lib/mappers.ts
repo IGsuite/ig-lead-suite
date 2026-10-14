@@ -14,6 +14,10 @@ import type {
   ProviderSpend,
   Reply,
   RotationConfig,
+  SocialCampaign,
+  SocialConnection,
+  SocialConnectionStatus,
+  SocialPlatform,
   UploadBatch,
 } from "@/lib/types";
 
@@ -335,6 +339,88 @@ export function mapAdAsset(row: {
     mimeType: row.mimeType,
     sizeBytes: row.sizeBytes,
     storagePath: row.storagePath,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export function mapSocialCampaign(row: {
+  id: string;
+  entityId: string;
+  platform: string;
+  name: string;
+  status: string;
+  objective: string;
+  budgetCents: number | null;
+  dailyBudgetCents: number | null;
+  targetingNotes: string | null;
+  primaryText: string | null;
+  cta: string | null;
+  landingUrl: string | null;
+  notes: string | null;
+  creativeAssetId: string | null;
+  creativeTemplateId: string | null;
+  scheduleStart: Date | null;
+  scheduleEnd: Date | null;
+  impressions: number;
+  clicks: number;
+  leads: number;
+  spendCents: number;
+  createdAt: Date;
+  updatedAt: Date;
+}): SocialCampaign {
+  return {
+    id: row.id,
+    entityId: row.entityId,
+    platform: row.platform as SocialPlatform,
+    name: row.name,
+    status: row.status as SocialCampaign["status"],
+    objective: row.objective || "",
+    budgetCents: row.budgetCents,
+    dailyBudgetCents: row.dailyBudgetCents,
+    targetingNotes: row.targetingNotes ?? undefined,
+    primaryText: row.primaryText ?? undefined,
+    cta: row.cta ?? undefined,
+    landingUrl: row.landingUrl ?? undefined,
+    notes: row.notes ?? undefined,
+    creativeAssetId: row.creativeAssetId,
+    creativeTemplateId: row.creativeTemplateId,
+    scheduleStart: row.scheduleStart
+      ? row.scheduleStart.toISOString().slice(0, 10)
+      : null,
+    scheduleEnd: row.scheduleEnd
+      ? row.scheduleEnd.toISOString().slice(0, 10)
+      : null,
+    impressions: row.impressions,
+    clicks: row.clicks,
+    leads: row.leads,
+    spendCents: row.spendCents,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export function mapSocialConnection(row: {
+  id: string;
+  entityId: string;
+  platform: string;
+  status: string;
+  adAccountId: string | null;
+  pixelOrEventsId: string | null;
+  accessTokenNote: string | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): SocialConnection {
+  return {
+    id: row.id,
+    entityId: row.entityId,
+    platform: row.platform as SocialPlatform,
+    status: row.status as SocialConnectionStatus,
+    adAccountId: row.adAccountId ?? undefined,
+    pixelOrEventsId: row.pixelOrEventsId ?? undefined,
+    accessTokenNote: row.accessTokenNote ?? undefined,
+    notes: row.notes ?? undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

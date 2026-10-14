@@ -27,6 +27,8 @@ import type {
   PlatformData,
   Reply,
   RotationConfig,
+  SocialCampaign,
+  SocialConnection,
   UploadBatch,
 } from "@/lib/types";
 import { deliverCampaignBatch } from "@/lib/send";
@@ -47,37 +49,51 @@ export type LaunchResult = {
 const DATA_DIR = path.join(process.cwd(), ".data");
 const DATA_FILE = path.join(DATA_DIR, "platform.json");
 
+function softMigratePlatformData(parsed: PlatformData): PlatformData {
+  if (!parsed.costEntries) parsed.costEntries = [];
+  if (!Array.isArray(parsed.messageTemplates)) parsed.messageTemplates = [];
+  if (!Array.isArray(parsed.adFolders)) parsed.adFolders = [];
+  if (!Array.isArray(parsed.adAssets)) parsed.adAssets = [];
+  if (!Array.isArray(parsed.socialCampaigns)) parsed.socialCampaigns = [];
+  if (!Array.isArray(parsed.socialConnections)) parsed.socialConnections = [];
+  for (const t of parsed.messageTemplates) {
+    if (t.folderId === undefined) t.folderId = null;
+    if (t.brandId === undefined) t.brandId = null;
+  }
+  for (const f of parsed.adFolders) {
+    if (f.brandId === undefined) f.brandId = null;
+    if (f.parentId === undefined) f.parentId = null;
+  }
+  for (const a of parsed.adAssets) {
+    if (a.brandId === undefined) a.brandId = null;
+    if (a.folderId === undefined) a.folderId = null;
+  }
+  for (const c of parsed.campaigns || []) {
+    if (!c.sendWindowPreset) {
+      Object.assign(c, normalizeSendWindow(c));
+    }
+  }
+  return parsed;
+}
+
 async function ensureStore(): Promise<PlatformData> {
   await fs.mkdir(DATA_DIR, { recursive: true });
   try {
     const raw = await fs.readFile(DATA_FILE, "utf8");
     const parsed = JSON.parse(raw) as PlatformData;
     if (parsed.version !== STORE_VERSION) {
+      // Soft-bump when brands already exist — never wipe live CRM data.
+      if (parsed.brands?.length) {
+        softMigratePlatformData(parsed);
+        parsed.version = STORE_VERSION;
+        await writeStore(parsed);
+        return parsed;
+      }
       const seed = await materializeSeedAdAssets(createSeedData());
       await writeStore(seed);
       return seed;
     }
-    if (!parsed.costEntries) parsed.costEntries = [];
-    if (!Array.isArray(parsed.messageTemplates)) parsed.messageTemplates = [];
-    if (!Array.isArray(parsed.adFolders)) parsed.adFolders = [];
-    if (!Array.isArray(parsed.adAssets)) parsed.adAssets = [];
-    for (const t of parsed.messageTemplates) {
-      if (t.folderId === undefined) t.folderId = null;
-      if (t.brandId === undefined) t.brandId = null;
-    }
-    for (const f of parsed.adFolders) {
-      if (f.brandId === undefined) f.brandId = null;
-      if (f.parentId === undefined) f.parentId = null;
-    }
-    for (const a of parsed.adAssets) {
-      if (a.brandId === undefined) a.brandId = null;
-      if (a.folderId === undefined) a.folderId = null;
-    }
-    for (const c of parsed.campaigns || []) {
-      if (!c.sendWindowPreset) {
-        Object.assign(c, normalizeSendWindow(c));
-      }
-    }
+    softMigratePlatformData(parsed);
     return parsed;
   } catch {
     const seed = await materializeSeedAdAssets(createSeedData());
@@ -693,6 +709,94 @@ export async function deleteAdAsset(id: string): Promise<boolean> {
   data.adAssets = (data.adAssets || []).filter((a) => a.id !== id);
   await writeStore(data);
   return true;
+}
+
+export async function createSocialCampaign(
+  input: Omit<SocialCampaign, "id" | "createdAt" | "updatedAt">,
+): Promise<SocialCampaign> {
+  const data = await ensureStore();
+  const now = new Date().toISOString();
+  const campaign: SocialCampaign = {
+    ...input,
+    id: `soc-${Date.now()}`,
+    impressions: input.impressions ?? 0,
+    clicks: input.clicks ?? 0,
+    leads: input.leads ?? 0,
+    spendCents: input.spendCents ?? 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+  data.socialCampaigns = data.socialCampaigns || [];
+  data.socialCampaigns.unshift(campaign);
+  await writeStore(data);
+  return campaign;
+}
+
+export async function updateSocialCampaign(
+  id: string,
+  patch: Partial<Omit<SocialCampaign, "id" | "createdAt" | "updatedAt">>,
+): Promise<SocialCampaign | null> {
+  const data = await ensureStore();
+  const idx = (data.socialCampaigns || []).findIndex((c) => c.id === id);
+  if (idx < 0) return null;
+  data.socialCampaigns[idx] = {
+    ...data.socialCampaigns[idx],
+    ...patch,
+    id,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeStore(data);
+  return data.socialCampaigns[idx];
+}
+
+export async function deleteSocialCampaign(id: string): Promise<boolean> {
+  const data = await ensureStore();
+  const before = data.socialCampaigns?.length || 0;
+  data.socialCampaigns = (data.socialCampaigns || []).filter(
+    (c) => c.id !== id,
+  );
+  await writeStore(data);
+  return (data.socialCampaigns?.length || 0) < before;
+}
+
+export async function upsertSocialConnection(
+  input: Omit<SocialConnection, "id" | "createdAt" | "updatedAt"> & {
+    id?: string;
+  },
+): Promise<SocialConnection> {
+  const data = await ensureStore();
+  data.socialConnections = data.socialConnections || [];
+  const idx = data.socialConnections.findIndex(
+    (c) => c.entityId === input.entityId && c.platform === input.platform,
+  );
+  const now = new Date().toISOString();
+  if (idx >= 0) {
+    data.socialConnections[idx] = {
+      ...data.socialConnections[idx],
+      ...input,
+      id: data.socialConnections[idx].id,
+      updatedAt: now,
+    };
+    await writeStore(data);
+    return data.socialConnections[idx];
+  }
+  const connection: SocialConnection = {
+    id:
+      input.id ||
+      `sconn-${input.entityId}-${input.platform}-${Date.now()}`,
+    entityId: input.entityId,
+    platform: input.platform,
+    status: input.status,
+    adAccountId: input.adAccountId,
+    pixelOrEventsId: input.pixelOrEventsId,
+    accessTokenNote: input.accessTokenNote,
+    notes: input.notes,
+    createdAt: now,
+    updatedAt: now,
+  };
+  data.socialConnections.unshift(connection);
+  await writeStore(data);
+  return connection;
 }
 
 /** One daily Ferris-wheel pass: each enabled entity gets its own SMS + email blast. */

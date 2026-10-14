@@ -2,7 +2,7 @@ import { defaultQuotas } from "@/lib/autopilot";
 import { writeSeedAdAssetFile } from "@/lib/ad-assets-fs";
 import type { PlatformData } from "@/lib/types";
 
-export const STORE_VERSION = 11;
+export const STORE_VERSION = 12;
 
 export function createSeedData(): PlatformData {
   const now = new Date();
@@ -908,6 +908,114 @@ export function createSeedData(): PlatformData {
     },
   ];
 
+  const socialCampaigns: PlatformData["socialCampaigns"] = [
+    {
+      id: "soc-tyh-meta-1",
+      entityId: "tyh",
+      platform: "meta",
+      name: "TYH · IG lead form · Q2",
+      status: "active",
+      objective: "Lead generation",
+      budgetCents: 150000,
+      dailyBudgetCents: 7500,
+      targetingNotes: "Business owners 25–54 · US · interested in digital marketing",
+      primaryText:
+        "Tired of guessing which ads work? TYH Marketing builds Meta + TikTok funnels that feed your CRM — not vanity metrics.",
+      cta: "Learn more",
+      landingUrl: "https://www.tyhmarketing.com/",
+      notes: "Demo campaign — publish needs live Meta access token later.",
+      creativeAssetId: null,
+      creativeTemplateId: null,
+      scheduleStart: daysAgo(14).slice(0, 10),
+      scheduleEnd: null,
+      impressions: 12400,
+      clicks: 318,
+      leads: 27,
+      spendCents: 48200,
+      createdAt: daysAgo(14),
+      updatedAt: daysAgo(1),
+    },
+    {
+      id: "soc-abstract-meta-1",
+      entityId: "abstract",
+      platform: "meta",
+      name: "Abstract · MCA awareness",
+      status: "draft",
+      objective: "Brand awareness",
+      budgetCents: 80000,
+      dailyBudgetCents: 4000,
+      targetingNotes: "SMB owners · Northeast · looking for working capital",
+      primaryText:
+        "Need capital for your business? Abstract Capital Group shops MCA, LOC, term & SBA options — one conversation.",
+      cta: "Get started",
+      landingUrl: "https://abstractcapitalgroup.com/",
+      notes: "",
+      creativeAssetId: "asset-abstract-brief",
+      creativeTemplateId: null,
+      scheduleStart: null,
+      scheduleEnd: null,
+      impressions: 0,
+      clicks: 0,
+      leads: 0,
+      spendCents: 0,
+      createdAt: daysAgo(3),
+      updatedAt: daysAgo(3),
+    },
+    {
+      id: "soc-ahava-tiktok-1",
+      entityId: "ahava",
+      platform: "tiktok",
+      name: "Ahava · TikTok spark ads",
+      status: "paused",
+      objective: "Traffic",
+      budgetCents: 50000,
+      dailyBudgetCents: 2500,
+      targetingNotes: "US · interest in entrepreneurship · lookalike of site visitors",
+      primaryText:
+        "Capital with love — Ahava Capital helps growing businesses unlock working capital without the bank maze.",
+      cta: "Visit site",
+      landingUrl: "https://www.ahavacapital.com/",
+      notes: "Paused pending creative refresh from Ads library.",
+      creativeAssetId: null,
+      creativeTemplateId: null,
+      scheduleStart: daysAgo(21).slice(0, 10),
+      scheduleEnd: daysAgo(7).slice(0, 10),
+      impressions: 8900,
+      clicks: 210,
+      leads: 8,
+      spendCents: 22100,
+      createdAt: daysAgo(21),
+      updatedAt: daysAgo(7),
+    },
+  ];
+
+  const socialConnections: PlatformData["socialConnections"] = [
+    {
+      id: "sconn-tyh-meta",
+      entityId: "tyh",
+      platform: "meta",
+      status: "needs_setup",
+      adAccountId: "act_0000000000",
+      pixelOrEventsId: "PIXEL_DEMO",
+      accessTokenNote: "Placeholder — set META_ACCESS_TOKEN for live publish later.",
+      notes: "Demo connection. Live Meta Marketing API OAuth not wired yet.",
+      createdAt: daysAgo(14),
+      updatedAt: daysAgo(2),
+    },
+    {
+      id: "sconn-ahava-tiktok",
+      entityId: "ahava",
+      platform: "tiktok",
+      status: "not_connected",
+      adAccountId: "",
+      pixelOrEventsId: "",
+      accessTokenNote: "",
+      notes: "",
+      createdAt: daysAgo(21),
+      updatedAt: daysAgo(21),
+    },
+  ];
+
   return {
     version: STORE_VERSION,
     brands,
@@ -932,6 +1040,8 @@ export function createSeedData(): PlatformData {
     messageTemplates,
     adFolders,
     adAssets,
+    socialCampaigns,
+    socialConnections,
     providerSpend: [
       {
         source: "LeadForge",

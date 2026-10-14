@@ -55,28 +55,33 @@ type ReportTab =
   | "improve"
   | "sources"
   | "timing"
-  | "costs";
+  | "costs"
+  | "social";
 
 function parseChannel(raw: string | null): ChannelFilter {
   if (raw === "email" || raw === "sms" || raw === "all") return raw;
   return "sms";
 }
 
+function parseReportTab(raw: string | null): ReportTab {
+  if (
+    raw === "costs" ||
+    raw === "timing" ||
+    raw === "sources" ||
+    raw === "improve" ||
+    raw === "social" ||
+    raw === "performance"
+  ) {
+    return raw;
+  }
+  return "performance";
+}
+
 function ReportsInner() {
   const { data, loading, error, refresh } = usePlatform();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab");
-  const [tab, setTab] = useState<ReportTab>(
-    initialTab === "costs"
-      ? "costs"
-      : initialTab === "timing"
-        ? "timing"
-        : initialTab === "sources"
-          ? "sources"
-          : initialTab === "improve"
-            ? "improve"
-            : "performance",
-  );
+  const [tab, setTab] = useState<ReportTab>(parseReportTab(initialTab));
   const [entityId, setEntityId] = useState(
     searchParams.get("entity") || "all",
   );
@@ -237,11 +242,71 @@ function ReportsInner() {
           entityId === "shared" ? r.brandId === null : r.brandId === entityId,
         );
 
+  const socialRows = useMemo(() => {
+    if (!data) return [];
+    const campaigns = data.socialCampaigns || [];
+    const scoped =
+      entityId === "all" || entityId === "shared"
+        ? campaigns
+        : campaigns.filter((c) => c.entityId === entityId);
+    const byKey = new Map<
+      string,
+      {
+        entityId: string;
+        brandName: string;
+        platform: string;
+        count: number;
+        active: number;
+        spendCents: number;
+        impressions: number;
+        clicks: number;
+        leads: number;
+      }
+    >();
+    for (const c of scoped) {
+      const key = `${c.entityId}:${c.platform}`;
+      const brandName =
+        data.brands.find((b) => b.id === c.entityId)?.shortName || c.entityId;
+      const row = byKey.get(key) || {
+        entityId: c.entityId,
+        brandName,
+        platform: c.platform,
+        count: 0,
+        active: 0,
+        spendCents: 0,
+        impressions: 0,
+        clicks: 0,
+        leads: 0,
+      };
+      row.count += 1;
+      if (c.status === "active") row.active += 1;
+      row.spendCents += c.spendCents || 0;
+      row.impressions += c.impressions || 0;
+      row.clicks += c.clicks || 0;
+      row.leads += c.leads || 0;
+      byKey.set(key, row);
+    }
+    return [...byKey.values()].sort((a, b) => b.spendCents - a.spendCents);
+  }, [data, entityId]);
+
+  const socialTotals = useMemo(() => {
+    return socialRows.reduce(
+      (acc, r) => ({
+        count: acc.count + r.count,
+        spendCents: acc.spendCents + r.spendCents,
+        leads: acc.leads + r.leads,
+        impressions: acc.impressions + r.impressions,
+      }),
+      { count: 0, spendCents: 0, leads: 0, impressions: 0 },
+    );
+  }, [socialRows]);
+
   const tabs: { id: ReportTab; label: string }[] = [
     { id: "performance", label: "Performance" },
     { id: "improve", label: "Improve" },
     { id: "sources", label: "Sources" },
     { id: "timing", label: "Send timing" },
+    { id: "social", label: "Social" },
     { id: "costs", label: "Costs & ROI" },
   ];
 
@@ -312,7 +377,7 @@ function ReportsInner() {
           </Select>
         </div>
 
-        {tab !== "costs" ? (
+        {tab !== "costs" && tab !== "social" ? (
           <div className="space-y-2">
             <label className="text-sm font-medium">Channel</label>
             <div className="flex flex-wrap gap-2">
@@ -720,6 +785,85 @@ function ReportsInner() {
             </Table>
           </div>
         )
+      ) : tab === "social" ? (
+        <div className="space-y-6 animate-rise">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              label="Social campaigns"
+              value={compactNumber(socialTotals.count)}
+            />
+            <MetricCard
+              label="Social spend (logged)"
+              value={money(socialTotals.spendCents)}
+            />
+            <MetricCard
+              label="Social leads"
+              value={compactNumber(socialTotals.leads)}
+            />
+            <MetricCard
+              label="Impressions"
+              value={compactNumber(socialTotals.impressions)}
+            />
+          </div>
+          {!socialRows.length ? (
+            <EmptyPanel
+              title="No social campaigns yet"
+              description="Open Social Media, pick an entity, and create Meta or TikTok campaigns. Spend and leads here are manual placeholders until Insights sync."
+              action={
+                <Link
+                  href="/social"
+                  className={cn(buttonVariants())}
+                >
+                  Open Social Media
+                </Link>
+              }
+            />
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)]">
+              <div className="border-b border-[color:var(--ink-border)] px-5 py-4">
+                <h2 className="font-[family-name:var(--font-display)] text-2xl">
+                  Social by entity & platform
+                </h2>
+                <p className="text-sm text-[color:var(--ink-muted)]">
+                  Counts and spend from stored Meta / TikTok campaign metrics
+                  (manual entry until API sync). Portals stay isolated.
+                </p>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Entity</TableHead>
+                    <TableHead>Platform</TableHead>
+                    <TableHead>Campaigns</TableHead>
+                    <TableHead>Active</TableHead>
+                    <TableHead>Spend</TableHead>
+                    <TableHead>Impressions</TableHead>
+                    <TableHead>Clicks</TableHead>
+                    <TableHead>Leads</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {socialRows.map((row) => (
+                    <TableRow key={`${row.entityId}:${row.platform}`}>
+                      <TableCell className="font-medium">
+                        {row.brandName}
+                      </TableCell>
+                      <TableCell>
+                        {row.platform === "meta" ? "Meta" : "TikTok"}
+                      </TableCell>
+                      <TableCell>{compactNumber(row.count)}</TableCell>
+                      <TableCell>{compactNumber(row.active)}</TableCell>
+                      <TableCell>{money(row.spendCents)}</TableCell>
+                      <TableCell>{compactNumber(row.impressions)}</TableCell>
+                      <TableCell>{compactNumber(row.clicks)}</TableCell>
+                      <TableCell>{compactNumber(row.leads)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
       ) : tab === "sources" ? (
         !sourceRows.length ? (
           <EmptyPanel

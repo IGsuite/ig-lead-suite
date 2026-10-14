@@ -105,6 +105,25 @@ npm run dev
 
 Open [http://127.0.0.1:43123](http://127.0.0.1:43123).
 
+## Social Media (Meta · TikTok)
+
+Open **Social Media** in the sidebar (`/social`):
+
+1. Pick an **entity portal**, then **Meta** or **TikTok**.
+2. Store a per-entity **connection** (ad account ID, pixel/events ID, status) — local/mock only; no OAuth in this slice.
+3. Create **social campaigns** (objective, budget, status, primary text, CTA, landing URL, optional Ads library links, schedule, metrics placeholders).
+4. **Reports → Social** rolls up campaign counts / spend / leads by entity + platform.
+5. Shared lead pool stays shared; social campaigns never mix across entities.
+
+Optional env (for a later live publish step — not required for planning UI):
+
+```bash
+# META_ACCESS_TOKEN=...      # Meta Marketing API (future)
+# TIKTOK_ACCESS_TOKEN=...    # TikTok Marketing API (future)
+```
+
+Live ad publish / Insights sync still needs OAuth + ad account linking per entity.
+
 ## Ads (creators · copy, templates & files)
 
 Yes — **creators work here**. Open **Ads** in the sidebar (`/creatives`):
@@ -132,10 +151,11 @@ Without a key the UI still works with demo drafts.
 
 1. **Leads** — Upload a provider CSV (source + group). Email and phone are **verified on import**.
 2. **Ads** — Pick a company, organize folders/templates/files, draft SMS/email copy with AI, save templates.
-3. **Reports** — Performance scorecards, best message ranking, Improve (source + timing + copy), Sources, Send timing, Costs & ROI — always filterable per company.
-4. **Campaigns / Autopilot** — Build or spin daily volumes **in IG Lead Suite** with send windows. SMS → Telnyx; email → Smartlead/Instantly. Use Ads templates in the builder.
-5. **Inbox** — Replies land in that entity’s inbox only. Good lead → Email team.
-6. **Users** — Give Ahava staff Ahava-only access, etc.
+3. **Social Media** — Per-entity Meta / TikTok campaign planning + connection setup (live publish later).
+4. **Reports** — Performance scorecards, best message ranking, Improve (source + timing + copy), Sources, Send timing, Social, Costs & ROI — always filterable per company.
+5. **Campaigns / Autopilot** — Build or spin daily volumes **in IG Lead Suite** with send windows. SMS → Telnyx; email → Smartlead/Instantly. Use Ads templates in the builder.
+6. **Inbox** — Replies land in that entity’s inbox only. Good lead → Email team.
+7. **Users** — Give Ahava staff Ahava-only access, etc.
 
 ### Telnyx / Smartlead
 
@@ -156,7 +176,8 @@ Provider CSVs → Shared lead pool (Neon) → auto-verify email/phone
      ┌──────────┬──────────┬──────────┬──────────┬──────────┐
   Abstract    Ahava    Take More   Venture     TYH
   campaigns  campaigns  campaigns  campaigns campaigns
+  + social   + social   + social   + social  + social
   (isolated — never mixed; ACL per user)
      ↓          ↓          ↓          ↓          ↓
-  Telnyx / Smartlead delivery backends
+  Telnyx / Smartlead (+ Meta/TikTok publish later)
 ```

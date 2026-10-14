@@ -39,6 +39,8 @@ export function statusLabel(status: string): string {
     not_interested: "Not interested",
     opt_out: "Opt out",
     not_started: "Not started",
+    not_connected: "Not connected",
+    needs_setup: "Needs setup",
   };
   if (special[status]) return special[status];
   return status

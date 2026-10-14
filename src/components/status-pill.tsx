@@ -35,6 +35,11 @@ const toneMap: Record<string, string> = {
   scale_up: "bg-emerald-100 text-emerald-900 border-emerald-200",
   hold: "bg-slate-100 text-slate-700 border-slate-200",
   cut: "bg-rose-100 text-rose-950 border-rose-200",
+  active: "bg-emerald-100 text-emerald-900 border-emerald-200",
+  archived: "bg-slate-100 text-slate-700 border-slate-200",
+  connected: "bg-emerald-100 text-emerald-900 border-emerald-200",
+  not_connected: "bg-slate-100 text-slate-700 border-slate-200",
+  needs_setup: "bg-amber-100 text-amber-950 border-amber-200",
 };
 
 export function StatusPill({

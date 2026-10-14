@@ -80,6 +80,12 @@ export function scopePlatformData(
   const adAssets = (data.adAssets || []).filter(
     (a) => !a.brandId || brandSet.has(a.brandId),
   );
+  const socialCampaigns = (data.socialCampaigns || []).filter((c) =>
+    brandSet.has(c.entityId),
+  );
+  const socialConnections = (data.socialConnections || []).filter((c) =>
+    brandSet.has(c.entityId),
+  );
   const rotation = {
     ...data.rotation,
     entityOrder: data.rotation.entityOrder.filter((id) => brandSet.has(id)),
@@ -98,6 +104,8 @@ export function scopePlatformData(
     messageTemplates,
     adFolders,
     adAssets,
+    socialCampaigns,
+    socialConnections,
     rotation,
     currentUser: session,
   };

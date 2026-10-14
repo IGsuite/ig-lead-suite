@@ -31,8 +31,10 @@ model Entity {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  campaigns Campaign[]
-  replies   Reply[]
+  campaigns        Campaign[]
+  replies          Reply[]
+  socialCampaigns  SocialCampaign[]
+  socialConnections SocialConnection[]
 }
 
 model Lead {
@@ -249,6 +251,64 @@ model CostEntry {
   @@index([brandId])
   @@index([category])
   @@index([incurredAt])
+}
+
+/// Per-entity Meta / TikTok ad campaign (planning + metrics placeholders)
+model SocialCampaign {
+  id                  String    @id
+  entityId            String
+  /// meta | tiktok
+  platform            String
+  name                String
+  /// draft | active | paused | archived
+  status              String    @default("draft")
+  objective           String    @default("")
+  budgetCents         Int?
+  dailyBudgetCents    Int?
+  targetingNotes      String?
+  primaryText         String?
+  cta                 String?
+  landingUrl          String?
+  notes               String?
+  /// Optional link to Ads library asset / template
+  creativeAssetId     String?
+  creativeTemplateId  String?
+  scheduleStart       DateTime?
+  scheduleEnd         DateTime?
+  impressions         Int       @default(0)
+  clicks              Int       @default(0)
+  leads               Int       @default(0)
+  spendCents          Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  entity Entity @relation(fields: [entityId], references: [id])
+
+  @@index([entityId])
+  @@index([platform])
+  @@index([status])
+}
+
+/// Per-entity platform connection (mock/local until real OAuth)
+model SocialConnection {
+  id               String   @id
+  entityId         String
+  /// meta | tiktok
+  platform         String
+  /// not_connected | connected | needs_setup
+  status           String   @default("not_connected")
+  adAccountId      String?
+  pixelOrEventsId  String?
+  accessTokenNote  String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  entity Entity @relation(fields: [entityId], references: [id])
+
+  @@unique([entityId, platform])
+  @@index([entityId])
+  @@index([platform])
 }
 
 /// Singleton row (id = "default") for rotation + autopilot config
