@@ -98,10 +98,15 @@ Open [http://127.0.0.1:43123](http://127.0.0.1:43123).
 
 Open **Creatives** in the sidebar (`/creatives`):
 
-1. **Draft with AI** — channel, entity context, brief / offer / tone / CTA → generates 2–3 SMS or email variations.
-2. **Use in form** or **Save as template**, then pick the template from the campaign builder.
-3. Compliance-minded prompts (no guaranteed funding; SMS samples include STOP).
-4. Image-heavy email design stays in **Smartlead** for now — this library is copy, not a Canva clone.
+1. **Creative assistant** (top panel) — pick a mode chip:
+   - **Create new** — brief / offer / tone / CTA → 2–3 variations.
+   - **Improve existing** — dropdown of saved creatives → AI rewrite (or use **Improve with AI** on a library card).
+   - **Suggest from winners** — remixes top-performing campaign messages + recent templates for that entity/channel.
+   - **Quick tips** — short SMS/email coaching for the selected entity.
+2. After a draft: **Shorter** / **Stronger CTA** / **Softer / compliance-safe** / **More variants** iterates from the selected option.
+3. **Use in form** or **Save as template**, then pick the template from the campaign builder.
+4. Compliance-minded prompts (no guaranteed funding; SMS samples include STOP). Works in **demo mode** without an AI key.
+5. Image-heavy email design stays in **Smartlead** for now — this library is copy, not a Canva clone.
 
 AI keys (any one):
 

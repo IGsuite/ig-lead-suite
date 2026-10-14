@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Lightbulb, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/state-panels";
@@ -28,11 +28,52 @@ const emptyForm = {
   brandId: "shared",
 };
 
+type AssistMode = "create" | "improve" | "winners" | "tips";
+type IterateAction =
+  | "shorter"
+  | "stronger_cta"
+  | "softer"
+  | "more_variants";
+
 type AiDraft = {
   name: string;
   subject?: string;
   body: string;
 };
+
+const ASSIST_OPTIONS: Array<{
+  id: AssistMode;
+  label: string;
+  blurb: string;
+}> = [
+  {
+    id: "create",
+    label: "Create new",
+    blurb: "Brief → compliance-minded variations, remixed from your library.",
+  },
+  {
+    id: "improve",
+    label: "Improve existing",
+    blurb: "Pick a saved creative; AI rewrites for clarity and CTA.",
+  },
+  {
+    id: "winners",
+    label: "Suggest from winners",
+    blurb: "New angles inspired by top-performing campaign messages.",
+  },
+  {
+    id: "tips",
+    label: "Quick tips",
+    blurb: "Short coaching on SMS/email best practices for this entity.",
+  },
+];
+
+const ITERATE_OPTIONS: Array<{ id: IterateAction; label: string }> = [
+  { id: "shorter", label: "Shorter" },
+  { id: "stronger_cta", label: "Stronger CTA" },
+  { id: "softer", label: "Softer / compliance-safe" },
+  { id: "more_variants", label: "More variants" },
+];
 
 export default function CreativesPage() {
   const { data, loading, error, refresh } = usePlatform();
@@ -45,16 +86,20 @@ export default function CreativesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const [assistMode, setAssistMode] = useState<AssistMode>("create");
   const [aiChannel, setAiChannel] = useState<CampaignChannel>("sms");
   const [aiBrandId, setAiBrandId] = useState("shared");
   const [aiBrief, setAiBrief] = useState("");
   const [aiOffer, setAiOffer] = useState("");
   const [aiTone, setAiTone] = useState("professional and clear");
   const [aiCta, setAiCta] = useState("");
+  const [improveTemplateId, setImproveTemplateId] = useState<string>("");
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiMode, setAiMode] = useState<"live" | "demo" | null>(null);
   const [aiNotice, setAiNotice] = useState<string | null>(null);
+  const [aiContextNote, setAiContextNote] = useState<string | null>(null);
   const [aiVariations, setAiVariations] = useState<AiDraft[]>([]);
+  const [aiTips, setAiTips] = useState<string[]>([]);
   const [selectedVariation, setSelectedVariation] = useState(0);
 
   useEffect(() => {
@@ -80,6 +125,29 @@ export default function CreativesPage() {
       return true;
     });
   }, [data, channelFilter, entityFilter]);
+
+  const improveCandidates = useMemo(() => {
+    const list = data?.messageTemplates || [];
+    return list
+      .filter((t) => {
+        if (t.channel !== aiChannel) return false;
+        if (aiBrandId === "shared") return t.brandId === null;
+        return t.brandId === aiBrandId || t.brandId === null;
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      );
+  }, [data, aiChannel, aiBrandId]);
+
+  useEffect(() => {
+    if (
+      improveTemplateId &&
+      !improveCandidates.some((t) => t.id === improveTemplateId)
+    ) {
+      setImproveTemplateId("");
+    }
+  }, [improveCandidates, improveTemplateId]);
 
   function startEdit(tpl: MessageTemplate) {
     setEditingId(tpl.id);
@@ -111,6 +179,16 @@ export default function CreativesPage() {
     toast.message("Draft loaded into the template form — edit and save");
   }
 
+  function loadTemplateIntoImprove(tpl: MessageTemplate) {
+    setAssistMode("improve");
+    setAiChannel(tpl.channel);
+    setAiBrandId(tpl.brandId || "shared");
+    setImproveTemplateId(tpl.id);
+    setAiBrief(`Improve ${tpl.name}: tighter hook and clearer CTA`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    toast.message("Loaded into Improve existing — adjust notes and generate");
+  }
+
   async function saveDraftAsTemplate(draft: AiDraft, channel: CampaignChannel) {
     setSaving(true);
     try {
@@ -136,14 +214,26 @@ export default function CreativesPage() {
     }
   }
 
-  async function onGenerate() {
-    if (!aiBrief.trim()) {
+  async function runGenerate(opts?: {
+    iterate?: IterateAction;
+    baseDraft?: AiDraft;
+  }) {
+    const iterating = Boolean(opts?.iterate && opts.baseDraft);
+    if (assistMode === "improve" && !iterating && !improveTemplateId) {
+      toast.error("Pick a template to improve");
+      return;
+    }
+    if (assistMode === "create" && !iterating && !aiBrief.trim()) {
       toast.error("Add a short brief first");
       return;
     }
+
     setAiGenerating(true);
-    setAiVariations([]);
-    setSelectedVariation(0);
+    if (!iterating) {
+      setAiVariations([]);
+      setAiTips([]);
+      setSelectedVariation(0);
+    }
     try {
       const res = await fetch("/api/creatives/generate", {
         method: "POST",
@@ -156,6 +246,13 @@ export default function CreativesPage() {
           tone: aiTone || undefined,
           cta: aiCta || undefined,
           count: 3,
+          assistMode,
+          iterate: opts?.iterate,
+          baseDraft: opts?.baseDraft,
+          templateId:
+            !iterating && assistMode === "improve"
+              ? improveTemplateId
+              : undefined,
         }),
       });
       const json = (await res.json()) as {
@@ -163,15 +260,37 @@ export default function CreativesPage() {
         mode?: "live" | "demo";
         notice?: string;
         variations?: AiDraft[];
+        tips?: string[];
+        context?: { libraryCount?: number; winnerCount?: number };
       };
       if (!res.ok) throw new Error(json.error || "Generate failed");
       setAiMode(json.mode || "demo");
       setAiNotice(json.notice || null);
-      setAiVariations(json.variations || []);
-      if (json.mode === "demo") {
-        toast.message(json.notice || "Demo drafts ready");
+      const lib = json.context?.libraryCount ?? 0;
+      const win = json.context?.winnerCount ?? 0;
+      setAiContextNote(
+        lib || win
+          ? `Using ${lib} recent template${lib === 1 ? "" : "s"}${win ? ` · ${win} winner signal${win === 1 ? "" : "s"}` : ""} for this entity/channel`
+          : null,
+      );
+
+      if (assistMode === "tips" && !iterating) {
+        setAiTips(json.tips || []);
+        setAiVariations([]);
+        toast.success(
+          json.mode === "demo" ? "Demo tips ready" : "Coaching tips ready",
+        );
       } else {
-        toast.success("AI drafts ready — pick one");
+        setAiVariations(json.variations || []);
+        setAiTips([]);
+        setSelectedVariation(0);
+        if (json.mode === "demo") {
+          toast.message(json.notice || "Demo drafts ready");
+        } else {
+          toast.success(
+            iterating ? "Updated draft ready" : "AI drafts ready — pick one",
+          );
+        }
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Generate failed");
@@ -221,6 +340,7 @@ export default function CreativesPage() {
       if (!res.ok) throw new Error(json.error || "Could not delete");
       toast.success("Template deleted");
       if (editingId === id) resetForm();
+      if (improveTemplateId === id) setImproveTemplateId("");
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delete failed");
@@ -234,12 +354,34 @@ export default function CreativesPage() {
     return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
 
   const activeDraft = aiVariations[selectedVariation];
+  const assistMeta = ASSIST_OPTIONS.find((o) => o.id === assistMode)!;
+  const primaryDisabled =
+    aiGenerating ||
+    (assistMode === "create" && !aiBrief.trim()) ||
+    (assistMode === "improve" && !improveTemplateId);
+
+  const primaryLabel =
+    assistMode === "tips"
+      ? aiGenerating
+        ? "Loading tips…"
+        : "Get quick tips"
+      : assistMode === "improve"
+        ? aiGenerating
+          ? "Improving…"
+          : "Improve template"
+        : assistMode === "winners"
+          ? aiGenerating
+            ? "Suggesting…"
+            : "Suggest from winners"
+          : aiGenerating
+            ? "Generating…"
+            : "Generate 3 variations";
 
   return (
     <div>
       <PageHeader
         title="Creatives"
-        description="Ads development desk: draft SMS and email copy with AI, save templates, then pull them into campaigns. Image-heavy email layouts still live in Smartlead."
+        description="Ads development desk: draft SMS and email copy with an AI coach, iterate faster, save templates, then pull them into campaigns. Image-heavy email layouts still live in Smartlead."
       />
 
       <section className="mb-6 space-y-4 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise">
@@ -247,11 +389,12 @@ export default function CreativesPage() {
           <div>
             <h2 className="flex items-center gap-2 font-[family-name:var(--font-display)] text-xl">
               <Sparkles className="size-5 text-[color:var(--ink-soft)]" />
-              Draft with AI
+              Creative assistant
             </h2>
             <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
-              Brief the offer, tone, and CTA. We generate 2–3 compliance-minded
-              variations (no guaranteed funding promises; SMS includes STOP).
+              Create, improve, or remix what has worked — then iterate (shorter,
+              stronger CTA, softer). Financial-services safe prompting; SMS
+              samples keep STOP.
             </p>
           </div>
           {aiMode ? (
@@ -260,6 +403,27 @@ export default function CreativesPage() {
             </span>
           ) : null}
         </div>
+
+        <div className="flex flex-wrap gap-2">
+          {ASSIST_OPTIONS.map((opt) => (
+            <Button
+              key={opt.id}
+              type="button"
+              size="sm"
+              variant={assistMode === opt.id ? "default" : "outline"}
+              onClick={() => {
+                setAssistMode(opt.id);
+                setAiVariations([]);
+                setAiTips([]);
+                setAiNotice(null);
+                setSelectedVariation(0);
+              }}
+            >
+              {opt.label}
+            </Button>
+          ))}
+        </div>
+        <p className="text-sm text-[color:var(--ink-muted)]">{assistMeta.blurb}</p>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
@@ -270,6 +434,8 @@ export default function CreativesPage() {
                 if (!value) return;
                 setAiChannel(value as CampaignChannel);
                 setAiVariations([]);
+                setAiTips([]);
+                setImproveTemplateId("");
               }}
             >
               <SelectTrigger>
@@ -286,7 +452,10 @@ export default function CreativesPage() {
             <Select
               value={aiBrandId}
               onValueChange={(value) => {
-                if (value) setAiBrandId(value);
+                if (value) {
+                  setAiBrandId(value);
+                  setImproveTemplateId("");
+                }
               }}
             >
               <SelectTrigger>
@@ -302,58 +471,130 @@ export default function CreativesPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label>Tone</Label>
-            <Input
-              value={aiTone}
-              onChange={(e) => setAiTone(e.target.value)}
-              placeholder="professional and clear"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>CTA</Label>
-            <Input
-              value={aiCta}
-              onChange={(e) => setAiCta(e.target.value)}
-              placeholder={
-                aiChannel === "sms" ? "Reply YES for options" : "Reply to compare options"
-              }
-            />
-          </div>
+          {assistMode !== "tips" ? (
+            <>
+              <div className="space-y-2">
+                <Label>Tone</Label>
+                <Input
+                  value={aiTone}
+                  onChange={(e) => setAiTone(e.target.value)}
+                  placeholder="professional and clear"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>CTA</Label>
+                <Input
+                  value={aiCta}
+                  onChange={(e) => setAiCta(e.target.value)}
+                  placeholder={
+                    aiChannel === "sms"
+                      ? "Reply YES for options"
+                      : "Reply to compare options"
+                  }
+                />
+              </div>
+            </>
+          ) : null}
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        {assistMode === "improve" ? (
           <div className="space-y-2">
-            <Label>Offer / angle</Label>
-            <Input
-              value={aiOffer}
-              onChange={(e) => setAiOffer(e.target.value)}
-              placeholder="MCA / working capital for qualified SMBs"
-            />
+            <Label>Template to improve</Label>
+            <Select
+              value={improveTemplateId || undefined}
+              onValueChange={(value) => {
+                if (value) setImproveTemplateId(value);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Choose a saved creative…" />
+              </SelectTrigger>
+              <SelectContent>
+                {improveCandidates.length === 0 ? (
+                  <SelectItem value="__none" disabled>
+                    No templates for this channel/entity
+                  </SelectItem>
+                ) : (
+                  improveCandidates.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                      {t.brandId ? "" : " (shared)"}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
           </div>
-          <div className="space-y-2 sm:col-span-1">
-            <Label>Brief</Label>
-            <Textarea
-              value={aiBrief}
-              onChange={(e) => setAiBrief(e.target.value)}
-              className="min-h-20"
-              placeholder="Week-12 LeadForge list, morning send, soft ask to reply if interested in capital options…"
-            />
+        ) : null}
+
+        {assistMode !== "tips" ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Offer / angle</Label>
+              <Input
+                value={aiOffer}
+                onChange={(e) => setAiOffer(e.target.value)}
+                placeholder="MCA / working capital for qualified SMBs"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>
+                {assistMode === "improve"
+                  ? "Improvement notes"
+                  : assistMode === "winners"
+                    ? "Brief (optional)"
+                    : "Brief"}
+              </Label>
+              <Textarea
+                value={aiBrief}
+                onChange={(e) => setAiBrief(e.target.value)}
+                className="min-h-20"
+                placeholder={
+                  assistMode === "improve"
+                    ? "Make CTA clearer, keep soft compliance tone…"
+                    : assistMode === "winners"
+                      ? "Optional: morning send, soft ask, similar to last week’s winner…"
+                      : "Week-12 LeadForge list, morning send, soft ask to reply if interested in capital options…"
+                }
+              />
+            </div>
           </div>
-        </div>
+        ) : null}
 
         <Button
           type="button"
-          disabled={aiGenerating || !aiBrief.trim()}
-          onClick={() => void onGenerate()}
+          disabled={primaryDisabled}
+          onClick={() => void runGenerate()}
         >
-          {aiGenerating ? "Generating…" : "Generate 3 variations"}
+          {primaryLabel}
         </Button>
 
         {aiNotice ? (
           <p className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2 text-sm text-[color:var(--ink-soft)]">
             {aiNotice}
           </p>
+        ) : null}
+        {aiContextNote ? (
+          <p className="text-xs text-[color:var(--ink-muted)]">{aiContextNote}</p>
+        ) : null}
+
+        {aiTips.length > 0 ? (
+          <div className="space-y-3 border-t border-[color:var(--ink-border)] pt-4">
+            <h3 className="flex items-center gap-2 text-sm font-medium">
+              <Lightbulb className="size-4 text-[color:var(--ink-soft)]" />
+              Coaching tips
+            </h3>
+            <ul className="space-y-2">
+              {aiTips.map((tip, idx) => (
+                <li
+                  key={`${idx}-${tip.slice(0, 24)}`}
+                  className="rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--canvas)]/40 px-3 py-2 text-sm text-[color:var(--ink-soft)]"
+                >
+                  {tip}
+                </li>
+              ))}
+            </ul>
+          </div>
         ) : null}
 
         {aiVariations.length > 0 ? (
@@ -401,6 +642,30 @@ export default function CreativesPage() {
                   >
                     Save as template
                   </Button>
+                </div>
+                <div className="mt-4 border-t border-[color:var(--ink-border)] pt-3">
+                  <p className="mb-2 text-xs text-[color:var(--ink-muted)]">
+                    Iterate on this draft
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {ITERATE_OPTIONS.map((opt) => (
+                      <Button
+                        key={opt.id}
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={aiGenerating}
+                        onClick={() =>
+                          void runGenerate({
+                            iterate: opt.id,
+                            baseDraft: activeDraft,
+                          })
+                        }
+                      >
+                        {opt.label}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
               </article>
             ) : null}
@@ -553,7 +818,7 @@ export default function CreativesPage() {
       {templates.length === 0 ? (
         <EmptyPanel
           title="No creatives yet"
-          description="Draft with AI above, or write a template manually — then use it from the campaign builder."
+          description="Use the Creative assistant above, or write a template manually — then use it from the campaign builder."
         />
       ) : (
         <div className="grid gap-3 animate-rise-delay-1">
@@ -580,6 +845,14 @@ export default function CreativesPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => loadTemplateIntoImprove(tpl)}
+                    >
+                      Improve with AI
+                    </Button>
                     <Button
                       type="button"
                       variant="outline"
