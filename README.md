@@ -26,6 +26,10 @@ SignalDesk is where you upload leads and run campaigns. **Telnyx sends the texts
 
 Without `DATABASE_URL`, the app uses a local JSON store under `.data/` so you can still demo the UI.
 
+## Go live
+
+See **[SETUP.md](SETUP.md)** and the in-app **Go live** page (`/setup`) for today’s checklist: Telnyx, Instantly/Smartlead, public webhooks.
+
 ## Connect Neon
 
 1. Create a project at [console.neon.tech](https://console.neon.tech).

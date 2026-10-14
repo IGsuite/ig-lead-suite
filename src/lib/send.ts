@@ -85,6 +85,9 @@ export async function deliverCampaignBatch(input: {
         subject: copy.subject || "Hello",
         body: copy.body,
         fromName: input.brand.shortName,
+        firstName: lead.firstName,
+        lastName: lead.lastName,
+        brandId: input.brand.id,
       });
       if (result.mode === "live") sawLive = true;
       else sawMock = true;

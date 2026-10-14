@@ -7,6 +7,7 @@ import {
   FerrisWheel,
   Inbox,
   LayoutDashboard,
+  ListChecks,
   Megaphone,
   Settings,
   ShieldOff,
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/setup", label: "Go live", icon: ListChecks },
   { href: "/leads", label: "Shared leads", icon: Users },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
