@@ -15,30 +15,27 @@ const providers = [
     key: "neon",
   },
   {
-    name: "Amazon SES",
-    role: "Email sending per entity subdomain",
-    key: "ses",
+    name: "Telnyx",
+    role: "SMS delivery backend — numbers + 10DLC per entity",
+    key: "telnyx",
   },
   {
-    name: "Twilio",
-    role: "SMS + 10DLC campaigns and numbers per entity",
-    key: "twilio",
+    name: "Instantly / Smartlead",
+    role: "Cold email (warmup + inbox) — better than SES/SendGrid for cold leads",
+    key: "cold_email",
   },
   {
     name: "n8n / website APIs",
     role: "Interested reply → that entity’s CRM or site API",
     key: "n8n",
   },
-  {
-    name: "Metabase",
-    role: "Reporting across pool, entities, and providers",
-    key: "metabase",
-  },
 ];
 
 export default function SettingsPage() {
   const { data, loading, error, refresh } = usePlatform();
   const [storageMode, setStorageMode] = useState<"neon" | "local">("local");
+  const [telnyxMode, setTelnyxMode] = useState<"live" | "mock">("mock");
+  const [emailMode, setEmailMode] = useState<string>("mock");
 
   useEffect(() => {
     void fetch("/api/platform")
@@ -46,6 +43,18 @@ export default function SettingsPage() {
       .then((json: { storageMode?: "neon" | "local" }) => {
         if (json.storageMode) setStorageMode(json.storageMode);
       })
+      .catch(() => undefined);
+    void fetch("/api/providers/status")
+      .then((r) => r.json())
+      .then(
+        (json: {
+          telnyx?: "live" | "mock";
+          email?: string;
+        }) => {
+          if (json.telnyx) setTelnyxMode(json.telnyx);
+          if (json.email) setEmailMode(json.email);
+        },
+      )
       .catch(() => undefined);
   }, [data]);
 
@@ -72,7 +81,7 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="Settings & providers"
-        description="One main backend on Neon Postgres. Five entity portals. Domains are set from your live sites — wire SES / Twilio / n8n next."
+        description="SignalDesk runs campaigns. Telnyx sends SMS. Instantly/Smartlead send cold email. CRM gets interested replies via n8n — brands stay separate."
       />
 
       <section className="mb-6 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise">
@@ -155,9 +164,15 @@ export default function SettingsPage() {
                 ? storageMode === "neon"
                   ? "verified"
                   : "partial"
-                : provider.key === "metabase"
-                  ? "setup"
-                  : "partial";
+                : provider.key === "telnyx"
+                  ? telnyxMode === "live"
+                    ? "verified"
+                    : "partial"
+                  : provider.key === "cold_email"
+                    ? emailMode === "mock"
+                      ? "setup"
+                      : "verified"
+                    : "partial";
             return (
               <div
                 key={provider.name}
@@ -167,6 +182,11 @@ export default function SettingsPage() {
                   <div className="font-medium">{provider.name}</div>
                   <p className="text-sm text-[color:var(--ink-muted)]">
                     {provider.role}
+                    {provider.key === "telnyx"
+                      ? ` · currently ${telnyxMode}`
+                      : provider.key === "cold_email"
+                        ? ` · currently ${emailMode}`
+                        : ""}
                   </p>
                 </div>
                 <StatusPill status={status} />
@@ -174,6 +194,11 @@ export default function SettingsPage() {
             );
           })}
         </div>
+        <p className="mt-4 text-xs text-[color:var(--ink-muted)]">
+          Set <code>TELNYX_API_KEY</code> + <code>TELNYX_FROM_NUMBER</code> in{" "}
+          <code>.env</code> (or Cloud Agent Secrets) to go live on SMS. Cold email:
+          Instantly or Smartlead — not Amazon SES / SendGrid for cold lead blasts.
+        </p>
       </section>
 
       <section className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise-delay-2">

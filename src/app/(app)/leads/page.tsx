@@ -365,7 +365,7 @@ export default function LeadsPage() {
       <p className="mb-4 text-sm text-[color:var(--ink-muted)]">
         Showing {compactNumber(filtered.length)} of{" "}
         {compactNumber(data.leads.length)} leads · local format checks now;
-        NeverBounce / Twilio Lookup can plug in later.
+        NeverBounce / Telnyx number lookup can plug in later.
       </p>
 
       {data.uploads.length ? (

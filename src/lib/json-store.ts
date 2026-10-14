@@ -20,6 +20,7 @@ import type {
   RotationConfig,
   UploadBatch,
 } from "@/lib/types";
+import { deliverCampaignBatch } from "@/lib/send";
 import { applyVerification } from "@/lib/verify";
 
 const DATA_DIR = path.join(process.cwd(), ".data");
@@ -243,6 +244,11 @@ export async function launchCampaign(id: string): Promise<Campaign | null> {
     .sort((a, b) => a.offeredEntityIds.length - b.offeredEntityIds.length);
 
   const toSend = eligible.slice(0, campaign.volume);
+  const brand = data.brands.find((b) => b.id === campaign.brandId);
+  if (brand && toSend.length) {
+    await deliverCampaignBatch({ campaign, brand, leads: toSend });
+  }
+
   for (const lead of toSend) {
     if (!lead.offeredEntityIds.includes(campaign.brandId)) {
       lead.offeredEntityIds.push(campaign.brandId);
@@ -417,6 +423,14 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
         })
         .sort((a, b) => a.offeredEntityIds.length - b.offeredEntityIds.length)
         .slice(0, leg.volume);
+
+      if (eligible.length) {
+        await deliverCampaignBatch({
+          campaign,
+          brand,
+          leads: eligible,
+        });
+      }
 
       for (const lead of eligible) {
         if (!lead.offeredEntityIds.includes(entityId)) {

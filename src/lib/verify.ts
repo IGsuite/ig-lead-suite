@@ -18,7 +18,7 @@ export type VerifyResult = {
   verifyNotes: string;
 };
 
-/** Built-in verifier. Swap in NeverBounce / Twilio Lookup later via env keys. */
+/** Built-in verifier. Swap in NeverBounce / Telnyx number lookup later via env keys. */
 export function verifyContact(input: {
   email?: string;
   phone?: string;

@@ -47,7 +47,7 @@ function CampaignsInner() {
         body: JSON.stringify({ action: "launch", id }),
       });
       if (!res.ok) throw new Error("Could not launch campaign");
-      toast.success("Campaign launched (entity-scoped mock send)");
+      toast.success("Campaign launched — SMS via Telnyx (live or mock)");
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Launch failed");

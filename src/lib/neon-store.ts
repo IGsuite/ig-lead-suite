@@ -32,6 +32,7 @@ import type {
   RotationConfig,
   UploadBatch,
 } from "@/lib/types";
+import { deliverCampaignBatch } from "@/lib/send";
 import { applyVerification } from "@/lib/verify";
 
 async function ensureSeeded(): Promise<void> {
@@ -504,7 +505,10 @@ export async function launchCampaign(id: string): Promise<Campaign | null> {
   if (!campaignRow) return null;
   const campaign = mapCampaign(campaignRow);
 
-  const leadRows = await prisma.lead.findMany();
+  const [leadRows, brandRow] = await Promise.all([
+    prisma.lead.findMany(),
+    prisma.entity.findUnique({ where: { id: campaign.brandId } }),
+  ]);
   const eligible = leadRows
     .map(mapLead)
     .filter((lead) =>
@@ -518,6 +522,14 @@ export async function launchCampaign(id: string): Promise<Campaign | null> {
     )
     .sort((a, b) => a.offeredEntityIds.length - b.offeredEntityIds.length)
     .slice(0, campaign.volume);
+
+  if (brandRow && eligible.length) {
+    await deliverCampaignBatch({
+      campaign,
+      brand: mapEntity(brandRow),
+      leads: eligible,
+    });
+  }
 
   await prisma.$transaction(async (tx) => {
     for (const lead of eligible) {
@@ -732,6 +744,31 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
         })
         .sort((a, b) => a.offeredEntityIds.length - b.offeredEntityIds.length)
         .slice(0, leg.volume);
+
+      const campaign: Campaign = {
+        id: campaignId,
+        brandId: entityId,
+        name: `Autopilot · ${brand.shortName} · ${leg.channel.toUpperCase()} · ${day}`,
+        channel: leg.channel,
+        subject: leg.subject,
+        message: leg.message,
+        sourceFilter: "all",
+        groupFilter: "all",
+        preferUnoffered: true,
+        preferVerified: true,
+        volume: leg.volume,
+        throttlePerHour: Math.max(60, Math.round(leg.volume / 12)),
+        status: "draft",
+        sentCount: 0,
+        replyCount: 0,
+        optOutCount: 0,
+        bounceCount: 0,
+        createdAt: new Date().toISOString(),
+      };
+
+      if (eligible.length) {
+        await deliverCampaignBatch({ campaign, brand, leads: eligible });
+      }
 
       await prisma.$transaction(async (tx) => {
         for (const lead of eligible) {

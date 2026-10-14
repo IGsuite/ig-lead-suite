@@ -17,10 +17,12 @@ One backend for multi-entity outbound: a **shared lead pool** feeding separate c
 | Piece | Role |
 |---|---|
 | **Neon** | Postgres — shared lead pool + entity data |
-| **Next.js** | SignalDesk ops UI + API |
-| **Amazon SES** | Email (next) |
-| **Twilio** | SMS / 10DLC (next) |
-| **n8n** | CRM / website sync (next) |
+| **Next.js** | SignalDesk ops UI — upload, campaigns, Autopilot, reports |
+| **Telnyx** | SMS delivery backend (numbers + 10DLC per entity) |
+| **Instantly / Smartlead** | Cold email delivery (warmup + inbox placement) |
+| **n8n** | Interested reply → that entity’s CRM / website API |
+
+SignalDesk is where you upload leads and run campaigns. **Telnyx sends the texts.** Your CRM gets replies/interested leads via n8n — it is not the blast engine.
 
 Without `DATABASE_URL`, the app uses a local JSON store under `.data/` so you can still demo the UI.
 
@@ -61,8 +63,22 @@ Sample CSV: [`public/sample-leads.csv`](public/sample-leads.csv).
 
 1. **Shared leads** — Upload a provider CSV (source + group). Email and phone are **verified on import**.
 2. **Reports** — Choose an entity (or shared pool) to see which sources win for that business.
-3. **Campaigns** — Pick one entity portal. That portal’s campaigns only — Ahava never sends as Abstract.
-4. **Autopilot** — Ferris-wheel rotation: set daily email + SMS volume per entity (default 20k each). Run a daily pass so each portal gets fresh verified leads from the shared pool.
+3. **Campaigns / Autopilot** — Build or spin daily volumes in SignalDesk. SMS goes out through **Telnyx**; cold email through Instantly/Smartlead once keyed.
+4. **CRM** — n8n pushes interested replies into each entity’s CRM/site. Campaigns themselves stay in SignalDesk so brands never mix.
+
+### Telnyx
+
+```bash
+# .env
+TELNYX_API_KEY=KEY...
+TELNYX_FROM_NUMBER=+1...
+```
+
+Without a key, SMS runs in **mock** mode (safe for demos).
+
+### Cold email (not SES / SendGrid)
+
+Amazon SES and SendGrid are built for transactional / opted-in marketing. For **cold lead outreach**, use **Instantly** or **Smartlead** (warmup, rotation, better inbox placement). SES is fine later for transactional mail from your sites — not as the cold engine.
 
 ## Architecture
 
