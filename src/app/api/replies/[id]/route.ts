@@ -8,7 +8,7 @@ export async function PATCH(
 ) {
   const { id } = await context.params;
   const patch = (await request.json()) as Partial<
-    Pick<Reply, "read" | "crmSynced" | "sentiment">
+    Pick<Reply, "read" | "crmSynced" | "sentiment" | "manualForwarded">
   >;
   const reply = await markReply(id, patch);
   if (!reply) {

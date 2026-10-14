@@ -22,7 +22,7 @@ const nav = [
   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
   { href: "/autopilot", label: "Autopilot", icon: FerrisWheel },
   { href: "/brands", label: "Entities", icon: Building2 },
-  { href: "/inbox", label: "Reply inbox", icon: Inbox },
+  { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/opt-outs", label: "Opt-outs", icon: ShieldOff },
   { href: "/settings", label: "Settings", icon: Settings },
 ];

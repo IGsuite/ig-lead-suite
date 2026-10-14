@@ -125,6 +125,8 @@ export interface Reply {
   from: string;
   body: string;
   sentiment: ReplySentiment;
+  /** Manual “good lead — emailed/forwarded to team” until CRM API is live. */
+  manualForwarded: boolean;
   crmSynced: boolean;
   createdAt: string;
   read: boolean;

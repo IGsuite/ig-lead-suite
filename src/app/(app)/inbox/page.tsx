@@ -1,19 +1,60 @@
 "use client";
 
+import Link from "next/link";
+import { Suspense, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/state-panels";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { usePlatform } from "@/hooks/use-platform";
 import { relativeDay } from "@/lib/client-format";
+import type { ReplySentiment } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
-export default function InboxPage() {
+function InboxInner() {
   const { data, loading, error, refresh } = usePlatform();
+  const searchParams = useSearchParams();
+  const [entityId, setEntityId] = useState(
+    searchParams.get("entity") || searchParams.get("brandId") || "abstract",
+  );
+  const [channelFilter, setChannelFilter] = useState<"all" | "sms" | "email">(
+    "all",
+  );
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "unread" | "interested" | "forwarded"
+  >("all");
+
+  const replies = useMemo(() => {
+    if (!data) return [];
+    return data.replies.filter((reply) => {
+      if (reply.brandId !== entityId) return false;
+      if (channelFilter !== "all" && reply.channel !== channelFilter)
+        return false;
+      if (statusFilter === "unread" && reply.read) return false;
+      if (statusFilter === "interested" && reply.sentiment !== "interested")
+        return false;
+      if (statusFilter === "forwarded" && !reply.manualForwarded) return false;
+      return true;
+    });
+  }, [data, entityId, channelFilter, statusFilter]);
 
   async function patch(
     id: string,
-    body: { read?: boolean; crmSynced?: boolean },
+    body: {
+      read?: boolean;
+      crmSynced?: boolean;
+      sentiment?: ReplySentiment;
+      manualForwarded?: boolean;
+    },
   ) {
     try {
       const res = await fetch(`/api/replies/${id}`, {
@@ -23,84 +64,294 @@ export default function InboxPage() {
       });
       if (!res.ok) throw new Error("Update failed");
       await refresh();
-      if (body.crmSynced) toast.success("Marked synced to CRM (mock n8n)");
+      if (body.manualForwarded) toast.success("Marked as manually forwarded");
+      else if (body.sentiment === "interested")
+        toast.success("Marked interested — ready to forward");
+      else if (body.crmSynced)
+        toast.success("Queued for CRM (manual flag — API later)");
+      else if (body.read) toast.success("Marked read");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Update failed");
     }
   }
 
-  if (loading) return <LoadingPanel />;
+  function forwardMailto(replyId: string) {
+    if (!data) return;
+    const reply = data.replies.find((r) => r.id === replyId);
+    const brand = data.brands.find((b) => b.id === entityId);
+    const lead = reply ? data.leads.find((l) => l.id === reply.leadId) : null;
+    const campaign = reply
+      ? data.campaigns.find((c) => c.id === reply.campaignId)
+      : null;
+    if (!reply || !brand) return;
+
+    const subject = encodeURIComponent(
+      `[${brand.shortName}] Good lead — ${lead?.firstName || reply.from}`,
+    );
+    const body = encodeURIComponent(
+      [
+        `Entity: ${brand.name}`,
+        `Campaign: ${campaign?.name || reply.campaignId}`,
+        `Channel: ${reply.channel.toUpperCase()}`,
+        `From: ${reply.from}`,
+        `Name: ${[lead?.firstName, lead?.lastName].filter(Boolean).join(" ") || "—"}`,
+        `Email: ${lead?.email || "—"}`,
+        `Phone: ${lead?.phone || "—"}`,
+        `Source: ${lead?.source || "—"} / ${lead?.groupName || "—"}`,
+        "",
+        "Reply:",
+        reply.body,
+        "",
+        "— forwarded from SignalDesk (manual triage)",
+      ].join("\n"),
+    );
+    window.open(`mailto:?subject=${subject}&body=${body}`, "_blank");
+    void patch(replyId, {
+      manualForwarded: true,
+      read: true,
+      sentiment: reply.sentiment === "other" ? "interested" : reply.sentiment,
+    });
+  }
+
+  if (loading) return <LoadingPanel label="Loading inbox…" />;
   if (error || !data)
     return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
 
-  const brandName = (id: string) =>
-    data.brands.find((b) => b.id === id)?.shortName || id;
+  const brand = data.brands.find((b) => b.id === entityId);
+  const unread = data.replies.filter(
+    (r) => r.brandId === entityId && !r.read,
+  ).length;
 
   return (
     <div>
       <PageHeader
-        title="Reply inbox"
-        description="Watch replies in real time. Interested replies should create CRM contacts via n8n — mocked here until the connector is wired."
+        title="Entity inbox"
+        description="Replies land here per business — SMS via Telnyx, email via Instantly/Smartlead. Triage manually now; CRM API later. Not a public landing page."
+        actions={
+          <Link
+            href={`/campaigns?brandId=${entityId}`}
+            className={cn(buttonVariants({ variant: "outline" }))}
+          >
+            {brand?.shortName} campaigns
+          </Link>
+        }
       />
 
-      {data.replies.length === 0 ? (
+      <div className="mb-4 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4 text-sm text-[color:var(--ink-soft)] animate-rise">
+        <strong>How replies work:</strong> people text/email back to the number
+        or mailbox that sent them. That inbound message hits this entity’s inbox
+        (not another brand). You review → mark interested →{" "}
+        <em>Email team</em> to forward manually. Later, the same “interested”
+        flag drives n8n → CRM automatically.
+      </div>
+
+      <div className="mb-6 grid gap-3 sm:grid-cols-3 animate-rise">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Entity portal</label>
+          <Select
+            value={entityId}
+            onValueChange={(value) => {
+              if (value) setEntityId(value);
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {data.brands.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Channel</label>
+          <Select
+            value={channelFilter}
+            onValueChange={(value) => {
+              if (value) setChannelFilter(value as typeof channelFilter);
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">SMS + email</SelectItem>
+              <SelectItem value="sms">SMS only</SelectItem>
+              <SelectItem value="email">Email only</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Filter</label>
+          <Select
+            value={statusFilter}
+            onValueChange={(value) => {
+              if (value) setStatusFilter(value as typeof statusFilter);
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All ({unread} unread)</SelectItem>
+              <SelectItem value="unread">Unread</SelectItem>
+              <SelectItem value="interested">Interested</SelectItem>
+              <SelectItem value="forwarded">Manually forwarded</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {replies.length === 0 ? (
         <EmptyPanel
-          title="Inbox is quiet"
-          description="When campaigns send, replies land here for triage."
+          title={`No ${brand?.shortName || "entity"} replies`}
+          description="When someone texts or emails back to this portal’s send identity, it shows up here for manual triage."
         />
       ) : (
-        <div className="space-y-3 animate-rise">
-          {data.replies.map((reply) => (
-            <article
-              key={reply.id}
-              className={`rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4 ${
-                reply.read ? "opacity-80" : "shadow-sm"
-              }`}
-            >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="font-medium">{reply.from}</h2>
-                    <StatusPill status={reply.sentiment} />
-                    {!reply.read ? (
-                      <span className="rounded-md bg-[color:var(--accent-soft)] px-2 py-0.5 text-xs text-[color:var(--ink)]">
-                        Unread
+        <div className="space-y-3 animate-rise-delay-1">
+          {replies.map((reply) => {
+            const lead = data.leads.find((l) => l.id === reply.leadId);
+            const campaign = data.campaigns.find(
+              (c) => c.id === reply.campaignId,
+            );
+            return (
+              <article
+                key={reply.id}
+                className={`rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4 ${
+                  reply.read ? "opacity-85" : "shadow-sm"
+                }`}
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="font-medium">
+                        {[lead?.firstName, lead?.lastName]
+                          .filter(Boolean)
+                          .join(" ") || reply.from}
+                      </h2>
+                      <StatusPill status={reply.sentiment} />
+                      <span className="rounded-md border border-[color:var(--ink-border)] px-2 py-0.5 text-xs uppercase">
+                        {reply.channel}
                       </span>
-                    ) : null}
+                      {!reply.read ? (
+                        <span className="rounded-md bg-[color:var(--accent-soft)] px-2 py-0.5 text-xs">
+                          Unread
+                        </span>
+                      ) : null}
+                      {reply.manualForwarded ? (
+                        <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-xs text-emerald-900">
+                          Forwarded
+                        </span>
+                      ) : null}
+                      {reply.crmSynced ? (
+                        <span className="rounded-md bg-sky-50 px-2 py-0.5 text-xs text-sky-950">
+                          CRM queued
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-xs text-[color:var(--ink-muted)]">
+                      {brand?.shortName} · {reply.from} ·{" "}
+                      {campaign?.name || "Campaign"} ·{" "}
+                      {relativeDay(reply.createdAt)}
+                      {lead
+                        ? ` · ${lead.source} / ${lead.groupName}`
+                        : ""}
+                    </p>
+                    <p className="mt-3 text-sm leading-6 text-[color:var(--ink-soft)]">
+                      {reply.body}
+                    </p>
                   </div>
-                  <p className="mt-1 text-xs text-[color:var(--ink-muted)]">
-                    {brandName(reply.brandId)} · {reply.channel.toUpperCase()} ·{" "}
-                    {relativeDay(reply.createdAt)}
-                    {reply.crmSynced ? " · CRM synced" : ""}
-                  </p>
-                  <p className="mt-3 text-sm leading-6 text-[color:var(--ink-soft)]">
-                    {reply.body}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {!reply.read ? (
+                  <div className="flex flex-wrap gap-2 lg:max-w-xs lg:justify-end">
+                    {reply.sentiment !== "interested" ? (
+                      <Button
+                        size="sm"
+                        onClick={() =>
+                          patch(reply.id, {
+                            sentiment: "interested",
+                            read: true,
+                          })
+                        }
+                      >
+                        Good lead
+                      </Button>
+                    ) : null}
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => patch(reply.id, { read: true })}
+                      onClick={() => forwardMailto(reply.id)}
                     >
-                      Mark read
+                      Email team
                     </Button>
-                  ) : null}
-                  {reply.sentiment === "interested" && !reply.crmSynced ? (
-                    <Button
-                      size="sm"
-                      onClick={() => patch(reply.id, { crmSynced: true, read: true })}
-                    >
-                      Push to CRM
-                    </Button>
-                  ) : null}
+                    {!reply.crmSynced ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          patch(reply.id, {
+                            crmSynced: true,
+                            read: true,
+                            sentiment: "interested",
+                          })
+                        }
+                      >
+                        Queue CRM later
+                      </Button>
+                    ) : null}
+                    {reply.sentiment !== "not_interested" ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          patch(reply.id, {
+                            sentiment: "not_interested",
+                            read: true,
+                          })
+                        }
+                      >
+                        Not interested
+                      </Button>
+                    ) : null}
+                    {reply.sentiment !== "opt_out" ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() =>
+                          patch(reply.id, {
+                            sentiment: "opt_out",
+                            read: true,
+                          })
+                        }
+                      >
+                        Opt out
+                      </Button>
+                    ) : null}
+                    {!reply.read ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => patch(reply.id, { read: true })}
+                      >
+                        Mark read
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       )}
     </div>
+  );
+}
+
+export default function InboxPage() {
+  return (
+    <Suspense fallback={<LoadingPanel label="Loading inbox…" />}>
+      <InboxInner />
+    </Suspense>
   );
 }

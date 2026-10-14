@@ -64,7 +64,20 @@ Sample CSV: [`public/sample-leads.csv`](public/sample-leads.csv).
 1. **Shared leads** — Upload a provider CSV (source + group). Email and phone are **verified on import**.
 2. **Reports** — Choose an entity (or shared pool) to see which sources win for that business.
 3. **Campaigns / Autopilot** — Build or spin daily volumes in SignalDesk. SMS goes out through **Telnyx**; cold email through Instantly/Smartlead once keyed.
-4. **CRM** — n8n pushes interested replies into each entity’s CRM/site. Campaigns themselves stay in SignalDesk so brands never mix.
+4. **Inbox (manual now)** — Replies come back to the number/mailbox that sent them → that entity’s SignalDesk inbox. You triage: Good lead → Email team (manual forward). CRM API later.
+5. **CRM (later)** — n8n pushes interested replies into each entity’s CRM/site. Campaigns themselves stay in SignalDesk so brands never mix.
+
+### Where do people reply?
+
+| Channel | What the lead does | Where it lands |
+|---|---|---|
+| **SMS** | Texts back the Telnyx number | Webhook → **that entity’s Inbox** |
+| **Email** | Replies to the Instantly/Smartlead thread | Webhook → **that entity’s Inbox** |
+| **Landing page (optional)** | Clicks a link in the message | Their site form → later CRM; not required for reply triage |
+
+You do **not** need a landing page for SMS/email replies. The conversation stays on text/email. Landing pages are optional CTAs (“apply here”) on each entity’s real website.
+
+Manual workflow today: open **Inbox** → pick entity → Good lead → **Email team**. Later the same flag feeds the CRM API.
 
 ### Telnyx
 

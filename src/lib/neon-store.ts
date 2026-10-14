@@ -154,6 +154,7 @@ async function replaceWithSeed(): Promise<PlatformData> {
         from: r.from,
         body: r.body,
         sentiment: r.sentiment,
+        manualForwarded: r.manualForwarded,
         crmSynced: r.crmSynced,
         createdAt: new Date(r.createdAt),
         read: r.read,
@@ -599,7 +600,9 @@ export async function applyOptOut(input: {
 
 export async function markReply(
   id: string,
-  patch: Partial<Pick<Reply, "read" | "crmSynced" | "sentiment">>,
+  patch: Partial<
+    Pick<Reply, "read" | "crmSynced" | "sentiment" | "manualForwarded">
+  >,
 ): Promise<Reply | null> {
   await ensureSeeded();
   const prisma = getPrisma();
@@ -612,6 +615,7 @@ export async function markReply(
       read: patch.read ?? existing.read,
       crmSynced: patch.crmSynced ?? existing.crmSynced,
       sentiment: patch.sentiment ?? existing.sentiment,
+      manualForwarded: patch.manualForwarded ?? existing.manualForwarded,
     },
   });
 
@@ -622,8 +626,140 @@ export async function markReply(
       data: { status: "replied" },
     });
   }
+  if (sentiment === "opt_out") {
+    await prisma.lead.update({
+      where: { id: updated.leadId },
+      data: { optedOut: true, status: "opted_out" },
+    });
+  }
 
   return mapReply(updated);
+}
+
+function guessSentiment(body: string): Reply["sentiment"] {
+  const t = body.toLowerCase();
+  if (/\bstop\b|\bunsubscribe\b|\bopt.?out\b/.test(t)) return "opt_out";
+  if (/\byes\b|\binterested\b|\bcall me\b|\bsend (me )?rates\b|\binfo\b/.test(t))
+    return "interested";
+  if (/\bno\b|\bnot interested\b|\balready funded\b/.test(t))
+    return "not_interested";
+  if (/\bwho is this\b|\?\s*$/.test(t)) return "neutral";
+  return "other";
+}
+
+export async function ingestReply(input: {
+  channel: Reply["channel"];
+  from: string;
+  body: string;
+  brandId?: string;
+  campaignId?: string;
+  leadId?: string;
+}): Promise<Reply> {
+  await ensureSeeded();
+  const prisma = getPrisma();
+  const fromNorm = normalizeContact(input.from);
+
+  const leads = await prisma.lead.findMany();
+  let leadRow =
+    (input.leadId && leads.find((l) => l.id === input.leadId)) ||
+    leads.find(
+      (l) =>
+        (l.email && normalizeContact(l.email) === fromNorm) ||
+        (l.phone && normalizeContact(l.phone) === fromNorm),
+    );
+
+  let brandId = input.brandId;
+  let campaignId = input.campaignId;
+  if (!brandId && leadRow?.lastEntityId) brandId = leadRow.lastEntityId;
+  if (!brandId && leadRow?.offeredEntityIds.length) {
+    brandId = leadRow.offeredEntityIds[leadRow.offeredEntityIds.length - 1];
+  }
+
+  const campaigns = await prisma.campaign.findMany();
+  if (!campaignId && brandId) {
+    campaignId = campaigns.find(
+      (c) =>
+        c.brandId === brandId &&
+        c.channel === input.channel &&
+        (c.status === "sending" || c.status === "completed"),
+    )?.id;
+  }
+  if (!brandId) {
+    const first = await prisma.entity.findFirst();
+    brandId = first?.id || "abstract";
+  }
+  if (!campaignId) {
+    campaignId =
+      campaigns.find((c) => c.brandId === brandId)?.id ||
+      `camp-unknown-${brandId}`;
+    if (!campaigns.some((c) => c.id === campaignId)) {
+      await prisma.campaign.create({
+        data: {
+          id: campaignId,
+          brandId,
+          name: "Inbound catch-all",
+          channel: input.channel,
+          message: "(inbound)",
+          status: "completed",
+          volume: 0,
+          throttlePerHour: 1,
+        },
+      });
+    }
+  }
+
+  if (!leadRow) {
+    const id = `lead-inbound-${Date.now()}`;
+    leadRow = await prisma.lead.create({
+      data: {
+        id,
+        email: input.channel === "email" ? input.from : null,
+        phone: input.channel === "sms" ? input.from : null,
+        source: "Inbound reply",
+        groupName: "Inbound",
+        purchaseDate: new Date(),
+        costCents: 0,
+        offeredEntityIds: [brandId],
+        lastEntityId: brandId,
+        status: "replied",
+        optedOut: false,
+        emailStatus: input.channel === "email" ? "valid" : "unverified",
+        phoneStatus: input.channel === "sms" ? "valid" : "unverified",
+      },
+    });
+  }
+
+  const sentiment = guessSentiment(input.body);
+  const reply = await prisma.reply.create({
+    data: {
+      id: `reply-${Date.now()}`,
+      campaignId,
+      brandId,
+      leadId: leadRow.id,
+      channel: input.channel,
+      from: input.from,
+      body: input.body,
+      sentiment,
+      manualForwarded: false,
+      crmSynced: false,
+      read: false,
+    },
+  });
+
+  await prisma.lead.update({
+    where: { id: leadRow.id },
+    data: {
+      lastEntityId: brandId,
+      status: sentiment === "opt_out" ? "opted_out" : "replied",
+      optedOut: sentiment === "opt_out",
+    },
+  });
+  await prisma.campaign.update({
+    where: { id: campaignId },
+    data: { replyCount: { increment: 1 } },
+  });
+
+  return mapReply(reply);
 }
 
 export async function verifyLeads(input?: {

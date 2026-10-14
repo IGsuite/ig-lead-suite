@@ -103,9 +103,22 @@ export async function applyOptOut(input: {
 
 export async function markReply(
   id: string,
-  patch: Partial<Pick<Reply, "read" | "crmSynced" | "sentiment">>,
+  patch: Partial<
+    Pick<Reply, "read" | "crmSynced" | "sentiment" | "manualForwarded">
+  >,
 ): Promise<Reply | null> {
   return backend().markReply(id, patch);
+}
+
+export async function ingestReply(input: {
+  channel: Reply["channel"];
+  from: string;
+  body: string;
+  brandId?: string;
+  campaignId?: string;
+  leadId?: string;
+}): Promise<Reply> {
+  return backend().ingestReply(input);
 }
 
 export function costPerReply(spend: {

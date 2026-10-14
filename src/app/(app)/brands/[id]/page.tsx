@@ -112,6 +112,12 @@ function BrandWorkspaceInner() {
               All entities
             </Link>
             <Link
+              href={`/inbox?entity=${brand.id}`}
+              className={cn(buttonVariants({ variant: "outline" }))}
+            >
+              Inbox
+            </Link>
+            <Link
               href={`/reports?entity=${brand.id}`}
               className={cn(buttonVariants({ variant: "outline" }))}
             >

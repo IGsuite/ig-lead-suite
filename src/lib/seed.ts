@@ -1,7 +1,7 @@
 import { defaultQuotas } from "@/lib/autopilot";
 import type { PlatformData } from "@/lib/types";
 
-export const STORE_VERSION = 6;
+export const STORE_VERSION = 7;
 
 export function createSeedData(): PlatformData {
   const now = new Date();
@@ -346,6 +346,7 @@ export function createSeedData(): PlatformData {
       from: "+15552000003",
       body: "YES interested, call me after 5",
       sentiment: "interested",
+      manualForwarded: true,
       crmSynced: true,
       createdAt: daysAgo(1),
       read: false,
@@ -359,6 +360,7 @@ export function createSeedData(): PlatformData {
       from: "+15552000004",
       body: "Who is this?",
       sentiment: "neutral",
+      manualForwarded: false,
       crmSynced: false,
       createdAt: daysAgo(1),
       read: false,
@@ -372,6 +374,7 @@ export function createSeedData(): PlatformData {
       from: "+15552000008",
       body: "STOP",
       sentiment: "opt_out",
+      manualForwarded: false,
       crmSynced: false,
       createdAt: daysAgo(2),
       read: true,
@@ -385,6 +388,7 @@ export function createSeedData(): PlatformData {
       from: "+15552000010",
       body: "Not interested thanks",
       sentiment: "not_interested",
+      manualForwarded: false,
       crmSynced: false,
       createdAt: daysAgo(0),
       read: false,
@@ -398,6 +402,7 @@ export function createSeedData(): PlatformData {
       from: "+15552000015",
       body: "Send me rates",
       sentiment: "interested",
+      manualForwarded: false,
       crmSynced: false,
       createdAt: daysAgo(0),
       read: false,
@@ -411,6 +416,7 @@ export function createSeedData(): PlatformData {
       from: "+15552000007",
       body: "YES tell me more",
       sentiment: "interested",
+      manualForwarded: false,
       crmSynced: false,
       createdAt: daysAgo(0),
       read: false,
@@ -424,6 +430,7 @@ export function createSeedData(): PlatformData {
       from: "+15552000009",
       body: "Already funded",
       sentiment: "not_interested",
+      manualForwarded: false,
       crmSynced: false,
       createdAt: daysAgo(1),
       read: true,
@@ -437,6 +444,7 @@ export function createSeedData(): PlatformData {
       from: "+15552000014",
       body: "Maybe later",
       sentiment: "neutral",
+      manualForwarded: false,
       crmSynced: false,
       createdAt: daysAgo(0),
       read: false,

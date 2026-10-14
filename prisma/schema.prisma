@@ -114,17 +114,18 @@ model Campaign {
 }
 
 model Reply {
-  id         String   @id
-  campaignId String
-  brandId    String
-  leadId     String
-  channel    String
-  from       String
-  body       String
-  sentiment  String
-  crmSynced  Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  read       Boolean  @default(false)
+  id              String   @id
+  campaignId      String
+  brandId         String
+  leadId          String
+  channel         String
+  from            String
+  body            String
+  sentiment       String
+  manualForwarded Boolean  @default(false)
+  crmSynced       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  read            Boolean  @default(false)
 
   campaign Campaign @relation(fields: [campaignId], references: [id])
   entity   Entity   @relation(fields: [brandId], references: [id])
@@ -156,7 +157,7 @@ model ProviderSpend {
 /// Singleton row (id = "default") for rotation + autopilot config
 model PlatformSettings {
   id               String    @id @default("default")
-  version          Int       @default(6)
+  version          Int       @default(7)
   mode             String    @default("round_robin")
   entityOrder      String[]
   notes            String    @default("")

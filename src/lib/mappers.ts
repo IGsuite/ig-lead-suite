@@ -184,6 +184,7 @@ export function mapReply(row: {
   from: string;
   body: string;
   sentiment: string;
+  manualForwarded?: boolean;
   crmSynced: boolean;
   createdAt: Date;
   read: boolean;
@@ -197,6 +198,7 @@ export function mapReply(row: {
     from: row.from,
     body: row.body,
     sentiment: row.sentiment as Reply["sentiment"],
+    manualForwarded: row.manualForwarded ?? false,
     crmSynced: row.crmSynced,
     createdAt: row.createdAt.toISOString(),
     read: row.read,

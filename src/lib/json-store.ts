@@ -299,7 +299,9 @@ export async function applyOptOut(input: {
 
 export async function markReply(
   id: string,
-  patch: Partial<Pick<Reply, "read" | "crmSynced" | "sentiment">>,
+  patch: Partial<
+    Pick<Reply, "read" | "crmSynced" | "sentiment" | "manualForwarded">
+  >,
 ): Promise<Reply | null> {
   const data = await ensureStore();
   const reply = data.replies.find((r) => r.id === id);
@@ -310,6 +312,118 @@ export async function markReply(
     const lead = data.leads.find((l) => l.id === reply.leadId);
     if (lead) lead.status = "replied";
   }
+  if (patch.sentiment === "opt_out") {
+    const lead = data.leads.find((l) => l.id === reply.leadId);
+    if (lead) {
+      lead.optedOut = true;
+      lead.status = "opted_out";
+    }
+  }
+
+  await writeStore(data);
+  return reply;
+}
+
+function guessSentiment(body: string): Reply["sentiment"] {
+  const t = body.toLowerCase();
+  if (/\bstop\b|\bunsubscribe\b|\bopt.?out\b/.test(t)) return "opt_out";
+  if (/\byes\b|\binterested\b|\bcall me\b|\bsend (me )?rates\b|\binfo\b/.test(t))
+    return "interested";
+  if (/\bno\b|\bnot interested\b|\balready funded\b/.test(t))
+    return "not_interested";
+  if (/\bwho is this\b|\?\s*$/.test(t)) return "neutral";
+  return "other";
+}
+
+/** Ingest an inbound SMS/email reply into the correct entity inbox. */
+export async function ingestReply(input: {
+  channel: Reply["channel"];
+  from: string;
+  body: string;
+  brandId?: string;
+  campaignId?: string;
+  leadId?: string;
+}): Promise<Reply> {
+  const data = await ensureStore();
+  const fromNorm = normalizeContact(input.from);
+
+  let lead =
+    (input.leadId && data.leads.find((l) => l.id === input.leadId)) ||
+    data.leads.find(
+      (l) =>
+        (l.phone && normalizeContact(l.phone) === fromNorm) ||
+        (l.email && normalizeContact(l.email) === fromNorm),
+    );
+
+  let brandId = input.brandId;
+  let campaignId = input.campaignId;
+
+  if (!brandId && lead?.lastEntityId) brandId = lead.lastEntityId;
+  if (!brandId && lead?.offeredEntityIds.length) {
+    brandId = lead.offeredEntityIds[lead.offeredEntityIds.length - 1];
+  }
+  if (!campaignId && brandId) {
+    const camp = data.campaigns.find(
+      (c) =>
+        c.brandId === brandId &&
+        c.channel === input.channel &&
+        (c.status === "sending" || c.status === "completed"),
+    );
+    campaignId = camp?.id;
+  }
+  if (!brandId) brandId = data.brands[0]?.id || "abstract";
+  if (!campaignId) {
+    const camp = data.campaigns.find((c) => c.brandId === brandId);
+    campaignId = camp?.id || `camp-unknown-${brandId}`;
+  }
+  if (!lead) {
+    lead = {
+      id: `lead-inbound-${Date.now()}`,
+      email: input.channel === "email" ? input.from : undefined,
+      phone: input.channel === "sms" ? input.from : undefined,
+      source: "Inbound reply",
+      groupName: "Inbound",
+      purchaseDate: new Date().toISOString().slice(0, 10),
+      costCents: 0,
+      offeredEntityIds: [brandId],
+      lastEntityId: brandId,
+      convertedEntityId: null,
+      status: "replied",
+      optedOut: false,
+      emailStatus: input.channel === "email" ? "valid" : "unverified",
+      phoneStatus: input.channel === "sms" ? "valid" : "unverified",
+      createdAt: new Date().toISOString(),
+    };
+    data.leads.unshift(lead);
+  }
+
+  const sentiment = guessSentiment(input.body);
+  const reply: Reply = {
+    id: `reply-${Date.now()}`,
+    campaignId,
+    brandId,
+    leadId: lead.id,
+    channel: input.channel,
+    from: input.from,
+    body: input.body,
+    sentiment,
+    manualForwarded: false,
+    crmSynced: false,
+    createdAt: new Date().toISOString(),
+    read: false,
+  };
+
+  if (sentiment === "opt_out") {
+    lead.optedOut = true;
+    lead.status = "opted_out";
+  } else {
+    lead.status = "replied";
+  }
+  lead.lastEntityId = brandId;
+
+  data.replies.unshift(reply);
+  const campaign = data.campaigns.find((c) => c.id === campaignId);
+  if (campaign) campaign.replyCount += 1;
 
   await writeStore(data);
   return reply;
