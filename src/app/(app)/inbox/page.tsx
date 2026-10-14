@@ -102,7 +102,7 @@ function InboxInner() {
         "Reply:",
         reply.body,
         "",
-        "— forwarded from SignalDesk (manual triage)",
+        "— forwarded from IG Lead Suite (manual triage)",
       ].join("\n"),
     );
     window.open(`mailto:?subject=${subject}&body=${body}`, "_blank");

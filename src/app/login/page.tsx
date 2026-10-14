@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PRODUCT_NAME } from "@/lib/brand";
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/brand";
 
 function LoginInner() {
   const router = useRouter();
@@ -48,7 +48,7 @@ function LoginInner() {
             {PRODUCT_NAME}
           </h1>
           <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
-            Master Marketing CRM — sign in with your email and password.
+            {PRODUCT_TAGLINE}. Sign in with your email and password.
           </p>
         </div>
         <div className="space-y-2">

@@ -156,7 +156,7 @@ function CampaignBuilderInner() {
           );
         } else {
           toast.success(
-            "Campaign launched through Master Marketing CRM → Telnyx / Smartlead",
+            "Campaign launched through IG Lead Suite → Telnyx / Smartlead",
           );
         }
       } else {

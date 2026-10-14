@@ -1,8 +1,8 @@
-# IG Lead Suite (Master Marketing CRM) — go-live checklist
+# IG Lead Suite — go-live checklist
 
-The **ops app is built**. Neon + Telnyx SMS + Smartlead are keyed. What’s left: **register the Telnyx 10DLC Campaign** (Brand is already **OK**), keep a **public webhook URL**, and set auth secrets on Vercel (login is **on by default** in production).
+The **ops app is built**. Neon + Telnyx SMS + Smartlead are keyed. What’s left: **register the Telnyx 10DLC Campaign** (Brand is already **OK**), keep a **public webhook URL**, and set auth secrets on Vercel project **`ig-lead-suite`** (login is **on by default** in production).
 
-## Already done in Master Marketing CRM
+## Already done in IG Lead Suite
 
 - [x] Shared lead upload + groups + verify-on-import  
 - [x] Entity portals (Abstract, Ahava, Take More, Venture, TYH)  
@@ -78,7 +78,7 @@ AUTH_ADMIN_PASSWORD=your-strong-password # required on Vercel — do not use cha
 
 1. **Campaigns → Build** → pick Morning or Afternoon (or custom hours)  
 2. Launch outside the window → stays **scheduled**  
-3. Launch inside the window → sends through Master Marketing CRM → Telnyx / Smartlead  
+3. Launch inside the window → sends through IG Lead Suite → Telnyx / Smartlead  
 4. **Reports → Send timing** to compare which windows get better replies  
 5. **Reports → Performance / Improve** for reply rates, best copy, and what to scale next  
 
@@ -104,7 +104,7 @@ AUTH_ADMIN_PASSWORD=...          # required on Vercel (not changeme)
 
 | Goal | Now |
 |---|---|
-| Run Master Marketing CRM ops UI | Yes |
+| Run IG Lead Suite ops UI | Yes |
 | Send test SMS via Telnyx | Yes (carriers may filter without Campaign) |
 | Receive SMS/email into Inbox | Yes, with public webhook URL |
 | Full 20k/day × 5 entities | No — needs 10DLC Campaign + warmed domains |

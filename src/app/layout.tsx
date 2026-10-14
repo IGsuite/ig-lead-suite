@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Figtree, Fraunces } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/brand";
 import "./globals.css";
 
 const sans = Figtree({
@@ -15,9 +16,8 @@ const display = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "IG Lead Suite — Master Marketing CRM",
-  description:
-    "Shared lead pool feeding Abstract, Ahava, Take More, Venture, and TYH portals with rotating offers.",
+  title: PRODUCT_NAME,
+  description: `${PRODUCT_TAGLINE}. Shared lead pool feeding Abstract, Ahava, Take More, Venture, and TYH portals.`,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -76,8 +76,8 @@ function CampaignsInner() {
       } else {
         toast.success(
           json.channel === "email"
-            ? "Launched through Master Marketing CRM → Smartlead/Instantly"
-            : "Launched through Master Marketing CRM → Telnyx SMS",
+            ? "Launched through IG Lead Suite → Smartlead/Instantly"
+            : "Launched through IG Lead Suite → Telnyx SMS",
         );
       }
       await refresh();
