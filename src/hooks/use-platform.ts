@@ -14,8 +14,11 @@ export function usePlatform() {
     try {
       const res = await fetch("/api/platform", { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to load platform data");
-      const json = (await res.json()) as PlatformData;
-      setData(json);
+      const json = (await res.json()) as PlatformData & {
+        storageMode?: string;
+      };
+      const { storageMode: _mode, ...platform } = json;
+      setData(platform);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {

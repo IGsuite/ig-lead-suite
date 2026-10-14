@@ -63,7 +63,7 @@ export function AppSidebar() {
         })}
       </nav>
       <div className="border-t border-[color:var(--ink-border)] p-4 text-xs text-[color:var(--ink-muted)]">
-        Shared pool feeds all five entity portals.
+        Neon-ready · shared pool for all five entities.
       </div>
     </aside>
   );

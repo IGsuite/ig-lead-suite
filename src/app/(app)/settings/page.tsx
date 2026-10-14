@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
@@ -9,34 +10,44 @@ import { usePlatform } from "@/hooks/use-platform";
 
 const providers = [
   {
-    name: "Supabase",
-    role: "One database for the shared lead pool + all entity portals",
-    status: "mock",
+    name: "Neon",
+    role: "Postgres for the shared lead pool + all entity portals",
+    key: "neon",
   },
   {
     name: "Amazon SES",
     role: "Email sending per entity subdomain",
-    status: "mock",
+    key: "ses",
   },
   {
     name: "Twilio",
     role: "SMS + 10DLC campaigns and numbers per entity",
-    status: "mock",
+    key: "twilio",
   },
   {
     name: "n8n / website APIs",
     role: "Interested reply → that entity’s CRM or site API",
-    status: "mock",
+    key: "n8n",
   },
   {
     name: "Metabase",
     role: "Reporting across pool, entities, and providers",
-    status: "planned",
+    key: "metabase",
   },
 ];
 
 export default function SettingsPage() {
   const { data, loading, error, refresh } = usePlatform();
+  const [storageMode, setStorageMode] = useState<"neon" | "local">("local");
+
+  useEffect(() => {
+    void fetch("/api/platform")
+      .then((r) => r.json())
+      .then((json: { storageMode?: "neon" | "local" }) => {
+        if (json.storageMode) setStorageMode(json.storageMode);
+      })
+      .catch(() => undefined);
+  }, [data]);
 
   async function reset() {
     try {
@@ -61,10 +72,54 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="Settings & providers"
-        description="One main backend. Five entity portals. Domains are set from your live sites — wire Supabase / SES / Twilio next."
+        description="One main backend on Neon Postgres. Five entity portals. Domains are set from your live sites — wire SES / Twilio / n8n next."
       />
 
       <section className="mb-6 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise">
+        <h2 className="font-[family-name:var(--font-display)] text-2xl">
+          Database
+        </h2>
+        <p className="mt-2 text-sm text-[color:var(--ink-muted)]">
+          Current mode:{" "}
+          <strong>
+            {storageMode === "neon" ? "Neon Postgres (live)" : "Local JSON fallback"}
+          </strong>
+        </p>
+        <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-[color:var(--ink-soft)]">
+          <li>
+            Create a project at{" "}
+            <a
+              className="underline underline-offset-2"
+              href="https://console.neon.tech"
+              target="_blank"
+              rel="noreferrer"
+            >
+              console.neon.tech
+            </a>
+            .
+          </li>
+          <li>Copy the connection string (URI, with <code>sslmode=require</code>).</li>
+          <li>
+            Set <code>DATABASE_URL</code> in{" "}
+            <code>.env</code> locally, or in{" "}
+            <a
+              className="underline underline-offset-2"
+              href="https://cursor.com/dashboard/cloud-agents"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Cursor Cloud Agent Secrets
+            </a>
+            .
+          </li>
+          <li>
+            Run <code>npm run db:push && npm run db:seed</code> (or ask the agent
+            after secrets are set).
+          </li>
+        </ol>
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise-delay-1">
         <h2 className="font-[family-name:var(--font-display)] text-2xl">
           Your entities
         </h2>
@@ -94,20 +149,30 @@ export default function SettingsPage() {
           Provider stack
         </h2>
         <div className="mt-4 space-y-3">
-          {providers.map((provider) => (
-            <div
-              key={provider.name}
-              className="flex flex-col gap-2 rounded-xl border border-[color:var(--ink-border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div>
-                <div className="font-medium">{provider.name}</div>
-                <p className="text-sm text-[color:var(--ink-muted)]">
-                  {provider.role}
-                </p>
+          {providers.map((provider) => {
+            const status =
+              provider.key === "neon"
+                ? storageMode === "neon"
+                  ? "verified"
+                  : "partial"
+                : provider.key === "metabase"
+                  ? "setup"
+                  : "partial";
+            return (
+              <div
+                key={provider.name}
+                className="flex flex-col gap-2 rounded-xl border border-[color:var(--ink-border)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <div className="font-medium">{provider.name}</div>
+                  <p className="text-sm text-[color:var(--ink-muted)]">
+                    {provider.role}
+                  </p>
+                </div>
+                <StatusPill status={status} />
               </div>
-              <StatusPill status={provider.status === "mock" ? "partial" : "setup"} />
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
@@ -116,9 +181,10 @@ export default function SettingsPage() {
           Demo data
         </h2>
         <p className="mt-2 text-sm text-[color:var(--ink-muted)]">
-          Local JSON store under <code>.data/platform.json</code> with{" "}
-          {data.leads.length} shared leads and {data.brands.length} entity
-          portals. Safe to reset anytime.
+          {storageMode === "neon"
+            ? "Seeded into Neon Postgres."
+            : "Local JSON under .data/platform.json until DATABASE_URL points at Neon."}{" "}
+          {data.leads.length} shared leads · {data.brands.length} entity portals.
         </p>
         <Button className="mt-4" variant="outline" onClick={reset}>
           Reset demo data

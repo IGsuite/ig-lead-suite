@@ -1,0 +1,151 @@
+// SignalDesk — Neon Postgres schema (shared lead pool + entity portals)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// One company portal (Abstract, Ahava, Take More, Venture, TYH)
+model Entity {
+  id               String   @id
+  name             String
+  shortName        String
+  focus            String
+  programs         String[]
+  domain           String
+  sendingSubdomain String
+  websiteUrl       String
+  websiteApiUrl    String   @default("")
+  crm              String
+  status           String
+  phoneNumbers     String[]
+  tenDlcStatus     String
+  emailAuthStatus  String
+  weeklySendCap    Int      @default(0)
+  rotationEnabled  Boolean  @default(true)
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  campaigns Campaign[]
+  replies   Reply[]
+}
+
+model Lead {
+  id                String   @id
+  email             String?
+  phone             String?
+  firstName         String?
+  lastName          String?
+  source            String
+  purchaseDate      DateTime @db.Date
+  costCents         Int
+  offeredEntityIds  String[]
+  lastEntityId      String?
+  convertedEntityId String?
+  status            String
+  optedOut          Boolean  @default(false)
+  uploadBatchId     String?
+  createdAt         DateTime @default(now())
+
+  uploadBatch UploadBatch? @relation(fields: [uploadBatchId], references: [id])
+  replies     Reply[]
+
+  @@index([source])
+  @@index([status])
+  @@index([optedOut])
+}
+
+model UploadBatch {
+  id             String   @id
+  filename       String
+  source         String
+  purchaseDate   DateTime @db.Date
+  costCents      Int
+  rowCount       Int
+  duplicateCount Int
+  importedCount  Int
+  createdAt      DateTime @default(now())
+
+  leads Lead[]
+}
+
+model Campaign {
+  id              String    @id
+  brandId         String
+  name            String
+  channel         String
+  subject         String?
+  message         String
+  sourceFilter    String    @default("all")
+  preferUnoffered Boolean   @default(true)
+  volume          Int
+  throttlePerHour Int
+  status          String
+  sentCount       Int       @default(0)
+  replyCount      Int       @default(0)
+  optOutCount     Int       @default(0)
+  bounceCount     Int       @default(0)
+  createdAt       DateTime  @default(now())
+  startedAt       DateTime?
+
+  entity  Entity  @relation(fields: [brandId], references: [id])
+  replies Reply[]
+
+  @@index([brandId])
+  @@index([status])
+}
+
+model Reply {
+  id         String   @id
+  campaignId String
+  brandId    String
+  leadId     String
+  channel    String
+  from       String
+  body       String
+  sentiment  String
+  crmSynced  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  read       Boolean  @default(false)
+
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+  entity   Entity   @relation(fields: [brandId], references: [id])
+  lead     Lead     @relation(fields: [leadId], references: [id])
+
+  @@index([brandId])
+  @@index([read])
+}
+
+model OptOut {
+  id        String   @id
+  contact   String
+  channel   String
+  reason    String
+  brandId   String?
+  createdAt DateTime @default(now())
+
+  @@index([contact])
+}
+
+model ProviderSpend {
+  source          String @id
+  leadsPurchased  Int    @default(0)
+  costCents       Int    @default(0)
+  replies         Int    @default(0)
+  conversions     Int    @default(0)
+}
+
+/// Singleton row (id = "default") for rotation config
+model PlatformSettings {
+  id          String   @id @default("default")
+  version     Int      @default(3)
+  mode        String   @default("round_robin")
+  entityOrder String[]
+  notes       String   @default("")
+  updatedAt   DateTime @updatedAt
+}

@@ -24,6 +24,13 @@
 .DS_Store
 *.pem
 .data/
+src/generated/
+
+# Prisma init skill stubs (not part of the app)
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
 
 # debug
 npm-debug.log*
@@ -33,6 +40,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -40,3 +48,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/src/generated/prisma
