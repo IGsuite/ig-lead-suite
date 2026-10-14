@@ -35,7 +35,19 @@ import type {
   UploadBatch,
 } from "@/lib/types";
 import { deliverCampaignBatch } from "@/lib/send";
+import {
+  isWithinSendWindow,
+  normalizeSendWindow,
+  sendWindowLabel,
+} from "@/lib/send-window";
 import { applyVerification } from "@/lib/verify";
+
+export type LaunchResult = {
+  campaign: Campaign;
+  deferred: boolean;
+  reason?: string;
+  windowLabel?: string;
+};
 
 async function ensureSeeded(): Promise<void> {
   const prisma = getPrisma();
@@ -124,27 +136,34 @@ async function replaceWithSeed(): Promise<PlatformData> {
     });
 
     await tx.campaign.createMany({
-      data: seed.campaigns.map((c) => ({
-        id: c.id,
-        brandId: c.brandId,
-        name: c.name,
-        channel: c.channel,
-        subject: c.subject ?? null,
-        message: c.message,
-        sourceFilter: c.sourceFilter,
-        groupFilter: c.groupFilter,
-        preferUnoffered: c.preferUnoffered,
-        preferVerified: c.preferVerified,
-        volume: c.volume,
-        throttlePerHour: c.throttlePerHour,
-        status: c.status,
-        sentCount: c.sentCount,
-        replyCount: c.replyCount,
-        optOutCount: c.optOutCount,
-        bounceCount: c.bounceCount,
-        createdAt: new Date(c.createdAt),
-        startedAt: c.startedAt ? new Date(c.startedAt) : null,
-      })),
+      data: seed.campaigns.map((c) => {
+        const win = normalizeSendWindow(c);
+        return {
+          id: c.id,
+          brandId: c.brandId,
+          name: c.name,
+          channel: c.channel,
+          subject: c.subject ?? null,
+          message: c.message,
+          sourceFilter: c.sourceFilter,
+          groupFilter: c.groupFilter,
+          preferUnoffered: c.preferUnoffered,
+          preferVerified: c.preferVerified,
+          volume: c.volume,
+          throttlePerHour: c.throttlePerHour,
+          sendWindowPreset: win.sendWindowPreset,
+          sendWindowStart: win.sendWindowStart,
+          sendWindowEnd: win.sendWindowEnd,
+          timezone: win.timezone,
+          status: c.status,
+          sentCount: c.sentCount,
+          replyCount: c.replyCount,
+          optOutCount: c.optOutCount,
+          bounceCount: c.bounceCount,
+          createdAt: new Date(c.createdAt),
+          startedAt: c.startedAt ? new Date(c.startedAt) : null,
+        };
+      }),
     });
 
     await tx.reply.createMany({
@@ -509,6 +528,7 @@ export async function createCampaign(
 ): Promise<Campaign> {
   await ensureSeeded();
   const prisma = getPrisma();
+  const win = normalizeSendWindow(input);
   const created = await prisma.campaign.create({
     data: {
       id: `camp-${Date.now()}`,
@@ -523,18 +543,35 @@ export async function createCampaign(
       preferVerified: input.preferVerified,
       volume: input.volume,
       throttlePerHour: input.throttlePerHour,
+      sendWindowPreset: win.sendWindowPreset,
+      sendWindowStart: win.sendWindowStart,
+      sendWindowEnd: win.sendWindowEnd,
+      timezone: win.timezone,
       status: input.status,
     },
   });
   return mapCampaign(created);
 }
 
-export async function launchCampaign(id: string): Promise<Campaign | null> {
+export async function launchCampaign(id: string): Promise<LaunchResult | null> {
   await ensureSeeded();
   const prisma = getPrisma();
   const campaignRow = await prisma.campaign.findUnique({ where: { id } });
   if (!campaignRow) return null;
   const campaign = mapCampaign(campaignRow);
+
+  if (!isWithinSendWindow(campaign)) {
+    const updated = await prisma.campaign.update({
+      where: { id },
+      data: { status: "scheduled" },
+    });
+    return {
+      campaign: mapCampaign(updated),
+      deferred: true,
+      reason: "outside_send_window",
+      windowLabel: sendWindowLabel(campaign),
+    };
+  }
 
   const [leadRows, brandRow] = await Promise.all([
     prisma.lead.findMany(),
@@ -588,7 +625,7 @@ export async function launchCampaign(id: string): Promise<Campaign | null> {
   });
 
   const updated = await prisma.campaign.findUniqueOrThrow({ where: { id } });
-  return mapCampaign(updated);
+  return { campaign: mapCampaign(updated), deferred: false };
 }
 
 export async function applyOptOut(input: {
@@ -887,6 +924,14 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
     const quota = rotation.quotas.find((q) => q.entityId === entityId);
     if (!brand || !quota?.enabled || !brand.rotationEnabled) continue;
 
+    const win = normalizeSendWindow({
+      sendWindowPreset: quota.sendWindowPreset || "morning",
+      sendWindowStart: quota.sendWindowStart,
+      sendWindowEnd: quota.sendWindowEnd,
+      timezone: quota.timezone,
+    });
+    const inWindow = isWithinSendWindow(win);
+
     const copy = entityOfferCopy(brand);
     const channelLegs: Array<{
       channel: "sms" | "email";
@@ -928,9 +973,24 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
           preferVerified: true,
           volume: leg.volume,
           throttlePerHour: Math.max(60, Math.round(leg.volume / 12)),
-          status: "draft",
+          sendWindowPreset: win.sendWindowPreset,
+          sendWindowStart: win.sendWindowStart,
+          sendWindowEnd: win.sendWindowEnd,
+          timezone: win.timezone,
+          status: inWindow ? "draft" : "scheduled",
         },
       });
+
+      if (!inWindow) {
+        legs.push({
+          entityId,
+          channel: leg.channel,
+          campaignId,
+          sent: 0,
+          volume: leg.volume,
+        });
+        continue;
+      }
 
       const eligible = mappedLeads
         .filter((lead) => {
@@ -959,6 +1019,10 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
         preferVerified: true,
         volume: leg.volume,
         throttlePerHour: Math.max(60, Math.round(leg.volume / 12)),
+        sendWindowPreset: win.sendWindowPreset,
+        sendWindowStart: win.sendWindowStart,
+        sendWindowEnd: win.sendWindowEnd,
+        timezone: win.timezone,
         status: "draft",
         sentCount: 0,
         replyCount: 0,

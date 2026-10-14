@@ -10,7 +10,18 @@ import { Label } from "@/components/ui/label";
 import { usePlatform } from "@/hooks/use-platform";
 import { DEFAULT_DAILY_EMAIL, DEFAULT_DAILY_SMS } from "@/lib/autopilot";
 import { compactNumber, relativeDay } from "@/lib/client-format";
-import type { EntityDailyQuota, RotationConfig } from "@/lib/types";
+import type {
+  EntityDailyQuota,
+  RotationConfig,
+  SendWindowPreset,
+} from "@/lib/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function AutopilotPage() {
   const { data, loading, error, refresh } = usePlatform();
@@ -205,7 +216,7 @@ export default function AutopilotPage() {
                   On the wheel
                 </label>
               </div>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="mt-4 grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
                   <Label>Daily email volume</Label>
                   <Input
@@ -235,6 +246,30 @@ export default function AutopilotPage() {
                       })
                     }
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label>Send window</Label>
+                  <Select
+                    value={quota.sendWindowPreset || "morning"}
+                    disabled={!quota.enabled}
+                    onValueChange={(value) => {
+                      if (value)
+                        updateQuota(quota.entityId, {
+                          sendWindowPreset: value as SendWindowPreset,
+                          timezone: "America/New_York",
+                        });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="morning">Morning</SelectItem>
+                      <SelectItem value="afternoon">Afternoon</SelectItem>
+                      <SelectItem value="evening">Evening</SelectItem>
+                      <SelectItem value="any">Any time</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </div>

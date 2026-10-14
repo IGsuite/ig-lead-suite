@@ -46,8 +46,24 @@ function CampaignsInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "launch", id }),
       });
-      if (!res.ok) throw new Error("Could not launch campaign");
-      toast.success("Campaign launched — SMS via Telnyx (live or mock)");
+      const json = (await res.json()) as {
+        error?: string;
+        deferred?: boolean;
+        windowLabel?: string;
+        channel?: string;
+      };
+      if (!res.ok) throw new Error(json.error || "Could not launch campaign");
+      if (json.deferred) {
+        toast.message(
+          `Outside send window (${json.windowLabel || "window"}). Campaign scheduled — launch again during the window.`,
+        );
+      } else {
+        toast.success(
+          json.channel === "email"
+            ? "Launched through SignalDesk → Smartlead/Instantly"
+            : "Launched through SignalDesk → Telnyx SMS",
+        );
+      }
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Launch failed");
@@ -132,8 +148,11 @@ function CampaignsInner() {
                     <div className="font-medium">{campaign.name}</div>
                     <div className="text-xs text-[color:var(--ink-muted)]">
                       {relativeDay(campaign.createdAt)} · throttle{" "}
-                      {campaign.throttlePerHour}/hr ·{" "}
-                      {brand?.shortName}
+                      {campaign.throttlePerHour}/hr · {brand?.shortName} ·{" "}
+                      {campaign.sendWindowPreset || "any"}
+                      {campaign.sendWindowStart && campaign.sendWindowEnd
+                        ? ` ${campaign.sendWindowStart}–${campaign.sendWindowEnd}`
+                        : ""}
                     </div>
                   </TableCell>
                   <TableCell className="uppercase">{campaign.channel}</TableCell>

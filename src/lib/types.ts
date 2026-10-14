@@ -29,6 +29,26 @@ export type ReplySentiment =
   | "not_interested"
   | "opt_out"
   | "other";
+export type SendWindowPreset =
+  | "morning"
+  | "afternoon"
+  | "evening"
+  | "custom"
+  | "any";
+export type UserRole = "admin" | "member";
+
+export interface AppUser {
+  id: string;
+  email: string;
+  name: string;
+  passwordHash: string;
+  role: UserRole;
+  /** Empty + admin = all entities. Member must list portals they can open. */
+  allowedEntityIds: string[];
+  createdAt: string;
+}
+
+export type AppUserPublic = Omit<AppUser, "passwordHash">;
 
 /** One company / program portal inside the shared backend. */
 export interface Brand {
@@ -107,6 +127,11 @@ export interface Campaign {
   preferVerified: boolean;
   volume: number;
   throttlePerHour: number;
+  /** When sends are allowed (local time in `timezone`). */
+  sendWindowPreset: SendWindowPreset;
+  sendWindowStart?: string | null;
+  sendWindowEnd?: string | null;
+  timezone: string;
   status: CampaignStatus;
   sentCount: number;
   replyCount: number;
@@ -189,6 +214,11 @@ export interface EntityDailyQuota {
   dailyEmailVolume: number;
   dailySmsVolume: number;
   enabled: boolean;
+  /** Preferred send window for Autopilot legs (defaults to any). */
+  sendWindowPreset?: SendWindowPreset;
+  sendWindowStart?: string | null;
+  sendWindowEnd?: string | null;
+  timezone?: string;
 }
 
 export interface RotationConfig {
@@ -214,6 +244,16 @@ export interface EntitySourceResult {
   costCents: number;
   costPerReply: number | null;
   recommendation: "scale_up" | "hold" | "cut";
+}
+
+/** Reply performance bucketed by local time-of-day. */
+export interface TimeOfDayResult {
+  bucket: "morning" | "afternoon" | "evening" | "night";
+  label: string;
+  replies: number;
+  interested: number;
+  optOuts: number;
+  interestedRate: number | null;
 }
 
 export interface PlatformData {

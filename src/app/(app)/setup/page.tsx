@@ -19,85 +19,31 @@ type ProviderStatus = {
   };
 };
 
-type LiveStatusKey = "neon" | "telnyx" | "email";
+type TenDlcStatus = {
+  summary?: string;
+  pending?: string | null;
+  brands?: Array<{
+    displayName: string;
+    status: string;
+    tcrBrandId: string | null;
+    campaigns: string[];
+  }>;
+};
 
-const steps: Array<{
-  id: string;
-  title: string;
-  youDo: string;
-  statusKey?: LiveStatusKey;
-  href?: string;
-  hrefLabel?: string;
-}> = [
-  {
-    id: "neon",
-    title: "1. Neon database",
-    youDo: "Already connected when DATABASE_URL is set.",
-    statusKey: "neon",
-  },
-  {
-    id: "telnyx",
-    title: "2. Telnyx SMS",
-    youDo:
-      "Create Telnyx account → API key → buy numbers → paste TELNYX_API_KEY + TELNYX_FROM_NUMBER into secrets. Assign a number on each entity portal. Start 10DLC registration.",
-    statusKey: "telnyx",
-    href: "https://portal.telnyx.com",
-    hrefLabel: "Open Telnyx Mission Control",
-  },
-  {
-    id: "email",
-    title: "3. Smartlead (cold email) — do now",
-    youDo:
-      "Create Smartlead → connect/warm domains → create a campaign → paste SMARTLEAD_API_KEY + SMARTLEAD_CAMPAIGN_ID into .env. Point Smartlead EMAIL_REPLY webhook to /api/webhooks/email. (Instantly still works via INSTANTLY_* if you prefer.)",
-    statusKey: "email",
-    href: "https://app.smartlead.ai",
-    hrefLabel: "Open Smartlead",
-  },
-  {
-    id: "host",
-    title: "4. Public URL for webhooks",
-    youDo:
-      "Use Cloudflare Tunnel (cloudflared) for local tests, or deploy to Vercel. Set PUBLIC_APP_URL. Point Telnyx messaging profile → /api/webhooks/telnyx and Smartlead → /api/webhooks/email. Quick tunnels change URL when restarted.",
-  },
-  {
-    id: "numbers",
-    title: "5. Numbers on each entity",
-    youDo:
-      "Entities → open each portal → paste Telnyx number(s). Autopilot SMS uses that entity’s first number.",
-    href: "/brands",
-    hrefLabel: "Open entities",
-  },
-  {
-    id: "tendlc",
-    title: "6. 10DLC Brand (waiting on Telnyx)",
-    youDo:
-      "Brand registration is pending (up to ~48h). After approval, finish the 10DLC Campaign, then scale SMS. Low-volume tests may still work before then.",
-    href: "https://portal.telnyx.com",
-    hrefLabel: "Telnyx Mission Control",
-  },
-  {
-    id: "smoke",
-    title: "7. Smoke test",
-    youDo:
-      "Upload 2–3 leads (your phone/email) → tiny campaign → reply → triage in Inbox → Email team. Repeat with a Smartlead self-send when email is keyed.",
-    href: "/leads",
-    hrefLabel: "Upload leads",
-  },
-  {
-    id: "crm",
-    title: "8. CRM / n8n (not today)",
-    youDo:
-      "Skip for now. Use Inbox → Good lead → Email team. Wire n8n when you’re ready.",
-  },
-];
+type LiveStatusKey = "neon" | "telnyx" | "email";
 
 export default function SetupPage() {
   const [status, setStatus] = useState<ProviderStatus | null>(null);
+  const [tenDlc, setTenDlc] = useState<TenDlcStatus | null>(null);
 
   useEffect(() => {
     void fetch("/api/providers/status")
       .then((r) => r.json())
       .then((json: ProviderStatus) => setStatus(json))
+      .catch(() => undefined);
+    void fetch("/api/providers/ten-dlc")
+      .then((r) => r.json())
+      .then((json: TenDlcStatus) => setTenDlc(json))
       .catch(() => undefined);
   }, []);
 
@@ -116,11 +62,98 @@ export default function SetupPage() {
     return status.telnyx;
   }
 
+  const brandOk = tenDlc?.brands?.some((b) => b.status === "OK");
+  const hasCampaign = tenDlc?.brands?.some((b) => (b.campaigns || []).length > 0);
+
+  const steps: Array<{
+    id: string;
+    title: string;
+    youDo: string;
+    statusKey?: LiveStatusKey;
+    done?: boolean;
+    pending?: boolean;
+    href?: string;
+    hrefLabel?: string;
+  }> = [
+    {
+      id: "neon",
+      title: "1. Neon database",
+      youDo: "Connected when DATABASE_URL is set.",
+      statusKey: "neon",
+      done: status?.neon === "live",
+    },
+    {
+      id: "telnyx",
+      title: "2. Telnyx SMS keys",
+      youDo:
+        "API key + from-number are live. Assign a Telnyx number on each entity portal.",
+      statusKey: "telnyx",
+      done: status?.telnyx === "live",
+      href: "https://portal.telnyx.com",
+      hrefLabel: "Open Telnyx",
+    },
+    {
+      id: "email",
+      title: "3. Smartlead cold email",
+      youDo:
+        "API key + campaign ID keyed. Point Smartlead EMAIL_REPLY webhook to /api/webhooks/email.",
+      statusKey: "email",
+      done: Boolean(status && status.email !== "mock"),
+      href: "https://app.smartlead.ai",
+      hrefLabel: "Open Smartlead",
+    },
+    {
+      id: "host",
+      title: "4. Public URL for webhooks",
+      youDo: status?.publicAppUrl
+        ? `Set to ${status.publicAppUrl}. Tunnel URLs change when restarted — prefer Vercel for production.`
+        : "Set PUBLIC_APP_URL (Cloudflare Tunnel or Vercel) and point Telnyx + Smartlead webhooks.",
+      done: Boolean(status?.publicAppUrl),
+    },
+    {
+      id: "tendlc",
+      title: brandOk
+        ? "5. 10DLC Campaign (next)"
+        : "5. 10DLC Brand (waiting)",
+      youDo: tenDlc?.summary
+        ? tenDlc.summary
+        : "Checking Telnyx… Brand registration can take up to ~48h.",
+      done: Boolean(brandOk && hasCampaign),
+      pending: Boolean(brandOk && !hasCampaign) || !brandOk,
+      href: "https://portal.telnyx.com",
+      hrefLabel: "Telnyx Mission Control",
+    },
+    {
+      id: "numbers",
+      title: "6. Numbers on each entity",
+      youDo:
+        "Entities → portal → paste Telnyx number(s). Autopilot SMS uses that entity’s first number.",
+      href: "/brands",
+      hrefLabel: "Open entities",
+    },
+    {
+      id: "users",
+      title: "7. Users & entity access",
+      youDo:
+        "Add teammates under Users. Members only see entities you assign. Set AUTH_REQUIRED=true to force login.",
+      href: "/users",
+      hrefLabel: "Manage users",
+    },
+    {
+      id: "smoke",
+      title: "8. Smoke test",
+      youDo:
+        "Upload 2–3 leads → tiny campaign inside a send window → reply → Inbox → Email team.",
+      href: "/leads",
+      hrefLabel: "Upload leads",
+    },
+  ];
+
   return (
     <div>
       <PageHeader
-        title="Go live today"
-        description="Neon + Telnyx keys are live. Next: Smartlead API keys + a public webhook URL. Scaled SMS waits on 10DLC Brand approval; cold email warmup can start as soon as Smartlead is keyed."
+        title="Go live"
+        description="Neon, Telnyx, and Smartlead keys are live. What’s still pending: finish the Telnyx 10DLC Campaign (Brand is already OK), then scale SMS. Use send windows on campaigns for morning vs afternoon."
         actions={
           <Link
             href="/settings"
@@ -130,6 +163,30 @@ export default function SetupPage() {
           </Link>
         }
       />
+
+      <div className="mb-4 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4 animate-rise">
+        <div className="text-xs uppercase tracking-wide text-[color:var(--ink-muted)]">
+          What’s pending right now
+        </div>
+        <p className="mt-2 font-[family-name:var(--font-display)] text-xl">
+          {tenDlc?.pending === "10dlc_campaign"
+            ? "10DLC Campaign registration (Brand already approved)"
+            : tenDlc?.pending === "10dlc_brand"
+              ? "10DLC Brand still awaiting Telnyx/TCR approval"
+              : tenDlc?.summary || "Checking providers…"}
+        </p>
+        {tenDlc?.brands?.length ? (
+          <ul className="mt-2 space-y-1 text-sm text-[color:var(--ink-soft)]">
+            {tenDlc.brands.map((b) => (
+              <li key={b.displayName}>
+                {b.displayName}: Brand <strong>{b.status}</strong>
+                {b.tcrBrandId ? ` · TCR ${b.tcrBrandId}` : ""} · campaigns:{" "}
+                {b.campaigns.length ? b.campaigns.join(", ") : "none yet"}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 animate-rise">
         <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
@@ -181,7 +238,15 @@ export default function SetupPage() {
                   <h2 className="font-[family-name:var(--font-display)] text-xl">
                     {step.title}
                   </h2>
-                  <StatusPill status={pill(step.statusKey)} />
+                  <StatusPill
+                    status={
+                      step.done
+                        ? "verified"
+                        : step.pending
+                          ? "pending"
+                          : pill(step.statusKey)
+                    }
+                  />
                   {step.statusKey ? (
                     <span className="text-xs text-[color:var(--ink-muted)]">
                       {label(step.statusKey)}
@@ -211,9 +276,8 @@ export default function SetupPage() {
       </ol>
 
       <p className="mt-6 text-sm text-[color:var(--ink-muted)]">
-        Full write-up: <code>SETUP.md</code> in the repo. Paste API keys into{" "}
-        <code>.env</code> or Cursor Cloud Agent Secrets, then restart — Status
-        above flips from mock → live.
+        Full write-up: <code>SETUP.md</code>. Campaigns always launch from
+        SignalDesk (Telnyx / Smartlead are delivery backends only).
       </p>
     </div>
   );

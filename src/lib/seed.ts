@@ -28,12 +28,13 @@ export function createSeedData(): PlatformData {
       websiteApiUrl: "",
       crm: "hubspot",
       status: "warming",
-      phoneNumbers: ["+1 (555) 010-1001", "+1 (555) 010-1002", "+1 (555) 010-1003"],
-      tenDlcStatus: "pending",
+      phoneNumbers: ["+15162661301"],
+      tenDlcStatus: "approved",
       emailAuthStatus: "partial",
       weeklySendCap: 2000,
       rotationEnabled: true,
-      notes: "Pilot entity for warm-up. Broad brokerage menu.",
+      notes:
+        "Pilot entity. Telnyx 10DLC Brand OK (TCR BNHCFPV) — register 10DLC Campaign next for volume SMS.",
     },
     {
       id: "ahava",
@@ -229,6 +230,13 @@ export function createSeedData(): PlatformData {
     });
   }
 
+  const windowDefaults = {
+    sendWindowPreset: "morning" as const,
+    sendWindowStart: "09:00",
+    sendWindowEnd: "12:00",
+    timezone: "America/New_York",
+  };
+
   const campaigns: PlatformData["campaigns"] = [
     {
       id: "camp-1",
@@ -243,6 +251,7 @@ export function createSeedData(): PlatformData {
       preferVerified: true,
       volume: 500,
       throttlePerHour: 80,
+      ...windowDefaults,
       status: "sending",
       sentCount: 312,
       replyCount: 18,
@@ -264,6 +273,10 @@ export function createSeedData(): PlatformData {
       preferVerified: true,
       volume: 800,
       throttlePerHour: 100,
+      ...windowDefaults,
+      sendWindowPreset: "afternoon",
+      sendWindowStart: "13:00",
+      sendWindowEnd: "17:00",
       status: "draft",
       sentCount: 0,
       replyCount: 0,
@@ -284,6 +297,7 @@ export function createSeedData(): PlatformData {
       preferVerified: true,
       volume: 700,
       throttlePerHour: 90,
+      ...windowDefaults,
       status: "draft",
       sentCount: 0,
       replyCount: 0,
@@ -305,6 +319,10 @@ export function createSeedData(): PlatformData {
       preferVerified: true,
       volume: 1000,
       throttlePerHour: 200,
+      ...windowDefaults,
+      sendWindowPreset: "afternoon",
+      sendWindowStart: "13:00",
+      sendWindowEnd: "17:00",
       status: "draft",
       sentCount: 0,
       replyCount: 0,
@@ -325,6 +343,7 @@ export function createSeedData(): PlatformData {
       preferVerified: true,
       volume: 600,
       throttlePerHour: 90,
+      ...windowDefaults,
       status: "draft",
       sentCount: 0,
       replyCount: 0,

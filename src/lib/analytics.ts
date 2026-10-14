@@ -1,3 +1,4 @@
+import { timeOfDayBucket } from "@/lib/send-window";
 import type {
   CostCategory,
   CostEntry,
@@ -6,6 +7,7 @@ import type {
   Lead,
   PlatformData,
   Reply,
+  TimeOfDayResult,
 } from "@/lib/types";
 
 export const COST_CATEGORIES: CostCategory[] = [
@@ -182,6 +184,62 @@ export function entitySourceResults(
         (a.costPerReply ?? Number.POSITIVE_INFINITY) -
         (b.costPerReply ?? Number.POSITIVE_INFINITY),
     );
+}
+
+const TOD_LABELS: Record<TimeOfDayResult["bucket"], string> = {
+  morning: "Morning (5am–12pm)",
+  afternoon: "Afternoon (12–5pm)",
+  evening: "Evening (5–9pm)",
+  night: "Night (9pm–5am)",
+};
+
+/** Which send/reply times of day get the best interested rates. */
+export function timeOfDayResults(
+  data: PlatformData,
+  entityId: string | "all",
+  timezone = "America/New_York",
+): TimeOfDayResult[] {
+  const replies =
+    entityId === "all"
+      ? data.replies
+      : data.replies.filter((r) => r.brandId === entityId);
+
+  const buckets: TimeOfDayResult["bucket"][] = [
+    "morning",
+    "afternoon",
+    "evening",
+    "night",
+  ];
+  const counts = Object.fromEntries(
+    buckets.map((b) => [
+      b,
+      { replies: 0, interested: 0, optOuts: 0 },
+    ]),
+  ) as Record<
+    TimeOfDayResult["bucket"],
+    { replies: number; interested: number; optOuts: number }
+  >;
+
+  for (const reply of replies) {
+    const bucket = timeOfDayBucket(reply.createdAt, timezone);
+    counts[bucket].replies += 1;
+    if (reply.sentiment === "interested") counts[bucket].interested += 1;
+    if (reply.sentiment === "opt_out") counts[bucket].optOuts += 1;
+  }
+
+  return buckets.map((bucket) => {
+    const c = counts[bucket];
+    return {
+      bucket,
+      label: TOD_LABELS[bucket],
+      replies: c.replies,
+      interested: c.interested,
+      optOuts: c.optOuts,
+      interestedRate: c.replies
+        ? Math.round((c.interested / c.replies) * 1000) / 10
+        : null,
+    };
+  });
 }
 
 export function poolSourceResults(data: PlatformData): EntitySourceResult[] {

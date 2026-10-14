@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   BarChart3,
   Building2,
@@ -8,9 +9,12 @@ import {
   Inbox,
   LayoutDashboard,
   ListChecks,
+  LogIn,
+  LogOut,
   Megaphone,
   Settings,
   ShieldOff,
+  UserCog,
   Users,
 } from "lucide-react";
 import { useClientPathname } from "@/hooks/use-client-pathname";
@@ -26,11 +30,27 @@ const nav = [
   { href: "/brands", label: "Entities", icon: Building2 },
   { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/opt-outs", label: "Opt-outs", icon: ShieldOff },
+  { href: "/users", label: "Users", icon: UserCog },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function AppSidebar() {
   const pathname = useClientPathname();
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetch("/api/auth/session", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json: { user?: { email?: string } | null }) => {
+        setSessionEmail(json.user?.email || null);
+      })
+      .catch(() => undefined);
+  }, [pathname]);
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  }
 
   return (
     <aside className="flex h-full w-64 flex-col border-r border-[color:var(--ink-border)] bg-[color:var(--panel)]">
@@ -67,6 +87,27 @@ export function AppSidebar() {
         })}
       </nav>
       <div className="border-t border-[color:var(--ink-border)] p-4 text-xs text-[color:var(--ink-muted)]">
+        {sessionEmail ? (
+          <div className="mb-2 space-y-2">
+            <div className="truncate text-[color:var(--ink-soft)]">
+              {sessionEmail}
+            </div>
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="flex items-center gap-2 text-[color:var(--ink-soft)] hover:text-[color:var(--ink)]"
+            >
+              <LogOut className="size-3.5" /> Sign out
+            </button>
+          </div>
+        ) : (
+          <Link
+            href="/login"
+            className="mb-2 flex items-center gap-2 text-[color:var(--ink-soft)] hover:text-[color:var(--ink)]"
+          >
+            <LogIn className="size-3.5" /> Sign in
+          </Link>
+        )}
         Upload once · verify · rotate · never mix brands.
       </div>
     </aside>

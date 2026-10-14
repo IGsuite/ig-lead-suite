@@ -16,13 +16,13 @@ One backend for multi-entity outbound: a **shared lead pool** feeding separate c
 
 | Piece | Role |
 |---|---|
-| **Neon** | Postgres — shared lead pool + entity data |
-| **Next.js** | SignalDesk ops UI — upload, campaigns, Autopilot, reports |
+| **Neon** | Postgres — shared lead pool + entity data + users |
+| **Next.js** | SignalDesk ops UI — upload, campaigns, Autopilot, reports, users |
 | **Telnyx** | SMS delivery backend (numbers + 10DLC per entity) |
 | **Instantly / Smartlead** | Cold email delivery (warmup + inbox placement) |
 | **n8n** | Interested reply → that entity’s CRM / website API |
 
-SignalDesk is where you upload leads and run campaigns. **Telnyx sends the texts.** Your CRM gets replies/interested leads via n8n — it is not the blast engine.
+SignalDesk is where you upload leads and run campaigns. **Telnyx sends the texts; Smartlead/Instantly send the emails.** Your CRM gets replies via n8n later — it is not the blast engine.
 
 Without `DATABASE_URL`, the app uses a local JSON store under `.data/` so you can still demo the UI.
 
@@ -30,7 +30,37 @@ Without `DATABASE_URL`, the app uses a local JSON store under `.data/` so you ca
 
 See **[SETUP.md](SETUP.md)** and the in-app **Go live** page (`/setup`).
 
-**Current:** Neon live · Telnyx SMS keyed (10DLC Brand pending) · **next = Smartlead** + public HTTPS for webhooks (`PUBLIC_APP_URL`).
+**Current:** Neon live · Telnyx SMS keyed · Smartlead keyed · **10DLC Brand approved (OK)** · **next = register 10DLC Campaign** for volume SMS · optional stable `PUBLIC_APP_URL` (Vercel).
+
+## Campaign send windows
+
+Each campaign (and Autopilot quota) has a **send window**: morning / afternoon / evening / custom / any (America/New_York).
+
+- Launch outside the window → status stays **scheduled** (no send).
+- Launch again inside the window → SignalDesk delivers via Telnyx or Smartlead.
+- **Reports → Send timing** shows reply performance by morning / afternoon / evening.
+
+## Users & entity access
+
+| Role | Sees |
+|---|---|
+| **Admin** | All entities + Users admin + Autopilot |
+| **Member** | Only `allowedEntityIds` portals (campaigns, inbox, reports, brands) |
+
+Shared leads remain shared. Portals never mix.
+
+```bash
+# .env
+AUTH_SECRET=long-random-string
+AUTH_ADMIN_EMAIL=admin@signaldesk.local
+AUTH_ADMIN_PASSWORD=changeme
+# Optional: force login for every page/API (except webhooks)
+# AUTH_REQUIRED=true
+```
+
+Open **Users** in the sidebar to invite teammates. Sign in at `/login`.
+
+Upgrade path later: replace the cookie session with Clerk/Auth.js — keep the same `AppUser.allowedEntityIds` scoping.
 
 ## Connect Neon
 
@@ -52,8 +82,6 @@ npm run db:seed
 npm run dev
 ```
 
-For Cursor Cloud Agents, add `DATABASE_URL` under [Cloud Agent Secrets](https://cursor.com/dashboard/cloud-agents), then start a **new** agent and ask it to run `db:push` + `db:seed`.
-
 ## Run locally
 
 ```bash
@@ -63,64 +91,34 @@ npm run dev
 
 Open [http://127.0.0.1:43123](http://127.0.0.1:43123).
 
-Sample CSV: [`public/sample-leads.csv`](public/sample-leads.csv).
-
 ## Lead ops flow
 
 1. **Shared leads** — Upload a provider CSV (source + group). Email and phone are **verified on import**.
-2. **Reports** — **Sources** tab: which lead lists win per company. **Costs & ROI** tab: log SMS, email, setups, integrations, and list spend per entity (or shared overhead) and see cost per reply / interested.
-3. **Campaigns / Autopilot** — Build or spin daily volumes in SignalDesk. SMS goes out through **Telnyx**; cold email through Instantly/Smartlead once keyed.
-4. **Inbox (manual now)** — Replies come back to the number/mailbox that sent them → that entity’s SignalDesk inbox. You triage: Good lead → Email team (manual forward). CRM API later.
-5. **CRM (later)** — n8n pushes interested replies into each entity’s CRM/site. Campaigns themselves stay in SignalDesk so brands never mix.
+2. **Reports** — Sources, **Send timing**, and Costs & ROI — always filterable per company.
+3. **Campaigns / Autopilot** — Build or spin daily volumes **in SignalDesk** with send windows. SMS → Telnyx; email → Smartlead/Instantly.
+4. **Inbox** — Replies land in that entity’s inbox only. Good lead → Email team.
+5. **Users** — Give Ahava staff Ahava-only access, etc.
 
-### Where do people reply?
-
-| Channel | What the lead does | Where it lands |
-|---|---|---|
-| **SMS** | Texts back the Telnyx number | Webhook → **that entity’s Inbox** |
-| **Email** | Replies to the Instantly/Smartlead thread | Webhook → **that entity’s Inbox** |
-| **Landing page (optional)** | Clicks a link in the message | Their site form → later CRM; not required for reply triage |
-
-You do **not** need a landing page for SMS/email replies. The conversation stays on text/email. Landing pages are optional CTAs (“apply here”) on each entity’s real website.
-
-Manual workflow today: open **Inbox** → pick entity → Good lead → **Email team**. Later the same flag feeds the CRM API.
-
-### Telnyx
+### Telnyx / Smartlead
 
 ```bash
-# .env
-TELNYX_API_KEY=KEY...
+TELNYX_API_KEY=...
 TELNYX_FROM_NUMBER=+1...
-```
-
-Without a key, SMS runs in **mock** mode (safe for demos).
-
-### Cold email — Smartlead (or Instantly)
-
-Amazon SES and SendGrid are built for transactional / opted-in marketing. For **cold lead outreach**, use **Smartlead** or **Instantly** (warmup, rotation, better inbox placement). SES is fine later for transactional mail from your sites — not as the cold engine.
-
-```bash
-# .env — Smartlead first
 SMARTLEAD_API_KEY=...
 SMARTLEAD_CAMPAIGN_ID=...
-PUBLIC_APP_URL=https://your-public-host   # tunnel or Vercel
-# Webhooks:
-#   Telnyx  → ${PUBLIC_APP_URL}/api/webhooks/telnyx
-#   Smartlead EMAIL_REPLY → ${PUBLIC_APP_URL}/api/webhooks/email
+PUBLIC_APP_URL=https://your-public-host
 ```
-
-Without Smartlead/Instantly keys, email runs in **mock** mode.
 
 ## Architecture
 
 ```
 Provider CSVs → Shared lead pool (Neon) → auto-verify email/phone
                          ↓
-                    Autopilot wheel
+                    Autopilot wheel (+ send windows)
      ┌──────────┬──────────┬──────────┬──────────┬──────────┐
   Abstract    Ahava    Take More   Venture     TYH
   campaigns  campaigns  campaigns  campaigns campaigns
-  (isolated — never mixed)
+  (isolated — never mixed; ACL per user)
      ↓          ↓          ↓          ↓          ↓
-  each site / CRM API (via n8n)
+  Telnyx / Smartlead delivery backends
 ```

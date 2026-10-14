@@ -98,6 +98,13 @@ model Campaign {
   preferVerified  Boolean   @default(true)
   volume          Int
   throttlePerHour Int
+  /// morning | afternoon | evening | custom | any
+  sendWindowPreset String   @default("any")
+  /// Local HH:mm (used when preset=custom, also stored for presets)
+  sendWindowStart  String?
+  sendWindowEnd    String?
+  /// IANA timezone for the send window (default America/New_York)
+  timezone         String   @default("America/New_York")
   status          String
   sentCount       Int       @default(0)
   replyCount      Int       @default(0)
@@ -111,6 +118,18 @@ model Campaign {
 
   @@index([brandId])
   @@index([status])
+}
+
+/// Ops users — admin sees all entities; member only allowedEntityIds
+model AppUser {
+  id                String   @id
+  email             String   @unique
+  name              String
+  passwordHash      String
+  role              String   @default("member")
+  allowedEntityIds  String[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Reply {

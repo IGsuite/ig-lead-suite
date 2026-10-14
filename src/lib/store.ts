@@ -85,7 +85,7 @@ export async function createCampaign(
   return backend().createCampaign(input);
 }
 
-export async function launchCampaign(id: string): Promise<Campaign | null> {
+export async function launchCampaign(id: string) {
   return backend().launchCampaign(id);
 }
 

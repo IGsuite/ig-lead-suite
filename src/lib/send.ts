@@ -1,4 +1,9 @@
-import { renderEmailTemplate, sendColdEmail } from "@/lib/providers/email";
+import {
+  emailProviderName,
+  isColdEmailConfigured,
+  renderEmailTemplate,
+  sendColdEmail,
+} from "@/lib/providers/email";
 import {
   isTelnyxConfigured,
   renderSmsTemplate,
@@ -107,6 +112,8 @@ export async function deliverCampaignBatch(input: {
         ? isTelnyxConfigured()
           ? "telnyx"
           : "telnyx-mock"
-        : "cold-email-mock",
+        : isColdEmailConfigured()
+          ? emailProviderName()
+          : "cold-email-mock",
   };
 }

@@ -34,6 +34,7 @@ import {
   entitySourceResults,
   filterCostEntries,
   poolSourceResults,
+  timeOfDayResults,
 } from "@/lib/analytics";
 import { compactNumber, money } from "@/lib/client-format";
 import type { CostCategory } from "@/lib/types";
@@ -42,8 +43,13 @@ import { cn } from "@/lib/utils";
 function ReportsInner() {
   const { data, loading, error, refresh } = usePlatform();
   const searchParams = useSearchParams();
-  const [tab, setTab] = useState<"sources" | "costs">(
-    searchParams.get("tab") === "costs" ? "costs" : "sources",
+  const initialTab = searchParams.get("tab");
+  const [tab, setTab] = useState<"sources" | "costs" | "timing">(
+    initialTab === "costs"
+      ? "costs"
+      : initialTab === "timing"
+        ? "timing"
+        : "sources",
   );
   const [entityId, setEntityId] = useState(
     searchParams.get("entity") || "all",
@@ -79,6 +85,12 @@ function ReportsInner() {
           ? "shared"
           : entityId;
     return filterCostEntries(data.costEntries || [], filter);
+  }, [data, entityId]);
+
+  const timingRows = useMemo(() => {
+    if (!data) return [];
+    const scope = entityId === "all" || entityId === "shared" ? "all" : entityId;
+    return timeOfDayResults(data, scope);
   }, [data, entityId]);
 
   async function addCost(e: React.FormEvent) {
@@ -180,6 +192,14 @@ function ReportsInner() {
         </Button>
         <Button
           type="button"
+          variant={tab === "timing" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setTab("timing")}
+        >
+          Send timing
+        </Button>
+        <Button
+          type="button"
           variant={tab === "costs" ? "default" : "outline"}
           size="sm"
           onClick={() => setTab("costs")}
@@ -217,7 +237,57 @@ function ReportsInner() {
         </Select>
       </div>
 
-      {tab === "sources" ? (
+      {tab === "timing" ? (
+        !timingRows.some((r) => r.replies > 0) ? (
+          <EmptyPanel
+            title="No timing data yet"
+            description="Replies will bucket into morning / afternoon / evening so you can see which send windows perform best."
+          />
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] animate-rise">
+            <div className="border-b border-[color:var(--ink-border)] px-5 py-4">
+              <h2 className="font-[family-name:var(--font-display)] text-2xl">
+                Performance by time of day
+              </h2>
+              <p className="text-sm text-[color:var(--ink-muted)]">
+                Based on when replies arrived (America/New_York). Use this to
+                pick morning vs afternoon send windows per campaign.
+              </p>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Window</TableHead>
+                  <TableHead>Replies</TableHead>
+                  <TableHead>Interested</TableHead>
+                  <TableHead>Opt-outs</TableHead>
+                  <TableHead>Interested %</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[...timingRows]
+                  .sort(
+                    (a, b) =>
+                      (b.interestedRate ?? -1) - (a.interestedRate ?? -1),
+                  )
+                  .map((row) => (
+                    <TableRow key={row.bucket}>
+                      <TableCell className="font-medium">{row.label}</TableCell>
+                      <TableCell>{compactNumber(row.replies)}</TableCell>
+                      <TableCell>{compactNumber(row.interested)}</TableCell>
+                      <TableCell>{compactNumber(row.optOuts)}</TableCell>
+                      <TableCell>
+                        {row.interestedRate != null
+                          ? `${row.interestedRate}%`
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+          </div>
+        )
+      ) : tab === "sources" ? (
         !sourceRows.length ? (
           <EmptyPanel
             title="No report data yet"

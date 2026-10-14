@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
+import { assertEntityAccess, canAccessEntity, isAdminSession } from "@/lib/acl";
+import { getSession } from "@/lib/auth";
 import { createCostEntry, deleteCostEntry, getData } from "@/lib/store";
 import type { CostCategory } from "@/lib/types";
 
 export async function GET() {
+  const session = await getSession();
   const data = await getData();
-  return NextResponse.json(data.costEntries || []);
+  const entries = (data.costEntries || []).filter(
+    (e) => !e.brandId || canAccessEntity(session, e.brandId),
+  );
+  return NextResponse.json(entries);
 }
 
 export async function POST(request: Request) {
+  const session = await getSession();
   const body = (await request.json()) as {
     brandId?: string | null;
     category?: CostCategory;
@@ -23,6 +30,18 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "category and label are required" },
       { status: 400 },
+    );
+  }
+
+  if (body.brandId) {
+    const gate = assertEntityAccess(session, body.brandId);
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.error }, { status: gate.status });
+    }
+  } else if (!isAdminSession(session)) {
+    return NextResponse.json(
+      { error: "Only admins can log shared overhead" },
+      { status: 403 },
     );
   }
 
@@ -49,6 +68,10 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const session = await getSession();
+  if (!isAdminSession(session)) {
+    return NextResponse.json({ error: "Admin only" }, { status: 403 });
+  }
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   if (!id) {

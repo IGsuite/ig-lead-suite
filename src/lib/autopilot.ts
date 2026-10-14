@@ -21,6 +21,8 @@ export function defaultQuotas(entityIds: string[]): EntityDailyQuota[] {
     dailyEmailVolume: DEFAULT_DAILY_EMAIL,
     dailySmsVolume: DEFAULT_DAILY_SMS,
     enabled: true,
+    sendWindowPreset: "morning" as const,
+    timezone: "America/New_York",
   }));
 }
 
@@ -46,6 +48,10 @@ export function normalizeRotation(
       dailyEmailVolume: prev?.dailyEmailVolume ?? DEFAULT_DAILY_EMAIL,
       dailySmsVolume: prev?.dailySmsVolume ?? DEFAULT_DAILY_SMS,
       enabled: prev?.enabled ?? true,
+      sendWindowPreset: prev?.sendWindowPreset ?? ("morning" as const),
+      sendWindowStart: prev?.sendWindowStart ?? null,
+      sendWindowEnd: prev?.sendWindowEnd ?? null,
+      timezone: prev?.timezone ?? "America/New_York",
     };
   });
 

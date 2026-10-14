@@ -146,6 +146,10 @@ export function mapCampaign(row: {
   preferVerified: boolean;
   volume: number;
   throttlePerHour: number;
+  sendWindowPreset?: string | null;
+  sendWindowStart?: string | null;
+  sendWindowEnd?: string | null;
+  timezone?: string | null;
   status: string;
   sentCount: number;
   replyCount: number;
@@ -167,6 +171,11 @@ export function mapCampaign(row: {
     preferVerified: row.preferVerified,
     volume: row.volume,
     throttlePerHour: row.throttlePerHour,
+    sendWindowPreset: (row.sendWindowPreset ||
+      "any") as Campaign["sendWindowPreset"],
+    sendWindowStart: row.sendWindowStart ?? null,
+    sendWindowEnd: row.sendWindowEnd ?? null,
+    timezone: row.timezone || "America/New_York",
     status: row.status as Campaign["status"],
     sentCount: row.sentCount,
     replyCount: row.replyCount,

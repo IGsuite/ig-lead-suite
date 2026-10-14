@@ -22,7 +22,19 @@ import type {
   UploadBatch,
 } from "@/lib/types";
 import { deliverCampaignBatch } from "@/lib/send";
+import {
+  isWithinSendWindow,
+  normalizeSendWindow,
+  sendWindowLabel,
+} from "@/lib/send-window";
 import { applyVerification } from "@/lib/verify";
+
+export type LaunchResult = {
+  campaign: Campaign;
+  deferred: boolean;
+  reason?: string;
+  windowLabel?: string;
+};
 
 const DATA_DIR = path.join(process.cwd(), ".data");
 const DATA_FILE = path.join(DATA_DIR, "platform.json");
@@ -38,6 +50,11 @@ async function ensureStore(): Promise<PlatformData> {
       return seed;
     }
     if (!parsed.costEntries) parsed.costEntries = [];
+    for (const c of parsed.campaigns || []) {
+      if (!c.sendWindowPreset) {
+        Object.assign(c, normalizeSendWindow(c));
+      }
+    }
     return parsed;
   } catch {
     const seed = createSeedData();
@@ -214,8 +231,10 @@ export async function createCampaign(
   >,
 ): Promise<Campaign> {
   const data = await ensureStore();
+  const win = normalizeSendWindow(input);
   const campaign: Campaign = {
     ...input,
+    ...win,
     id: `camp-${Date.now()}`,
     sentCount: 0,
     replyCount: 0,
@@ -228,10 +247,26 @@ export async function createCampaign(
   return campaign;
 }
 
-export async function launchCampaign(id: string): Promise<Campaign | null> {
+export async function launchCampaign(id: string): Promise<LaunchResult | null> {
   const data = await ensureStore();
   const campaign = data.campaigns.find((c) => c.id === id);
   if (!campaign) return null;
+
+  // Backfill window fields for older local JSON rows
+  if (!campaign.sendWindowPreset) {
+    Object.assign(campaign, normalizeSendWindow(campaign));
+  }
+
+  if (!isWithinSendWindow(campaign)) {
+    campaign.status = "scheduled";
+    await writeStore(data);
+    return {
+      campaign,
+      deferred: true,
+      reason: "outside_send_window",
+      windowLabel: sendWindowLabel(campaign),
+    };
+  }
 
   const eligible = data.leads
     .filter((lead) =>
@@ -263,7 +298,7 @@ export async function launchCampaign(id: string): Promise<Campaign | null> {
   campaign.sentCount = toSend.length;
   campaign.startedAt = new Date().toISOString();
   await writeStore(data);
-  return campaign;
+  return { campaign, deferred: false };
 }
 
 export async function applyOptOut(input: {
@@ -501,6 +536,14 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
     const quota = rotation.quotas.find((q) => q.entityId === entityId);
     if (!brand || !quota?.enabled || !brand.rotationEnabled) continue;
 
+    const win = normalizeSendWindow({
+      sendWindowPreset: quota.sendWindowPreset || "morning",
+      sendWindowStart: quota.sendWindowStart,
+      sendWindowEnd: quota.sendWindowEnd,
+      timezone: quota.timezone,
+    });
+    const inWindow = isWithinSendWindow(win);
+
     const copy = entityOfferCopy(brand);
     const channels: Array<{
       channel: "sms" | "email";
@@ -544,7 +587,11 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
         preferVerified: true,
         volume: leg.volume,
         throttlePerHour: Math.max(60, Math.round(leg.volume / 12)),
-        status: "draft",
+        sendWindowPreset: win.sendWindowPreset,
+        sendWindowStart: win.sendWindowStart,
+        sendWindowEnd: win.sendWindowEnd,
+        timezone: win.timezone,
+        status: inWindow ? "draft" : "scheduled",
         sentCount: 0,
         replyCount: 0,
         optOutCount: 0,
@@ -552,6 +599,17 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
         createdAt: new Date().toISOString(),
       };
       data.campaigns.unshift(campaign);
+
+      if (!inWindow) {
+        legs.push({
+          entityId,
+          channel: leg.channel,
+          campaignId: campaign.id,
+          sent: 0,
+          volume: leg.volume,
+        });
+        continue;
+      }
 
       const eligible = data.leads
         .filter((lead) => {

@@ -19,7 +19,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { usePlatform } from "@/hooks/use-platform";
 import { compactNumber } from "@/lib/client-format";
-import type { CampaignChannel } from "@/lib/types";
+import type { CampaignChannel, SendWindowPreset } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function CampaignBuilderInner() {
@@ -41,6 +41,10 @@ function CampaignBuilderInner() {
   const [preferVerified, setPreferVerified] = useState(true);
   const [volume, setVolume] = useState(1500);
   const [throttlePerHour, setThrottlePerHour] = useState(120);
+  const [sendWindowPreset, setSendWindowPreset] =
+    useState<SendWindowPreset>("morning");
+  const [sendWindowStart, setSendWindowStart] = useState("09:00");
+  const [sendWindowEnd, setSendWindowEnd] = useState("12:00");
   const [saving, setSaving] = useState(false);
 
   const sources = useMemo(() => {
@@ -107,18 +111,34 @@ function CampaignBuilderInner() {
           preferVerified,
           volume,
           throttlePerHour,
+          sendWindowPreset,
+          sendWindowStart:
+            sendWindowPreset === "custom" ? sendWindowStart : undefined,
+          sendWindowEnd:
+            sendWindowPreset === "custom" ? sendWindowEnd : undefined,
+          timezone: "America/New_York",
           status,
         }),
       });
       if (!res.ok) throw new Error("Could not create campaign");
       const campaign = (await res.json()) as { id: string };
       if (status === "scheduled") {
-        await fetch("/api/campaigns", {
+        const launchRes = await fetch("/api/campaigns", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "launch", id: campaign.id }),
         });
-        toast.success("Campaign created and launched (mock throttled send)");
+        const launched = (await launchRes.json()) as {
+          deferred?: boolean;
+          windowLabel?: string;
+        };
+        if (launched.deferred) {
+          toast.message(
+            `Scheduled — outside send window (${launched.windowLabel || "window"}). Launch again during the window.`,
+          );
+        } else {
+          toast.success("Campaign launched through SignalDesk → Telnyx / Smartlead");
+        }
       } else {
         toast.success("Draft campaign saved");
       }
@@ -304,6 +324,58 @@ function CampaignBuilderInner() {
                 onChange={(e) => setThrottlePerHour(Number(e.target.value) || 1)}
               />
             </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Send window (America/New_York)</Label>
+              <Select
+                value={sendWindowPreset}
+                onValueChange={(value) => {
+                  if (value) setSendWindowPreset(value as SendWindowPreset);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="morning">Morning (9am–12pm)</SelectItem>
+                  <SelectItem value="afternoon">Afternoon (1pm–5pm)</SelectItem>
+                  <SelectItem value="evening">Evening (5pm–8pm)</SelectItem>
+                  <SelectItem value="custom">Custom hours</SelectItem>
+                  <SelectItem value="any">Any time</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-[color:var(--ink-muted)]">
+                Sends only fire inside this window (email + SMS). Different
+                campaigns can use different windows.
+              </p>
+            </div>
+            {sendWindowPreset === "custom" ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Start</Label>
+                  <Input
+                    type="time"
+                    value={sendWindowStart}
+                    onChange={(e) => setSendWindowStart(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>End</Label>
+                  <Input
+                    type="time"
+                    value={sendWindowEnd}
+                    onChange={(e) => setSendWindowEnd(e.target.value)}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2 text-sm text-[color:var(--ink-soft)] self-end">
+                Outside the window, launch stays <strong>scheduled</strong> until
+                you run it again in-hours.
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2">
