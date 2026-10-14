@@ -15,7 +15,7 @@ const display = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Master Marketing CRM — Multi-entity outbound ops",
+  title: "IG Lead Suite — Master Marketing CRM",
   description:
     "Shared lead pool feeding Abstract, Ahava, Take More, Venture, and TYH portals with rotating offers.",
 };

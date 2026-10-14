@@ -1,6 +1,11 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { hashPassword, toPublicUser, verifyPassword } from "@/lib/auth";
+import {
+  hashPassword,
+  isProductionDeploy,
+  toPublicUser,
+  verifyPassword,
+} from "@/lib/auth";
 import { isNeonConfigured, getPrisma } from "@/lib/db";
 import type { AppUser, AppUserPublic, UserRole } from "@/lib/types";
 
@@ -9,8 +14,21 @@ const USERS_FILE = path.join(DATA_DIR, "users.json");
 
 const DEFAULT_ADMIN_EMAIL =
   process.env.AUTH_ADMIN_EMAIL?.trim().toLowerCase() || "admin@signaldesk.local";
-const DEFAULT_ADMIN_PASSWORD =
-  process.env.AUTH_ADMIN_PASSWORD?.trim() || "changeme";
+
+/**
+ * Bootstrap admin password.
+ * Production / Vercel: AUTH_ADMIN_PASSWORD (or SITE_ACCESS_CODE) is required — never "changeme".
+ * Local demos: falls back to "changeme" only when neither env is set.
+ */
+function resolveBootstrapAdminPassword(): string | null {
+  const fromEnv =
+    process.env.AUTH_ADMIN_PASSWORD?.trim() ||
+    process.env.SITE_ACCESS_CODE?.trim() ||
+    "";
+  if (fromEnv) return fromEnv;
+  if (isProductionDeploy()) return null;
+  return "changeme";
+}
 
 function isMissingUserTable(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
@@ -68,11 +86,18 @@ export async function ensureDefaultAdmin(): Promise<void> {
   if (byEmail) return;
   const existing = await listUsers();
   if (existing.length > 0) return;
+  const password = resolveBootstrapAdminPassword();
+  if (!password) {
+    console.warn(
+      "[auth] Set AUTH_ADMIN_PASSWORD (or SITE_ACCESS_CODE) on Vercel/production — refusing to bootstrap admin with a default password.",
+    );
+    return;
+  }
   try {
     await createUser({
       email: DEFAULT_ADMIN_EMAIL,
-      name: "Master Marketing CRM Admin",
-      password: DEFAULT_ADMIN_PASSWORD,
+      name: "IG Lead Suite Admin",
+      password,
       role: "admin",
       allowedEntityIds: [],
     });
@@ -137,8 +162,17 @@ export async function authenticateUser(
   await ensureDefaultAdmin();
   const user = await getUserByEmail(email);
   if (!user) return null;
-  if (!verifyPassword(password, user.passwordHash)) return null;
-  return user;
+  if (verifyPassword(password, user.passwordHash)) return user;
+  // Optional site passcode: accept SITE_ACCESS_CODE for the bootstrap admin email
+  const siteCode = process.env.SITE_ACCESS_CODE?.trim();
+  if (
+    siteCode &&
+    user.email === DEFAULT_ADMIN_EMAIL &&
+    password === siteCode
+  ) {
+    return user;
+  }
+  return null;
 }
 
 export async function createUser(input: {
@@ -277,6 +311,15 @@ export async function deleteUser(id: string): Promise<boolean> {
   return true;
 }
 
-export function defaultAdminCredentials(): { email: string; password: string } {
-  return { email: DEFAULT_ADMIN_EMAIL, password: DEFAULT_ADMIN_PASSWORD };
+export function defaultAdminCredentials(): {
+  email: string;
+  password: string | null;
+  passwordConfigured: boolean;
+} {
+  const password = resolveBootstrapAdminPassword();
+  return {
+    email: DEFAULT_ADMIN_EMAIL,
+    password,
+    passwordConfigured: Boolean(password),
+  };
 }

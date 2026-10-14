@@ -139,12 +139,12 @@ export default function UsersPage() {
 
       {sessionRole === "anon" ? (
         <p className="mb-4 rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4 text-sm text-[color:var(--ink-soft)]">
-          Open mode (not signed in) acts as admin.{" "}
+          Local open mode (not signed in) acts as admin.{" "}
           <a href="/login" className="underline">
             Sign in
           </a>{" "}
-          or set <code>AUTH_REQUIRED=true</code> to require login. Default
-          admin: admin@signaldesk.local
+          — on Vercel, login is required by default. Default admin:{" "}
+          admin@signaldesk.local (set AUTH_ADMIN_PASSWORD).
         </p>
       ) : null}
 

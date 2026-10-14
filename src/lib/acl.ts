@@ -1,16 +1,17 @@
-import type { SessionPayload } from "@/lib/auth";
+import { isAuthRequired, type SessionPayload } from "@/lib/auth";
 import type { PlatformData } from "@/lib/types";
 
 /**
  * Entity access control.
- * - No session (open mode): full admin access (all entities).
+ * - No session + auth not required (local open mode): full admin access.
+ * - No session + auth required: deny (middleware should already block).
  * - role=admin: all entities.
  * - role=member: only allowedEntityIds.
  * Shared lead pool stays shared; isolation is on portals/campaigns/inbox/reports.
  */
 
 export function isAdminSession(session: SessionPayload | null): boolean {
-  if (!session) return true; // anonymous open mode = operator
+  if (!session) return !isAuthRequired(); // anonymous open mode only when unlocked
   return session.role === "admin";
 }
 
@@ -18,7 +19,8 @@ export function allowedEntityIdsFor(
   session: SessionPayload | null,
   allEntityIds: string[],
 ): string[] | "all" {
-  if (!session || session.role === "admin") return "all";
+  if (!session) return isAuthRequired() ? [] : "all";
+  if (session.role === "admin") return "all";
   const allowed = session.allowedEntityIds.filter((id) =>
     allEntityIds.includes(id),
   );
@@ -29,7 +31,8 @@ export function canAccessEntity(
   session: SessionPayload | null,
   entityId: string,
 ): boolean {
-  if (!session || session.role === "admin") return true;
+  if (!session) return !isAuthRequired();
+  if (session.role === "admin") return true;
   return session.allowedEntityIds.includes(entityId);
 }
 

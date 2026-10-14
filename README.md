@@ -1,4 +1,4 @@
-# Master Marketing CRM
+# IG Lead Suite (Master Marketing CRM)
 
 One backend for multi-entity outbound: a **shared lead pool** feeding separate company portals — each with its own offer, sending identity, and website/CRM API hook.
 
@@ -52,16 +52,27 @@ Each campaign (and Autopilot quota) has a **send window**: morning / afternoon /
 
 Shared leads remain shared. Portals never mix.
 
+**Production (Vercel) locks the site behind login by default.** Local stays open for demos unless you set `AUTH_REQUIRED=true`.
+
 ```bash
-# .env
-AUTH_SECRET=long-random-string
+# .env / Vercel Project → Settings → Environment Variables
+AUTH_SECRET=long-random-string          # required — signs session cookies
 AUTH_ADMIN_EMAIL=admin@signaldesk.local
-AUTH_ADMIN_PASSWORD=changeme
-# Optional: force login for every page/API (except webhooks)
-# AUTH_REQUIRED=true
+AUTH_ADMIN_PASSWORD=your-strong-password  # required on Vercel (no changeme)
+# AUTH_REQUIRED=true                    # force login locally
+# AUTH_REQUIRED=false                   # only if you intentionally want an open deploy
+# SITE_ACCESS_CODE=optional-passcode    # optional alternate admin password
 ```
 
 Open **Users** in the sidebar to invite teammates. Sign in at `/login`.
+
+**Still public without browser login** (providers need this):
+
+- `/api/webhooks/telnyx`
+- `/api/webhooks/email`
+- `/api/providers/status` (health)
+
+Optional second layer: enable [Vercel Deployment Protection](https://vercel.com/docs/security/deployment-protection) on the project (SSO / Vercel auth). App login still applies after that.
 
 Upgrade path later: replace the cookie session with Clerk/Auth.js — keep the same `AppUser.allowedEntityIds` scoping.
 

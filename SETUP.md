@@ -1,6 +1,6 @@
-# Master Marketing CRM — go-live checklist
+# IG Lead Suite (Master Marketing CRM) — go-live checklist
 
-The **ops app is built**. Neon + Telnyx SMS + Smartlead are keyed. What’s left: **register the Telnyx 10DLC Campaign** (Brand is already **OK**), keep a **public webhook URL**, and optionally lock down login with `AUTH_REQUIRED`.
+The **ops app is built**. Neon + Telnyx SMS + Smartlead are keyed. What’s left: **register the Telnyx 10DLC Campaign** (Brand is already **OK**), keep a **public webhook URL**, and set auth secrets on Vercel (login is **on by default** in production).
 
 ## Already done in Master Marketing CRM
 
@@ -54,18 +54,25 @@ Webhook: `${PUBLIC_APP_URL}/api/webhooks/email` (event **EMAIL_REPLY**).
 
 Cloudflare Tunnel for local tests, or Vercel for production. Set `PUBLIC_APP_URL`.
 
-### 4. Users (optional but ready)
+### 4. Users & site lock (required on Vercel)
+
+On **Vercel / production**, auth is required automatically (unless `AUTH_REQUIRED=false`). Local demos stay open unless you set `AUTH_REQUIRED=true`.
 
 ```bash
-AUTH_SECRET=long-random-string
+AUTH_SECRET=long-random-string           # required — signs cookies
 AUTH_ADMIN_EMAIL=admin@signaldesk.local
-AUTH_ADMIN_PASSWORD=changeme
-# AUTH_REQUIRED=true   # force login
+AUTH_ADMIN_PASSWORD=your-strong-password # required on Vercel — do not use changeme
+# SITE_ACCESS_CODE=optional-passcode     # optional alternate admin password
+# AUTH_REQUIRED=true                     # force login locally
+# AUTH_REQUIRED=false                    # only if you want an unlocked deploy
 ```
 
-1. Open `/login` with the admin credentials  
-2. **Users** → add members and check only the entities they may see  
-3. Members never see other companies’ campaigns / inbox / reports  
+1. Set the vars above in Vercel → Project → Environment Variables (Production)  
+2. Open `/login` with the admin email + `AUTH_ADMIN_PASSWORD`  
+3. **Users** → add members and check only the entities they may see  
+4. Members never see other companies’ campaigns / inbox / reports  
+
+**Webhooks stay public** (no browser login): `/api/webhooks/telnyx`, `/api/webhooks/email`. Optional second layer: Vercel Deployment Protection.
 
 ### 5. Campaign timing
 
@@ -85,9 +92,11 @@ TELNYX_FROM_NUMBER=+1...         # done
 SMARTLEAD_API_KEY=...            # done
 SMARTLEAD_CAMPAIGN_ID=...        # done
 PUBLIC_APP_URL=https://...       # tunnel or Vercel
-AUTH_SECRET=...                  # recommended
-AUTH_ADMIN_PASSWORD=...          # change from changeme
-# AUTH_REQUIRED=true
+AUTH_SECRET=...                  # required on Vercel
+AUTH_ADMIN_PASSWORD=...          # required on Vercel (not changeme)
+# SITE_ACCESS_CODE=...           # optional
+# AUTH_REQUIRED=true             # local lock / explicit
+# AUTH_REQUIRED=false            # unlock a deploy (not recommended)
 # N8N_WEBHOOK_URL=...            # later
 ```
 
@@ -103,4 +112,4 @@ AUTH_ADMIN_PASSWORD=...          # change from changeme
 | Per-company user access | Yes — Users page |
 
 **Still needs you:** Telnyx **10DLC Campaign** registration.  
-**Optional:** Stable production URL (Vercel) + `AUTH_REQUIRED=true`.
+**On Vercel:** set `AUTH_SECRET` + `AUTH_ADMIN_PASSWORD` (login is required by default; webhooks remain public).

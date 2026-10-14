@@ -17,10 +17,15 @@ export async function GET() {
     authRequired: isAuthRequired(),
     user: user ? toPublicUser(user) : null,
     userCount: users.length,
-    /** Only expose bootstrap hint when still on default local admin setup */
+    /** Only expose bootstrap hint for local demos — never password values */
     bootstrapHint:
-      !session && process.env.NODE_ENV !== "production"
-        ? { email: creds.email, passwordHint: "see AUTH_ADMIN_PASSWORD or changeme" }
+      !session && process.env.NODE_ENV !== "production" && process.env.VERCEL !== "1"
+        ? {
+            email: creds.email,
+            passwordHint: creds.passwordConfigured
+              ? "see AUTH_ADMIN_PASSWORD or SITE_ACCESS_CODE"
+              : "set AUTH_ADMIN_PASSWORD (local default: changeme)",
+          }
         : null,
   });
 }

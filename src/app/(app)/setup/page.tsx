@@ -135,7 +135,7 @@ export default function SetupPage() {
       id: "users",
       title: "7. Users & entity access",
       youDo:
-        "Add teammates under Users. Members only see entities you assign. Set AUTH_REQUIRED=true to force login.",
+        "Add teammates under Users. Members only see entities you assign. Vercel locks the site behind login by default (set AUTH_ADMIN_PASSWORD + AUTH_SECRET).",
       href: "/users",
       hrefLabel: "Manage users",
     },

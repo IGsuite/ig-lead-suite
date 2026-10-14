@@ -4,6 +4,10 @@ import type { NextRequest } from "next/server";
 /** Keep Edge-safe: only presence-check the cookie. Full HMAC verify happens in Node route handlers. */
 const SESSION_COOKIE = "sd_session";
 
+/**
+ * Public without a session cookie.
+ * Webhooks (Telnyx / Smartlead) MUST stay here — providers cannot log in.
+ */
 const PUBLIC_PATHS = [
   "/login",
   "/api/auth/login",
@@ -21,9 +25,16 @@ function isPublic(pathname: string): boolean {
   );
 }
 
+/**
+ * Mirror of src/lib/auth isAuthRequired (Edge cannot import Node crypto module).
+ * Vercel / production → auth on unless AUTH_REQUIRED=false.
+ * Local → open unless AUTH_REQUIRED=true.
+ */
 function isAuthRequired(): boolean {
   const v = process.env.AUTH_REQUIRED?.trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes";
+  if (v === "0" || v === "false" || v === "no") return false;
+  if (v === "1" || v === "true" || v === "yes") return true;
+  return process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
 }
 
 export function middleware(request: NextRequest) {

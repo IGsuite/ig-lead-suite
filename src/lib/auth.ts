@@ -21,9 +21,26 @@ function authSecret(): string {
   );
 }
 
+/** True on Vercel or NODE_ENV=production (Edge-safe env checks only). */
+export function isProductionDeploy(): boolean {
+  return (
+    process.env.VERCEL === "1" || process.env.NODE_ENV === "production"
+  );
+}
+
+/**
+ * When auth is required, unauthenticated visitors are redirected to /login
+ * (middleware). Webhooks and a few health routes stay public.
+ *
+ * Defaults:
+ * - Vercel / production → required (unless AUTH_REQUIRED=false)
+ * - Local → open for demos (unless AUTH_REQUIRED=true)
+ */
 export function isAuthRequired(): boolean {
   const v = process.env.AUTH_REQUIRED?.trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes";
+  if (v === "0" || v === "false" || v === "no") return false;
+  if (v === "1" || v === "true" || v === "yes") return true;
+  return isProductionDeploy();
 }
 
 export function hashPassword(password: string, salt?: string): string {

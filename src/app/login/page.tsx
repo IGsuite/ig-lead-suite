@@ -48,8 +48,7 @@ function LoginInner() {
             {PRODUCT_NAME}
           </h1>
           <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
-            Sign in to your entity portals. Shared leads stay shared — campaigns
-            and inboxes stay isolated.
+            Master Marketing CRM — sign in with your email and password.
           </p>
         </div>
         <div className="space-y-2">
@@ -78,8 +77,8 @@ function LoginInner() {
           <p className="text-sm text-red-700">{error}</p>
         ) : (
           <p className="text-xs text-[color:var(--ink-muted)]">
-            Default admin: admin@signaldesk.local — set AUTH_ADMIN_PASSWORD (or
-            use changeme). Set AUTH_REQUIRED=true to force login.
+            Production requires AUTH_ADMIN_PASSWORD (and AUTH_SECRET) in env.
+            Optional SITE_ACCESS_CODE works as the admin passcode.
           </p>
         )}
         <Button type="submit" className="w-full" disabled={saving}>
