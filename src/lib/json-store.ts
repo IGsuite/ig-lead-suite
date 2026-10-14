@@ -58,11 +58,20 @@ async function ensureStore(): Promise<PlatformData> {
       return seed;
     }
     if (!parsed.costEntries) parsed.costEntries = [];
-    if (!parsed.messageTemplates) parsed.messageTemplates = [];
-    if (!parsed.adFolders) parsed.adFolders = [];
-    if (!parsed.adAssets) parsed.adAssets = [];
+    if (!Array.isArray(parsed.messageTemplates)) parsed.messageTemplates = [];
+    if (!Array.isArray(parsed.adFolders)) parsed.adFolders = [];
+    if (!Array.isArray(parsed.adAssets)) parsed.adAssets = [];
     for (const t of parsed.messageTemplates) {
       if (t.folderId === undefined) t.folderId = null;
+      if (t.brandId === undefined) t.brandId = null;
+    }
+    for (const f of parsed.adFolders) {
+      if (f.brandId === undefined) f.brandId = null;
+      if (f.parentId === undefined) f.parentId = null;
+    }
+    for (const a of parsed.adAssets) {
+      if (a.brandId === undefined) a.brandId = null;
+      if (a.folderId === undefined) a.folderId = null;
     }
     for (const c of parsed.campaigns || []) {
       if (!c.sendWindowPreset) {

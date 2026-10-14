@@ -60,12 +60,65 @@ export type LaunchResult = {
   windowLabel?: string;
 };
 
+function isMissingCollectionError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message;
+  return (
+    /does not exist/i.test(msg) ||
+    /\bP2021\b/.test(msg) ||
+    /Cannot read properties of undefined/i.test(msg) ||
+    /missing Ads\/auth model delegates/i.test(msg)
+  );
+}
+
+async function safeFindMany<T>(
+  run: () => Promise<T[]>,
+  label: string,
+): Promise<T[]> {
+  try {
+    return await run();
+  } catch (err) {
+    if (!isMissingCollectionError(err)) throw err;
+    console.warn(
+      `[neon-store] ${label} unavailable; returning []:`,
+      err instanceof Error ? err.message : err,
+    );
+    return [];
+  }
+}
+
 async function ensureSeeded(): Promise<void> {
   const prisma = getPrisma();
   const settings = await prisma.platformSettings.findUnique({
     where: { id: "default" },
   });
   if (settings && settings.version === STORE_VERSION) return;
+
+  // Never wipe live entity data on a STORE_VERSION bump — that loop destroys the CRM.
+  // Soft-bump when brands already exist; only full-seed an empty database.
+  const brandCount = settings
+    ? await prisma.entity.count().catch(() => 0)
+    : 0;
+  if (brandCount > 0 && settings) {
+    try {
+      await Promise.all([
+        safeFindMany(() => prisma.messageTemplate.findMany({ take: 1 }), "MessageTemplate"),
+        safeFindMany(() => prisma.adFolder.findMany({ take: 1 }), "AdFolder"),
+        safeFindMany(() => prisma.adAsset.findMany({ take: 1 }), "AdAsset"),
+      ]);
+      await prisma.platformSettings.update({
+        where: { id: "default" },
+        data: { version: STORE_VERSION },
+      });
+    } catch (err) {
+      console.error(
+        "[neon-store] STORE_VERSION soft-bump failed; refusing wipe because entities exist. Run `npx prisma db push`.",
+        err,
+      );
+    }
+    return;
+  }
+
   await replaceWithSeed();
 }
 
@@ -325,9 +378,18 @@ export async function getData(): Promise<PlatformData> {
     prisma.optOut.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.providerSpend.findMany({ orderBy: { source: "asc" } }),
     prisma.costEntry.findMany({ orderBy: { incurredAt: "desc" } }),
-    prisma.messageTemplate.findMany({ orderBy: { updatedAt: "desc" } }),
-    prisma.adFolder.findMany({ orderBy: { name: "asc" } }),
-    prisma.adAsset.findMany({ orderBy: { updatedAt: "desc" } }),
+    safeFindMany(
+      () => prisma.messageTemplate.findMany({ orderBy: { updatedAt: "desc" } }),
+      "MessageTemplate",
+    ),
+    safeFindMany(
+      () => prisma.adFolder.findMany({ orderBy: { name: "asc" } }),
+      "AdFolder",
+    ),
+    safeFindMany(
+      () => prisma.adAsset.findMany({ orderBy: { updatedAt: "desc" } }),
+      "AdAsset",
+    ),
     prisma.platformSettings.findUniqueOrThrow({ where: { id: "default" } }),
   ]);
 

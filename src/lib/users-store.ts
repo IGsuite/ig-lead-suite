@@ -19,7 +19,12 @@ function isMissingUserTable(err: unknown): boolean {
     /relation ["']?AppUser["']? does not exist/i.test(msg) ||
     /relation ["']?app_user["']? does not exist/i.test(msg) ||
     /table [`"']?AppUser[`"']? does not exist/i.test(msg) ||
-    /\bP2021\b/.test(msg)
+    /\bP2021\b/.test(msg) ||
+    // Stale Prisma singleton after schema bump (appUser delegate missing)
+    /Cannot read properties of undefined \(reading '(findMany|findUnique|create|update|delete)'\)/i.test(
+      msg,
+    ) ||
+    /missing Ads\/auth model delegates/i.test(msg)
   );
 }
 

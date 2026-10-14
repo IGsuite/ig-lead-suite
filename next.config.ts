@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
     "*.trycloudflare.com",
     "apollo-refrigerator-prefix-futures.trycloudflare.com",
   ],
+  async redirects() {
+    return [{ source: "/ads", destination: "/creatives", permanent: false }];
+  },
   turbopack: {
     rules: {
       "*.css": {

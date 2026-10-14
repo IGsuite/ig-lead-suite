@@ -7,6 +7,23 @@ const globalForPrisma = globalThis as unknown as {
   pgPool: Pool | undefined;
 };
 
+/** Delegates required by Ads + auth — stale hot-reload clients often lack these. */
+const REQUIRED_DELEGATES = [
+  "appUser",
+  "messageTemplate",
+  "adFolder",
+  "adAsset",
+  "platformSettings",
+  "entity",
+] as const;
+
+function clientHasRequiredDelegates(client: PrismaClient): boolean {
+  const c = client as unknown as Record<string, { findMany?: unknown } | undefined>;
+  return REQUIRED_DELEGATES.every(
+    (name) => typeof c[name]?.findMany === "function",
+  );
+}
+
 export function isNeonConfigured(): boolean {
   const url = process.env.DATABASE_URL?.trim();
   if (!url) return false;
@@ -20,7 +37,14 @@ export function getPrisma(): PrismaClient {
     throw new Error("DATABASE_URL is not set to a Neon Postgres connection string");
   }
 
-  if (globalForPrisma.prisma) return globalForPrisma.prisma;
+  if (globalForPrisma.prisma) {
+    if (clientHasRequiredDelegates(globalForPrisma.prisma)) {
+      return globalForPrisma.prisma;
+    }
+    // Discard stale singleton from before prisma generate (missing AdFolder, etc.)
+    void globalForPrisma.prisma.$disconnect().catch(() => undefined);
+    globalForPrisma.prisma = undefined;
+  }
 
   const pool =
     globalForPrisma.pgPool ??
@@ -33,6 +57,11 @@ export function getPrisma(): PrismaClient {
 
   const adapter = new PrismaPg(pool);
   const prisma = new PrismaClient({ adapter });
+  if (!clientHasRequiredDelegates(prisma)) {
+    throw new Error(
+      "Prisma client is missing Ads/auth model delegates. Run `npx prisma generate` and restart the server.",
+    );
+  }
   globalForPrisma.prisma = prisma;
   return prisma;
 }
