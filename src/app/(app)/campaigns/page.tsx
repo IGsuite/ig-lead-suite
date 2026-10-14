@@ -60,8 +60,8 @@ function CampaignsInner() {
       } else {
         toast.success(
           json.channel === "email"
-            ? "Launched through SignalDesk → Smartlead/Instantly"
-            : "Launched through SignalDesk → Telnyx SMS",
+            ? "Launched through Master Marketing CRM → Smartlead/Instantly"
+            : "Launched through Master Marketing CRM → Telnyx SMS",
         );
       }
       await refresh();

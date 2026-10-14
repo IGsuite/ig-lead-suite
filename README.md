@@ -1,6 +1,8 @@
-# SignalDesk
+# Master Marketing CRM
 
 One backend for multi-entity outbound: a **shared lead pool** feeding separate company portals — each with its own offer, sending identity, and website/CRM API hook.
+
+*(Internal package name remains `signaldesk`.)*
 
 ## Entities
 
@@ -17,12 +19,12 @@ One backend for multi-entity outbound: a **shared lead pool** feeding separate c
 | Piece | Role |
 |---|---|
 | **Neon** | Postgres — shared lead pool + entity data + users |
-| **Next.js** | SignalDesk ops UI — upload, campaigns, Autopilot, reports, users |
+| **Next.js** | Master Marketing CRM ops UI — upload, campaigns, Autopilot, reports, users |
 | **Telnyx** | SMS delivery backend (numbers + 10DLC per entity) |
 | **Instantly / Smartlead** | Cold email delivery (warmup + inbox placement) |
 | **n8n** | Interested reply → that entity’s CRM / website API |
 
-SignalDesk is where you upload leads and run campaigns. **Telnyx sends the texts; Smartlead/Instantly send the emails.** Your CRM gets replies via n8n later — it is not the blast engine.
+Master Marketing CRM is where you upload leads and run campaigns. **Telnyx sends the texts; Smartlead/Instantly send the emails.** Your CRM gets replies via n8n later — it is not the blast engine.
 
 Without `DATABASE_URL`, the app uses a local JSON store under `.data/` so you can still demo the UI.
 
@@ -37,8 +39,9 @@ See **[SETUP.md](SETUP.md)** and the in-app **Go live** page (`/setup`).
 Each campaign (and Autopilot quota) has a **send window**: morning / afternoon / evening / custom / any (America/New_York).
 
 - Launch outside the window → status stays **scheduled** (no send).
-- Launch again inside the window → SignalDesk delivers via Telnyx or Smartlead.
+- Launch again inside the window → Master Marketing CRM delivers via Telnyx or Smartlead.
 - **Reports → Send timing** shows reply performance by morning / afternoon / evening.
+- **Reports → Performance / Improve** — scorecards, best message copy, and source + timing + message in one view.
 
 ## Users & entity access
 
@@ -94,8 +97,8 @@ Open [http://127.0.0.1:43123](http://127.0.0.1:43123).
 ## Lead ops flow
 
 1. **Shared leads** — Upload a provider CSV (source + group). Email and phone are **verified on import**.
-2. **Reports** — Sources, **Send timing**, and Costs & ROI — always filterable per company.
-3. **Campaigns / Autopilot** — Build or spin daily volumes **in SignalDesk** with send windows. SMS → Telnyx; email → Smartlead/Instantly.
+2. **Reports** — Performance scorecards, best message ranking, Improve (source + timing + copy), Sources, Send timing, Costs & ROI — always filterable per company.
+3. **Campaigns / Autopilot** — Build or spin daily volumes **in Master Marketing CRM** with send windows. SMS → Telnyx; email → Smartlead/Instantly.
 4. **Inbox** — Replies land in that entity’s inbox only. Good lead → Email team.
 5. **Users** — Give Ahava staff Ahava-only access, etc.
 

@@ -3,9 +3,17 @@
 import Link from "next/link";
 import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
+import {
+  EntityScoreRow,
+  PerformanceScorecards,
+} from "@/components/performance-widgets";
 import { StatusPill } from "@/components/status-pill";
 import { ErrorPanel, LoadingPanel } from "@/components/state-panels";
 import { buttonVariants } from "@/components/ui/button";
+import {
+  allEntityPerformanceScores,
+  entityPerformanceScores,
+} from "@/lib/analytics";
 import { compactNumber, money } from "@/lib/client-format";
 import { usePlatform } from "@/hooks/use-platform";
 import { cn } from "@/lib/utils";
@@ -32,6 +40,8 @@ export default function DashboardPage() {
     .filter((p) => p.replies > 0)
     .sort((a, b) => a.costCents / a.replies - b.costCents / b.replies)[0];
   const rotating = data.brands.filter((b) => b.rotationEnabled);
+  const poolScores = entityPerformanceScores(data, "all");
+  const entityScores = allEntityPerformanceScores(data);
 
   const entityCoverage = data.brands.map((brand) => {
     const offered = data.leads.filter((l) =>
@@ -103,7 +113,35 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-[1.15fr_0.85fr] animate-rise-delay-1">
+      <section className="mt-6 animate-rise-delay-1">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="font-[family-name:var(--font-display)] text-2xl">
+              Pool performance
+            </h2>
+            <p className="text-sm text-[color:var(--ink-muted)]">
+              Reply rate, interested, conversions, and cost efficiency across
+              entities.
+            </p>
+          </div>
+          <Link
+            href="/reports?tab=performance"
+            className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
+          >
+            Full reports
+          </Link>
+        </div>
+        <PerformanceScorecards scores={poolScores} />
+        <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+          {entityScores.map((row) => (
+            <Link key={row.brandId || "all"} href={`/reports?tab=improve&entity=${row.brandId}`}>
+              <EntityScoreRow scores={row} />
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <div className="mt-6 grid gap-4 xl:grid-cols-[1.15fr_0.85fr] animate-rise-delay-2">
         <section className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-[family-name:var(--font-display)] text-2xl">

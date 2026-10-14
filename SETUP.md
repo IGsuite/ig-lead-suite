@@ -1,14 +1,16 @@
-# SignalDesk — go-live checklist
+# Master Marketing CRM — go-live checklist
 
 The **ops app is built**. Neon + Telnyx SMS + Smartlead are keyed. What’s left: **register the Telnyx 10DLC Campaign** (Brand is already **OK**), keep a **public webhook URL**, and optionally lock down login with `AUTH_REQUIRED`.
 
-## Already done in SignalDesk
+## Already done in Master Marketing CRM
 
 - [x] Shared lead upload + groups + verify-on-import  
 - [x] Entity portals (Abstract, Ahava, Take More, Venture, TYH)  
 - [x] Entity-scoped campaigns + reports + inbox (hard isolation)  
 - [x] Campaign **send windows** (morning / afternoon / evening / custom)  
 - [x] Reports **Send timing** (reply performance by time of day)  
+- [x] Reports **Performance** scorecards + **best message** ranking + **Improve** view  
+
 - [x] Autopilot Ferris-wheel (daily email/SMS quotas + send windows)  
 - [x] Multi-user access (admin / member + `allowedEntityIds`)  
 - [x] Telnyx SMS + Smartlead email providers  
@@ -69,8 +71,10 @@ AUTH_ADMIN_PASSWORD=changeme
 
 1. **Campaigns → Build** → pick Morning or Afternoon (or custom hours)  
 2. Launch outside the window → stays **scheduled**  
-3. Launch inside the window → sends through SignalDesk → Telnyx / Smartlead  
+3. Launch inside the window → sends through Master Marketing CRM → Telnyx / Smartlead  
 4. **Reports → Send timing** to compare which windows get better replies  
+5. **Reports → Performance / Improve** for reply rates, best copy, and what to scale next  
+
 
 ## Secrets checklist
 
@@ -91,7 +95,7 @@ AUTH_ADMIN_PASSWORD=...          # change from changeme
 
 | Goal | Now |
 |---|---|
-| Run SignalDesk ops UI | Yes |
+| Run Master Marketing CRM ops UI | Yes |
 | Send test SMS via Telnyx | Yes (carriers may filter without Campaign) |
 | Receive SMS/email into Inbox | Yes, with public webhook URL |
 | Full 20k/day × 5 entities | No — needs 10DLC Campaign + warmed domains |

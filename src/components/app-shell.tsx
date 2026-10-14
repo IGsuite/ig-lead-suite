@@ -10,6 +10,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { PRODUCT_NAME } from "@/lib/brand";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -24,8 +25,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-[color:var(--ink-border)] bg-[color:var(--panel)]/80 px-4 py-3 backdrop-blur lg:hidden">
           <div>
-            <div className="font-[family-name:var(--font-display)] text-xl text-[color:var(--ink)]">
-              SignalDesk
+            <div className="font-[family-name:var(--font-display)] text-lg leading-tight text-[color:var(--ink)]">
+              {PRODUCT_NAME}
             </div>
             <p className="text-xs text-[color:var(--ink-muted)]">Ops desk</p>
           </div>

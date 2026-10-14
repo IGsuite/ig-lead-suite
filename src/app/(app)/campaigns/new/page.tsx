@@ -137,7 +137,9 @@ function CampaignBuilderInner() {
             `Scheduled — outside send window (${launched.windowLabel || "window"}). Launch again during the window.`,
           );
         } else {
-          toast.success("Campaign launched through SignalDesk → Telnyx / Smartlead");
+          toast.success(
+            "Campaign launched through Master Marketing CRM → Telnyx / Smartlead",
+          );
         }
       } else {
         toast.success("Draft campaign saved");

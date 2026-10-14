@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PRODUCT_NAME } from "@/lib/brand";
 
 function LoginInner() {
   const router = useRouter();
@@ -44,7 +45,7 @@ function LoginInner() {
       >
         <div>
           <h1 className="font-[family-name:var(--font-display)] text-3xl tracking-tight">
-            SignalDesk
+            {PRODUCT_NAME}
           </h1>
           <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
             Sign in to your entity portals. Shared leads stay shared — campaigns

@@ -1,8 +1,11 @@
 import { timeOfDayBucket } from "@/lib/send-window";
 import type {
+  CampaignMessageResult,
   CostCategory,
   CostEntry,
   EntityCostRollup,
+  EntityImprovementInsight,
+  EntityPerformanceScores,
   EntitySourceResult,
   Lead,
   PlatformData,
@@ -240,6 +243,248 @@ export function timeOfDayResults(
         : null,
     };
   });
+}
+
+function ratePercent(numerator: number, denominator: number): number | null {
+  if (!denominator) return null;
+  return Math.round((numerator / denominator) * 1000) / 10;
+}
+
+/** Scorecards for one entity or the whole pool (`entityId === "all"`). */
+export function entityPerformanceScores(
+  data: PlatformData,
+  entityId: string | "all",
+): EntityPerformanceScores {
+  if (entityId === "all") {
+    const sent = data.campaigns.reduce((s, c) => s + c.sentCount, 0);
+    const replies = data.replies.length;
+    const interested = data.replies.filter(
+      (r) => r.sentiment === "interested",
+    ).length;
+    const conversions = data.leads.filter(
+      (l) => l.status === "converted",
+    ).length;
+    const optOuts = data.replies.filter((r) => r.sentiment === "opt_out").length;
+    const spendCents = (data.costEntries || []).reduce(
+      (s, e) => s + e.amountCents,
+      0,
+    );
+    const offered = data.leads.length;
+    const denom = sent || offered;
+    return {
+      brandId: null,
+      brandName: "All entities",
+      shortName: "All",
+      offered,
+      sent,
+      replies,
+      interested,
+      conversions,
+      optOuts,
+      spendCents,
+      replyRate: ratePercent(replies, denom),
+      interestedRate: ratePercent(interested, replies),
+      conversionRate: ratePercent(conversions, offered),
+      costPerInterested: interested
+        ? Math.round(spendCents / interested)
+        : null,
+      costEfficiencyScore: null,
+    };
+  }
+
+  const brand = data.brands.find((b) => b.id === entityId);
+  const campaigns = data.campaigns.filter((c) => c.brandId === entityId);
+  const sent = campaigns.reduce((s, c) => s + c.sentCount, 0);
+  const replies = data.replies.filter((r) => r.brandId === entityId);
+  const interested = replies.filter((r) => r.sentiment === "interested").length;
+  const optOuts = replies.filter((r) => r.sentiment === "opt_out").length;
+  const offered = data.leads.filter((l) =>
+    l.offeredEntityIds.includes(entityId),
+  ).length;
+  const conversions = data.leads.filter(
+    (l) => l.convertedEntityId === entityId || (l.status === "converted" && l.lastEntityId === entityId),
+  ).length;
+  const spendCents = (data.costEntries || [])
+    .filter((e) => e.brandId === entityId)
+    .reduce((s, e) => s + e.amountCents, 0);
+  const denom = sent || offered;
+
+  return {
+    brandId: entityId,
+    brandName: brand?.name || entityId,
+    shortName: brand?.shortName || entityId,
+    offered,
+    sent,
+    replies: replies.length,
+    interested,
+    conversions,
+    optOuts,
+    spendCents,
+    replyRate: ratePercent(replies.length, denom),
+    interestedRate: ratePercent(interested, replies.length),
+    conversionRate: ratePercent(conversions, offered || denom),
+    costPerInterested: interested
+      ? Math.round(spendCents / interested)
+      : null,
+    costEfficiencyScore: null,
+  };
+}
+
+/** Scorecards for every entity (+ optional pool row). */
+export function allEntityPerformanceScores(
+  data: PlatformData,
+  includePool = false,
+): EntityPerformanceScores[] {
+  const rows = data.brands.map((b) => entityPerformanceScores(data, b.id));
+  const withCpi = rows.filter((r) => r.costPerInterested != null);
+  const min = Math.min(
+    ...withCpi.map((r) => r.costPerInterested as number),
+    Number.POSITIVE_INFINITY,
+  );
+  const max = Math.max(
+    ...withCpi.map((r) => r.costPerInterested as number),
+    0,
+  );
+
+  const scored = rows.map((row) => {
+    if (row.costPerInterested == null || !withCpi.length) {
+      return { ...row, costEfficiencyScore: null };
+    }
+    if (max === min) return { ...row, costEfficiencyScore: 85 };
+    const normalized = 1 - (row.costPerInterested - min) / (max - min);
+    return {
+      ...row,
+      costEfficiencyScore: Math.round(normalized * 1000) / 10,
+    };
+  });
+
+  if (includePool) {
+    return [entityPerformanceScores(data, "all"), ...scored];
+  }
+  return scored;
+}
+
+/**
+ * Rank campaign copy by interested rate, then reply rate.
+ * Scope with entityId or pass "all".
+ */
+export function campaignMessageResults(
+  data: PlatformData,
+  entityId: string | "all",
+): CampaignMessageResult[] {
+  const campaigns =
+    entityId === "all"
+      ? data.campaigns
+      : data.campaigns.filter((c) => c.brandId === entityId);
+
+  const rows: Omit<CampaignMessageResult, "rank" | "recommendation">[] =
+    campaigns.map((campaign) => {
+      const brand = data.brands.find((b) => b.id === campaign.brandId);
+      const replies = data.replies.filter((r) => r.campaignId === campaign.id);
+      const interested = replies.filter(
+        (r) => r.sentiment === "interested",
+      ).length;
+      const optOuts = replies.filter((r) => r.sentiment === "opt_out").length;
+      const sent = campaign.sentCount;
+      const replyCount = Math.max(campaign.replyCount, replies.length);
+      return {
+        campaignId: campaign.id,
+        brandId: campaign.brandId,
+        brandName: brand?.shortName || campaign.brandId,
+        name: campaign.name,
+        channel: campaign.channel,
+        message: campaign.message,
+        subject: campaign.subject,
+        sent,
+        replies: replyCount,
+        interested,
+        optOuts,
+        replyRate: ratePercent(replyCount, sent),
+        interestedRate: ratePercent(interested, replyCount || replies.length),
+      };
+    });
+
+  const ranked = [...rows].sort((a, b) => {
+    const ai = a.interestedRate ?? -1;
+    const bi = b.interestedRate ?? -1;
+    if (bi !== ai) return bi - ai;
+    const ar = a.replyRate ?? -1;
+    const br = b.replyRate ?? -1;
+    if (br !== ar) return br - ar;
+    return b.interested - a.interested;
+  });
+
+  const withActivity = ranked.filter(
+    (r) => r.replies > 0 || r.sent > 0 || r.interested > 0,
+  );
+  const bestId = withActivity[0]?.campaignId;
+  const worstId =
+    withActivity.length > 1
+      ? withActivity[withActivity.length - 1]?.campaignId
+      : undefined;
+
+  return ranked.map((row, index) => ({
+    ...row,
+    rank: index + 1,
+    recommendation:
+      row.replies === 0 && row.sent === 0
+        ? "hold"
+        : row.campaignId === bestId && withActivity.length > 1
+          ? "scale_up"
+          : row.campaignId === worstId
+            ? "cut"
+            : "hold",
+  }));
+}
+
+/** Source + timing + message winners in one scan per entity (or pool). */
+export function entityImprovementInsight(
+  data: PlatformData,
+  entityId: string | "all",
+): EntityImprovementInsight {
+  const scores = entityPerformanceScores(data, entityId);
+  const sources =
+    entityId === "all"
+      ? poolSourceResults(data)
+      : entitySourceResults(data, entityId);
+  const withReplies = sources.filter((s) => s.replies > 0);
+  const bestSource =
+    withReplies.find((s) => s.recommendation === "scale_up") ||
+    withReplies[0] ||
+    null;
+  const worstSource =
+    [...withReplies].reverse().find((s) => s.recommendation === "cut") ||
+    (withReplies.length > 1 ? withReplies[withReplies.length - 1] : null);
+
+  const timing = timeOfDayResults(data, entityId);
+  const bestTiming =
+    [...timing]
+      .filter((t) => t.replies > 0)
+      .sort(
+        (a, b) => (b.interestedRate ?? -1) - (a.interestedRate ?? -1),
+      )[0] || null;
+
+  const messages = campaignMessageResults(data, entityId);
+  const bestMessage =
+    messages.find((m) => m.recommendation === "scale_up") ||
+    messages.find((m) => m.replies > 0 || m.interested > 0) ||
+    null;
+
+  return {
+    brandId: entityId === "all" ? null : entityId,
+    brandName: scores.brandName,
+    bestSource,
+    worstSource,
+    bestTiming,
+    bestMessage,
+    scores,
+  };
+}
+
+export function allEntityImprovementInsights(
+  data: PlatformData,
+): EntityImprovementInsight[] {
+  return data.brands.map((b) => entityImprovementInsight(data, b.id));
 }
 
 export function poolSourceResults(data: PlatformData): EntitySourceResult[] {

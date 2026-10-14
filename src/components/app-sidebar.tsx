@@ -18,6 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import { useClientPathname } from "@/hooks/use-client-pathname";
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -56,11 +57,11 @@ export function AppSidebar() {
     <aside className="flex h-full w-64 flex-col border-r border-[color:var(--ink-border)] bg-[color:var(--panel)]">
       <div className="border-b border-[color:var(--ink-border)] px-5 py-5">
         <Link href="/dashboard" className="block">
-          <div className="font-[family-name:var(--font-display)] text-2xl tracking-tight text-[color:var(--ink)]">
-            SignalDesk
+          <div className="font-[family-name:var(--font-display)] text-xl leading-tight tracking-tight text-[color:var(--ink)] sm:text-2xl">
+            {PRODUCT_NAME}
           </div>
           <p className="mt-1 text-xs text-[color:var(--ink-muted)]">
-            Shared pool · separate portals
+            {PRODUCT_TAGLINE}
           </p>
         </Link>
       </div>

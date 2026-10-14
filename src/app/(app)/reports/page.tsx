@@ -6,6 +6,10 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
+import {
+  EntityScoreRow,
+  PerformanceScorecards,
+} from "@/components/performance-widgets";
 import { StatusPill } from "@/components/status-pill";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/state-panels";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -29,8 +33,13 @@ import {
 import { usePlatform } from "@/hooks/use-platform";
 import {
   COST_CATEGORIES,
+  allEntityImprovementInsights,
+  allEntityPerformanceScores,
+  campaignMessageResults,
   costCategoryLabel,
   entityCostRollups,
+  entityImprovementInsight,
+  entityPerformanceScores,
   entitySourceResults,
   filterCostEntries,
   poolSourceResults,
@@ -40,16 +49,27 @@ import { compactNumber, money } from "@/lib/client-format";
 import type { CostCategory } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+type ReportTab =
+  | "performance"
+  | "improve"
+  | "sources"
+  | "timing"
+  | "costs";
+
 function ReportsInner() {
   const { data, loading, error, refresh } = usePlatform();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab");
-  const [tab, setTab] = useState<"sources" | "costs" | "timing">(
+  const [tab, setTab] = useState<ReportTab>(
     initialTab === "costs"
       ? "costs"
       : initialTab === "timing"
         ? "timing"
-        : "sources",
+        : initialTab === "sources"
+          ? "sources"
+          : initialTab === "improve"
+            ? "improve"
+            : "performance",
   );
   const [entityId, setEntityId] = useState(
     searchParams.get("entity") || "all",
@@ -92,6 +112,34 @@ function ReportsInner() {
     const scope = entityId === "all" || entityId === "shared" ? "all" : entityId;
     return timeOfDayResults(data, scope);
   }, [data, entityId]);
+
+  const scores = useMemo(() => {
+    if (!data) return null;
+    const scope = entityId === "shared" ? "all" : entityId;
+    return entityPerformanceScores(data, scope);
+  }, [data, entityId]);
+
+  const entityScores = useMemo(
+    () => (data ? allEntityPerformanceScores(data) : []),
+    [data],
+  );
+
+  const messageRows = useMemo(() => {
+    if (!data) return [];
+    const scope = entityId === "all" || entityId === "shared" ? "all" : entityId;
+    return campaignMessageResults(data, scope);
+  }, [data, entityId]);
+
+  const improveInsight = useMemo(() => {
+    if (!data) return null;
+    const scope = entityId === "all" || entityId === "shared" ? "all" : entityId;
+    return entityImprovementInsight(data, scope);
+  }, [data, entityId]);
+
+  const allImprove = useMemo(
+    () => (data ? allEntityImprovementInsights(data) : []),
+    [data],
+  );
 
   async function addCost(e: React.FormEvent) {
     e.preventDefault();
@@ -164,11 +212,19 @@ function ReportsInner() {
           entityId === "shared" ? r.brandId === null : r.brandId === entityId,
         );
 
+  const tabs: { id: ReportTab; label: string }[] = [
+    { id: "performance", label: "Performance" },
+    { id: "improve", label: "Improve" },
+    { id: "sources", label: "Sources" },
+    { id: "timing", label: "Send timing" },
+    { id: "costs", label: "Costs & ROI" },
+  ];
+
   return (
     <div>
       <PageHeader
         title="Reports"
-        description="Source performance and full cost tracking per company — SMS, email, setups, integrations — so you can see return on spend."
+        description="Per-company scorecards, best message copy, source + timing winners, and full cost tracking."
         actions={
           brand ? (
             <Link
@@ -182,36 +238,21 @@ function ReportsInner() {
       />
 
       <div className="mb-4 flex flex-wrap gap-2 animate-rise">
-        <Button
-          type="button"
-          variant={tab === "sources" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setTab("sources")}
-        >
-          Sources
-        </Button>
-        <Button
-          type="button"
-          variant={tab === "timing" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setTab("timing")}
-        >
-          Send timing
-        </Button>
-        <Button
-          type="button"
-          variant={tab === "costs" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setTab("costs")}
-        >
-          Costs & ROI
-        </Button>
+        {tabs.map((t) => (
+          <Button
+            key={t.id}
+            type="button"
+            variant={tab === t.id ? "default" : "outline"}
+            size="sm"
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </Button>
+        ))}
       </div>
 
       <div className="mb-6 max-w-sm space-y-2">
-        <label className="text-sm font-medium">
-          {tab === "sources" ? "Report for" : "Costs for"}
-        </label>
+        <label className="text-sm font-medium">Report for</label>
         <Select
           value={entityId}
           onValueChange={(value) => {
@@ -237,7 +278,290 @@ function ReportsInner() {
         </Select>
       </div>
 
-      {tab === "timing" ? (
+      {tab === "performance" ? (
+        <div className="space-y-6">
+          {scores ? (
+            <div className="animate-rise">
+              <div className="mb-3">
+                <h2 className="font-[family-name:var(--font-display)] text-2xl">
+                  {brand
+                    ? `${brand.shortName} performance`
+                    : "Pool performance"}
+                </h2>
+                <p className="text-sm text-[color:var(--ink-muted)]">
+                  Reply rate, interested share, conversions, and cost
+                  efficiency.
+                </p>
+              </div>
+              <PerformanceScorecards scores={scores} />
+            </div>
+          ) : null}
+
+          {entityId === "all" ? (
+            <div className="animate-rise-delay-1">
+              <h2 className="mb-3 font-[family-name:var(--font-display)] text-2xl">
+                By company
+              </h2>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {entityScores.map((row) => (
+                  <EntityScoreRow
+                    key={row.brandId || "all"}
+                    scores={row}
+                    onOpen={() => {
+                      if (row.brandId) setEntityId(row.brandId);
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="overflow-hidden rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] animate-rise-delay-2">
+            <div className="border-b border-[color:var(--ink-border)] px-5 py-4">
+              <h2 className="font-[family-name:var(--font-display)] text-2xl">
+                Best message / campaign copy
+              </h2>
+              <p className="text-sm text-[color:var(--ink-muted)]">
+                Ranked by interested rate, then reply rate. Scale winners; retire
+                weak copy.
+              </p>
+            </div>
+            {!messageRows.some((r) => r.sent > 0 || r.replies > 0) ? (
+              <div className="p-5">
+                <EmptyPanel
+                  title="No campaign results yet"
+                  description="Launch campaigns for this entity to rank which message copy performs best."
+                />
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>Campaign</TableHead>
+                    <TableHead>Message</TableHead>
+                    <TableHead>Sent</TableHead>
+                    <TableHead>Replies</TableHead>
+                    <TableHead>Interested</TableHead>
+                    <TableHead>Reply %</TableHead>
+                    <TableHead>Interested %</TableHead>
+                    <TableHead>Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {messageRows.map((row) => (
+                    <TableRow key={row.campaignId}>
+                      <TableCell className="font-medium">{row.rank}</TableCell>
+                      <TableCell>
+                        <div className="font-medium">{row.name}</div>
+                        <div className="text-xs text-[color:var(--ink-muted)]">
+                          {row.brandName} · {row.channel}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-xs">
+                        <div className="line-clamp-2 text-sm text-[color:var(--ink-soft)]">
+                          {row.subject ? `${row.subject} — ` : ""}
+                          {row.message}
+                        </div>
+                      </TableCell>
+                      <TableCell>{compactNumber(row.sent)}</TableCell>
+                      <TableCell>{compactNumber(row.replies)}</TableCell>
+                      <TableCell>{compactNumber(row.interested)}</TableCell>
+                      <TableCell>
+                        {row.replyRate != null ? `${row.replyRate}%` : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {row.interestedRate != null
+                          ? `${row.interestedRate}%`
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <StatusPill status={row.recommendation} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </div>
+      ) : tab === "improve" ? (
+        <div className="space-y-6">
+          {improveInsight ? (
+            <div className="grid gap-4 lg:grid-cols-3 animate-rise">
+              <ImproveCard
+                title="Best source"
+                subtitle="Buy more of this list"
+                primary={improveInsight.bestSource?.source || "—"}
+                meta={
+                  improveInsight.bestSource
+                    ? `${compactNumber(improveInsight.bestSource.replies)} replies · ${
+                        improveInsight.bestSource.costPerReply != null
+                          ? `${money(improveInsight.bestSource.costPerReply)} / reply`
+                          : "no CPA yet"
+                      }`
+                    : "Need replies by source"
+                }
+                warn={
+                  improveInsight.worstSource
+                    ? `Cut or pause: ${improveInsight.worstSource.source}`
+                    : undefined
+                }
+              />
+              <ImproveCard
+                title="Best timing"
+                subtitle="Send in this window"
+                primary={improveInsight.bestTiming?.label || "—"}
+                meta={
+                  improveInsight.bestTiming
+                    ? `${improveInsight.bestTiming.interestedRate ?? 0}% interested · ${compactNumber(improveInsight.bestTiming.replies)} replies`
+                    : "Need timed replies"
+                }
+              />
+              <ImproveCard
+                title="Best message"
+                subtitle="Reuse this copy"
+                primary={improveInsight.bestMessage?.name || "—"}
+                meta={
+                  improveInsight.bestMessage
+                    ? `${improveInsight.bestMessage.interestedRate ?? 0}% interested · ${compactNumber(improveInsight.bestMessage.replies)} replies`
+                    : "Need campaign replies"
+                }
+                detail={improveInsight.bestMessage?.message}
+              />
+            </div>
+          ) : null}
+
+          {entityId === "all" ? (
+            <div className="overflow-hidden rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] animate-rise-delay-1">
+              <div className="border-b border-[color:var(--ink-border)] px-5 py-4">
+                <h2 className="font-[family-name:var(--font-display)] text-2xl">
+                  Improve by company
+                </h2>
+                <p className="text-sm text-[color:var(--ink-muted)]">
+                  Source, timing, and message winners side by side — one scan per
+                  entity.
+                </p>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Entity</TableHead>
+                    <TableHead>Reply %</TableHead>
+                    <TableHead>Interested %</TableHead>
+                    <TableHead>Scale source</TableHead>
+                    <TableHead>Best window</TableHead>
+                    <TableHead>Best copy</TableHead>
+                    <TableHead />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allImprove.map((row) => (
+                    <TableRow key={row.brandId || "pool"}>
+                      <TableCell className="font-medium">
+                        {row.brandName}
+                      </TableCell>
+                      <TableCell>
+                        {row.scores.replyRate != null
+                          ? `${row.scores.replyRate}%`
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {row.scores.interestedRate != null
+                          ? `${row.scores.interestedRate}%`
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {row.bestSource?.source || "—"}
+                      </TableCell>
+                      <TableCell>
+                        {row.bestTiming
+                          ? row.bestTiming.label.replace(/ \(.*\)/, "")
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="max-w-[14rem]">
+                        <div className="truncate text-sm">
+                          {row.bestMessage?.name || "—"}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {row.brandId ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setEntityId(row.brandId!)}
+                          >
+                            Open
+                          </Button>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2 animate-rise-delay-1">
+              <section className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
+                <h3 className="font-[family-name:var(--font-display)] text-xl">
+                  Sources to act on
+                </h3>
+                <div className="mt-3 space-y-2">
+                  {sourceRows.slice(0, 5).map((row) => (
+                    <div
+                      key={row.source}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-[color:var(--ink-border)] px-3 py-2 text-sm"
+                    >
+                      <span className="font-medium">{row.source}</span>
+                      <StatusPill status={row.recommendation} />
+                    </div>
+                  ))}
+                  {!sourceRows.length ? (
+                    <p className="text-sm text-[color:var(--ink-muted)]">
+                      No source data yet.
+                    </p>
+                  ) : null}
+                </div>
+              </section>
+              <section className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
+                <h3 className="font-[family-name:var(--font-display)] text-xl">
+                  Message ranking
+                </h3>
+                <ol className="mt-3 space-y-2">
+                  {messageRows
+                    .filter((m) => m.sent > 0 || m.replies > 0)
+                    .slice(0, 5)
+                    .map((row) => (
+                      <li
+                        key={row.campaignId}
+                        className="rounded-lg border border-[color:var(--ink-border)] px-3 py-2 text-sm"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium">
+                            #{row.rank} {row.name}
+                          </span>
+                          <span className="text-[color:var(--ink-muted)]">
+                            {row.interestedRate != null
+                              ? `${row.interestedRate}% int.`
+                              : "—"}
+                          </span>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-xs text-[color:var(--ink-soft)]">
+                          {row.message}
+                        </p>
+                      </li>
+                    ))}
+                  {!messageRows.some((m) => m.sent > 0 || m.replies > 0) ? (
+                    <p className="text-sm text-[color:var(--ink-muted)]">
+                      No message results yet.
+                    </p>
+                  ) : null}
+                </ol>
+              </section>
+            </div>
+          )}
+        </div>
+      ) : tab === "timing" ? (
         !timingRows.some((r) => r.replies > 0) ? (
           <EmptyPanel
             title="No timing data yet"
@@ -385,9 +709,7 @@ function ReportsInner() {
               value={
                 entityRollup?.costPerReply != null
                   ? money(entityRollup.costPerReply)
-                  : entityId === "all"
-                    ? "—"
-                    : "—"
+                  : "—"
               }
               hint={
                 entityRollup
@@ -641,6 +963,43 @@ function ReportsInner() {
         </>
       )}
     </div>
+  );
+}
+
+function ImproveCard({
+  title,
+  subtitle,
+  primary,
+  meta,
+  warn,
+  detail,
+}: {
+  title: string;
+  subtitle: string;
+  primary: string;
+  meta: string;
+  warn?: string;
+  detail?: string;
+}) {
+  return (
+    <section className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
+      <p className="text-xs font-medium uppercase tracking-[0.08em] text-[color:var(--ink-muted)]">
+        {title}
+      </p>
+      <p className="mt-1 text-xs text-[color:var(--ink-soft)]">{subtitle}</p>
+      <h3 className="mt-3 font-[family-name:var(--font-display)] text-2xl tracking-tight text-[color:var(--ink)]">
+        {primary}
+      </h3>
+      <p className="mt-2 text-sm text-[color:var(--ink-muted)]">{meta}</p>
+      {detail ? (
+        <p className="mt-3 line-clamp-3 rounded-lg bg-[color:var(--panel-hover)] px-3 py-2 text-xs text-[color:var(--ink-soft)]">
+          {detail}
+        </p>
+      ) : null}
+      {warn ? (
+        <p className="mt-3 text-xs text-[color:var(--brand-accent)]">{warn}</p>
+      ) : null}
+    </section>
   );
 }
 

@@ -256,6 +256,60 @@ export interface TimeOfDayResult {
   interestedRate: number | null;
 }
 
+/** Per-entity (or pool) scorecard rates for overview widgets. */
+export interface EntityPerformanceScores {
+  brandId: string | null;
+  brandName: string;
+  shortName: string;
+  offered: number;
+  sent: number;
+  replies: number;
+  interested: number;
+  conversions: number;
+  optOuts: number;
+  spendCents: number;
+  /** Replies / sent (or offered when no sends). 0–100. */
+  replyRate: number | null;
+  /** Interested / replies. 0–100. */
+  interestedRate: number | null;
+  /** Conversions / offered. 0–100. */
+  conversionRate: number | null;
+  /** Lower cost-per-interested is better; null if none. */
+  costPerInterested: number | null;
+  /** 0–100 efficiency score vs peers (higher = cheaper interested). */
+  costEfficiencyScore: number | null;
+}
+
+/** Campaign copy ranked by reply / interested performance. */
+export interface CampaignMessageResult {
+  campaignId: string;
+  brandId: string;
+  brandName: string;
+  name: string;
+  channel: CampaignChannel;
+  message: string;
+  subject?: string;
+  sent: number;
+  replies: number;
+  interested: number;
+  optOuts: number;
+  replyRate: number | null;
+  interestedRate: number | null;
+  rank: number;
+  recommendation: "scale_up" | "hold" | "cut";
+}
+
+/** One-line improve insight combining source + timing + message. */
+export interface EntityImprovementInsight {
+  brandId: string | null;
+  brandName: string;
+  bestSource: EntitySourceResult | null;
+  worstSource: EntitySourceResult | null;
+  bestTiming: TimeOfDayResult | null;
+  bestMessage: CampaignMessageResult | null;
+  scores: EntityPerformanceScores;
+}
+
 export interface PlatformData {
   version: number;
   brands: Brand[];

@@ -81,7 +81,7 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="Settings & providers"
-        description="SignalDesk runs campaigns. Telnyx sends SMS. Instantly/Smartlead send cold email. CRM gets interested replies via n8n — brands stay separate."
+        description="Master Marketing CRM runs campaigns. Telnyx sends SMS. Instantly/Smartlead send cold email. CRM gets interested replies via n8n — brands stay separate."
       />
 
       <section className="mb-6 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise">

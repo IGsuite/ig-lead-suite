@@ -66,7 +66,7 @@ export async function ensureDefaultAdmin(): Promise<void> {
   try {
     await createUser({
       email: DEFAULT_ADMIN_EMAIL,
-      name: "SignalDesk Admin",
+      name: "Master Marketing CRM Admin",
       password: DEFAULT_ADMIN_PASSWORD,
       role: "admin",
       allowedEntityIds: [],

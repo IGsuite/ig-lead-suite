@@ -277,7 +277,7 @@ export default function SetupPage() {
 
       <p className="mt-6 text-sm text-[color:var(--ink-muted)]">
         Full write-up: <code>SETUP.md</code>. Campaigns always launch from
-        SignalDesk (Telnyx / Smartlead are delivery backends only).
+        Master Marketing CRM (Telnyx / Smartlead are delivery backends only).
       </p>
     </div>
   );
