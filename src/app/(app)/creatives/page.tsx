@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/state-panels";
@@ -27,8 +28,15 @@ const emptyForm = {
   brandId: "shared",
 };
 
+type AiDraft = {
+  name: string;
+  subject?: string;
+  body: string;
+};
+
 export default function CreativesPage() {
   const { data, loading, error, refresh } = usePlatform();
+  const formRef = useRef<HTMLFormElement>(null);
   const [channelFilter, setChannelFilter] = useState<"all" | CampaignChannel>(
     "all",
   );
@@ -36,6 +44,27 @@ export default function CreativesPage() {
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [aiChannel, setAiChannel] = useState<CampaignChannel>("sms");
+  const [aiBrandId, setAiBrandId] = useState("shared");
+  const [aiBrief, setAiBrief] = useState("");
+  const [aiOffer, setAiOffer] = useState("");
+  const [aiTone, setAiTone] = useState("professional and clear");
+  const [aiCta, setAiCta] = useState("");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiMode, setAiMode] = useState<"live" | "demo" | null>(null);
+  const [aiNotice, setAiNotice] = useState<string | null>(null);
+  const [aiVariations, setAiVariations] = useState<AiDraft[]>([]);
+  const [selectedVariation, setSelectedVariation] = useState(0);
+
+  useEffect(() => {
+    void fetch("/api/creatives/generate", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((json: { mode?: "live" | "demo" }) => {
+        if (json.mode) setAiMode(json.mode);
+      })
+      .catch(() => undefined);
+  }, []);
 
   const templates = useMemo(() => {
     const list = data?.messageTemplates || [];
@@ -61,11 +90,94 @@ export default function CreativesPage() {
       body: tpl.body,
       brandId: tpl.brandId || "shared",
     });
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function resetForm() {
     setEditingId(null);
     setForm(emptyForm);
+  }
+
+  function applyDraftToForm(draft: AiDraft, channel: CampaignChannel) {
+    setEditingId(null);
+    setForm({
+      name: draft.name,
+      channel,
+      subject: channel === "email" ? draft.subject || "" : "",
+      body: draft.body,
+      brandId: aiBrandId,
+    });
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    toast.message("Draft loaded into the template form — edit and save");
+  }
+
+  async function saveDraftAsTemplate(draft: AiDraft, channel: CampaignChannel) {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/creatives", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: draft.name,
+          channel,
+          subject: channel === "email" ? draft.subject : undefined,
+          body: draft.body,
+          brandId: aiBrandId === "shared" ? null : aiBrandId,
+        }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error || "Could not save template");
+      toast.success("Saved as template");
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onGenerate() {
+    if (!aiBrief.trim()) {
+      toast.error("Add a short brief first");
+      return;
+    }
+    setAiGenerating(true);
+    setAiVariations([]);
+    setSelectedVariation(0);
+    try {
+      const res = await fetch("/api/creatives/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel: aiChannel,
+          brandId: aiBrandId === "shared" ? null : aiBrandId,
+          brief: aiBrief,
+          offer: aiOffer || undefined,
+          tone: aiTone || undefined,
+          cta: aiCta || undefined,
+          count: 3,
+        }),
+      });
+      const json = (await res.json()) as {
+        error?: string;
+        mode?: "live" | "demo";
+        notice?: string;
+        variations?: AiDraft[];
+      };
+      if (!res.ok) throw new Error(json.error || "Generate failed");
+      setAiMode(json.mode || "demo");
+      setAiNotice(json.notice || null);
+      setAiVariations(json.variations || []);
+      if (json.mode === "demo") {
+        toast.message(json.notice || "Demo drafts ready");
+      } else {
+        toast.success("AI drafts ready — pick one");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Generate failed");
+    } finally {
+      setAiGenerating(false);
+    }
   }
 
   async function onSave(e: React.FormEvent) {
@@ -121,14 +233,183 @@ export default function CreativesPage() {
   if (error || !data)
     return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
 
+  const activeDraft = aiVariations[selectedVariation];
+
   return (
     <div>
       <PageHeader
         title="Creatives"
-        description="Write SMS and email copy once, then pull it into campaigns. Shared templates work across entities; entity-scoped ones stay with that portal."
+        description="Ads development desk: draft SMS and email copy with AI, save templates, then pull them into campaigns. Image-heavy email layouts still live in Smartlead."
       />
 
+      <section className="mb-6 space-y-4 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 font-[family-name:var(--font-display)] text-xl">
+              <Sparkles className="size-5 text-[color:var(--ink-soft)]" />
+              Draft with AI
+            </h2>
+            <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
+              Brief the offer, tone, and CTA. We generate 2–3 compliance-minded
+              variations (no guaranteed funding promises; SMS includes STOP).
+            </p>
+          </div>
+          {aiMode ? (
+            <span className="rounded-md border border-[color:var(--ink-border)] px-2 py-1 text-xs text-[color:var(--ink-muted)]">
+              {aiMode === "live" ? "Live Gemini" : "Demo mode (no AI key)"}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="space-y-2">
+            <Label>Channel</Label>
+            <Select
+              value={aiChannel}
+              onValueChange={(value) => {
+                if (!value) return;
+                setAiChannel(value as CampaignChannel);
+                setAiVariations([]);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sms">SMS</SelectItem>
+                <SelectItem value="email">Email</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Entity context</Label>
+            <Select
+              value={aiBrandId}
+              onValueChange={(value) => {
+                if (value) setAiBrandId(value);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="shared">Shared (generic)</SelectItem>
+                {data.brands.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.shortName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Tone</Label>
+            <Input
+              value={aiTone}
+              onChange={(e) => setAiTone(e.target.value)}
+              placeholder="professional and clear"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>CTA</Label>
+            <Input
+              value={aiCta}
+              onChange={(e) => setAiCta(e.target.value)}
+              placeholder={
+                aiChannel === "sms" ? "Reply YES for options" : "Reply to compare options"
+              }
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Offer / angle</Label>
+            <Input
+              value={aiOffer}
+              onChange={(e) => setAiOffer(e.target.value)}
+              placeholder="MCA / working capital for qualified SMBs"
+            />
+          </div>
+          <div className="space-y-2 sm:col-span-1">
+            <Label>Brief</Label>
+            <Textarea
+              value={aiBrief}
+              onChange={(e) => setAiBrief(e.target.value)}
+              className="min-h-20"
+              placeholder="Week-12 LeadForge list, morning send, soft ask to reply if interested in capital options…"
+            />
+          </div>
+        </div>
+
+        <Button
+          type="button"
+          disabled={aiGenerating || !aiBrief.trim()}
+          onClick={() => void onGenerate()}
+        >
+          {aiGenerating ? "Generating…" : "Generate 3 variations"}
+        </Button>
+
+        {aiNotice ? (
+          <p className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2 text-sm text-[color:var(--ink-soft)]">
+            {aiNotice}
+          </p>
+        ) : null}
+
+        {aiVariations.length > 0 ? (
+          <div className="space-y-3 border-t border-[color:var(--ink-border)] pt-4">
+            <div className="flex flex-wrap gap-2">
+              {aiVariations.map((draft, idx) => (
+                <Button
+                  key={`${draft.name}-${idx}`}
+                  type="button"
+                  size="sm"
+                  variant={selectedVariation === idx ? "default" : "outline"}
+                  onClick={() => setSelectedVariation(idx)}
+                >
+                  Option {idx + 1}
+                </Button>
+              ))}
+            </div>
+            {activeDraft ? (
+              <article className="rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--canvas)]/40 p-4">
+                <div className="font-medium">{activeDraft.name}</div>
+                {aiChannel === "email" && activeDraft.subject ? (
+                  <p className="mt-2 text-sm text-[color:var(--ink-soft)]">
+                    Subject: {activeDraft.subject}
+                  </p>
+                ) : null}
+                <p className="mt-2 whitespace-pre-wrap text-sm text-[color:var(--ink-soft)]">
+                  {activeDraft.body}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyDraftToForm(activeDraft, aiChannel)}
+                  >
+                    Use in form
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={saving}
+                    onClick={() =>
+                      void saveDraftAsTemplate(activeDraft, aiChannel)
+                    }
+                  >
+                    Save as template
+                  </Button>
+                </div>
+              </article>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+
       <form
+        ref={formRef}
         onSubmit={onSave}
         className="mb-6 space-y-4 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise"
       >
@@ -272,7 +553,7 @@ export default function CreativesPage() {
       {templates.length === 0 ? (
         <EmptyPanel
           title="No creatives yet"
-          description="Save SMS or email copy here, then use it from the campaign builder."
+          description="Draft with AI above, or write a template manually — then use it from the campaign builder."
         />
       ) : (
         <div className="grid gap-3 animate-rise-delay-1">

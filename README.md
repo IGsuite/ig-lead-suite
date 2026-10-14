@@ -94,13 +94,35 @@ npm run dev
 
 Open [http://127.0.0.1:43123](http://127.0.0.1:43123).
 
+## Creatives (ads development)
+
+Open **Creatives** in the sidebar (`/creatives`):
+
+1. **Draft with AI** — channel, entity context, brief / offer / tone / CTA → generates 2–3 SMS or email variations.
+2. **Use in form** or **Save as template**, then pick the template from the campaign builder.
+3. Compliance-minded prompts (no guaranteed funding; SMS samples include STOP).
+4. Image-heavy email design stays in **Smartlead** for now — this library is copy, not a Canva clone.
+
+AI keys (any one):
+
+```bash
+AI_GATEWAY_API_KEY=...                 # Vercel AI Gateway → google/gemini-3.5-flash
+# or
+GOOGLE_GENERATIVE_AI_API_KEY=...       # Google AI Studio
+# or
+GEMINI_API_KEY=...                     # same as Google key
+```
+
+Without a key the UI still works with demo drafts.
+
 ## Lead ops flow
 
-1. **Shared leads** — Upload a provider CSV (source + group). Email and phone are **verified on import**.
-2. **Reports** — Performance scorecards, best message ranking, Improve (source + timing + copy), Sources, Send timing, Costs & ROI — always filterable per company.
-3. **Campaigns / Autopilot** — Build or spin daily volumes **in Master Marketing CRM** with send windows. SMS → Telnyx; email → Smartlead/Instantly.
-4. **Inbox** — Replies land in that entity’s inbox only. Good lead → Email team.
-5. **Users** — Give Ahava staff Ahava-only access, etc.
+1. **Leads** — Upload a provider CSV (source + group). Email and phone are **verified on import**.
+2. **Creatives** — Draft SMS/email copy (AI optional) and save templates.
+3. **Reports** — Performance scorecards, best message ranking, Improve (source + timing + copy), Sources, Send timing, Costs & ROI — always filterable per company.
+4. **Campaigns / Autopilot** — Build or spin daily volumes **in Master Marketing CRM** with send windows. SMS → Telnyx; email → Smartlead/Instantly. Use Creatives templates in the builder.
+5. **Inbox** — Replies land in that entity’s inbox only. Good lead → Email team.
+6. **Users** — Give Ahava staff Ahava-only access, etc.
 
 ### Telnyx / Smartlead
 
