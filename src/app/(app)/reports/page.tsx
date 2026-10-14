@@ -36,6 +36,7 @@ import {
   allEntityImprovementInsights,
   allEntityPerformanceScores,
   campaignMessageResults,
+  channelLabel,
   costCategoryLabel,
   entityCostRollups,
   entityImprovementInsight,
@@ -46,7 +47,7 @@ import {
   timeOfDayResults,
 } from "@/lib/analytics";
 import { compactNumber, money } from "@/lib/client-format";
-import type { CostCategory } from "@/lib/types";
+import type { CampaignChannel, ChannelFilter, CostCategory } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type ReportTab =
@@ -55,6 +56,11 @@ type ReportTab =
   | "sources"
   | "timing"
   | "costs";
+
+function parseChannel(raw: string | null): ChannelFilter {
+  if (raw === "email" || raw === "sms" || raw === "all") return raw;
+  return "sms";
+}
 
 function ReportsInner() {
   const { data, loading, error, refresh } = usePlatform();
@@ -74,6 +80,9 @@ function ReportsInner() {
   const [entityId, setEntityId] = useState(
     searchParams.get("entity") || "all",
   );
+  const [channel, setChannel] = useState<ChannelFilter>(
+    parseChannel(searchParams.get("channel")),
+  );
 
   const [costBrandId, setCostBrandId] = useState<string>("shared");
   const [category, setCategory] = useState<CostCategory>("sms");
@@ -85,11 +94,14 @@ function ReportsInner() {
   );
   const [saving, setSaving] = useState(false);
 
+  const reportChannel: ChannelFilter =
+    tab === "costs" ? "all" : channel;
+
   const sourceRows = useMemo(() => {
     if (!data) return [];
-    if (entityId === "all") return poolSourceResults(data);
-    return entitySourceResults(data, entityId);
-  }, [data, entityId]);
+    if (entityId === "all") return poolSourceResults(data, reportChannel);
+    return entitySourceResults(data, entityId, reportChannel);
+  }, [data, entityId, reportChannel]);
 
   const costRollups = useMemo(
     () => (data ? entityCostRollups(data) : []),
@@ -110,35 +122,48 @@ function ReportsInner() {
   const timingRows = useMemo(() => {
     if (!data) return [];
     const scope = entityId === "all" || entityId === "shared" ? "all" : entityId;
-    return timeOfDayResults(data, scope);
-  }, [data, entityId]);
+    return timeOfDayResults(data, scope, "America/New_York", reportChannel);
+  }, [data, entityId, reportChannel]);
 
   const scores = useMemo(() => {
     if (!data) return null;
     const scope = entityId === "shared" ? "all" : entityId;
-    return entityPerformanceScores(data, scope);
+    return entityPerformanceScores(data, scope, reportChannel);
+  }, [data, entityId, reportChannel]);
+
+  const smsScores = useMemo(() => {
+    if (!data) return null;
+    const scope = entityId === "shared" ? "all" : entityId;
+    return entityPerformanceScores(data, scope, "sms");
+  }, [data, entityId]);
+
+  const emailScores = useMemo(() => {
+    if (!data) return null;
+    const scope = entityId === "shared" ? "all" : entityId;
+    return entityPerformanceScores(data, scope, "email");
   }, [data, entityId]);
 
   const entityScores = useMemo(
-    () => (data ? allEntityPerformanceScores(data) : []),
-    [data],
+    () =>
+      data ? allEntityPerformanceScores(data, false, reportChannel) : [],
+    [data, reportChannel],
   );
 
   const messageRows = useMemo(() => {
     if (!data) return [];
     const scope = entityId === "all" || entityId === "shared" ? "all" : entityId;
-    return campaignMessageResults(data, scope);
-  }, [data, entityId]);
+    return campaignMessageResults(data, scope, reportChannel);
+  }, [data, entityId, reportChannel]);
 
   const improveInsight = useMemo(() => {
     if (!data) return null;
     const scope = entityId === "all" || entityId === "shared" ? "all" : entityId;
-    return entityImprovementInsight(data, scope);
-  }, [data, entityId]);
+    return entityImprovementInsight(data, scope, reportChannel);
+  }, [data, entityId, reportChannel]);
 
   const allImprove = useMemo(
-    () => (data ? allEntityImprovementInsights(data) : []),
-    [data],
+    () => (data ? allEntityImprovementInsights(data, reportChannel) : []),
+    [data, reportChannel],
   );
 
   async function addCost(e: React.FormEvent) {
@@ -220,11 +245,19 @@ function ReportsInner() {
     { id: "costs", label: "Costs & ROI" },
   ];
 
+  const channelTabs: { id: ChannelFilter; label: string }[] = [
+    { id: "sms", label: "SMS" },
+    { id: "email", label: "Email" },
+    { id: "all", label: "Both (compare)" },
+  ];
+
+  const showDualPerformance = tab === "performance" && channel === "all";
+
   return (
     <div>
       <PageHeader
         title="Reports"
-        description="Per-company scorecards, best message copy, source + timing winners, and full cost tracking."
+        description="SMS and email scorecards stay separate — reply, interested, convert, and efficiency per channel, plus source and timing winners."
         actions={
           brand ? (
             <Link
@@ -251,46 +284,90 @@ function ReportsInner() {
         ))}
       </div>
 
-      <div className="mb-6 max-w-sm space-y-2">
-        <label className="text-sm font-medium">Report for</label>
-        <Select
-          value={entityId}
-          onValueChange={(value) => {
-            if (value) setEntityId(value);
-          }}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">
-              {tab === "costs" ? "All entities + shared" : "Shared pool (all)"}
-            </SelectItem>
-            {tab === "costs" ? (
-              <SelectItem value="shared">Shared / overhead only</SelectItem>
-            ) : null}
-            {data.brands.map((b) => (
-              <SelectItem key={b.id} value={b.id}>
-                {b.name}
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end">
+        <div className="max-w-sm flex-1 space-y-2">
+          <label className="text-sm font-medium">Report for</label>
+          <Select
+            value={entityId}
+            onValueChange={(value) => {
+              if (value) setEntityId(value);
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">
+                {tab === "costs" ? "All entities + shared" : "Shared pool (all)"}
               </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+              {tab === "costs" ? (
+                <SelectItem value="shared">Shared / overhead only</SelectItem>
+              ) : null}
+              {data.brands.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {tab !== "costs" ? (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Channel</label>
+            <div className="flex flex-wrap gap-2">
+              {channelTabs.map((c) => (
+                <Button
+                  key={c.id}
+                  type="button"
+                  variant={channel === c.id ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setChannel(c.id)}
+                >
+                  {c.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {tab === "performance" ? (
         <div className="space-y-6">
-          {scores ? (
+          {showDualPerformance && smsScores && emailScores ? (
+            <div className="grid gap-6 xl:grid-cols-2 animate-rise">
+              <section className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
+                <PerformanceScorecards
+                  scores={smsScores}
+                  title={
+                    brand
+                      ? `${brand.shortName} · SMS`
+                      : "Pool · SMS"
+                  }
+                />
+              </section>
+              <section className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
+                <PerformanceScorecards
+                  scores={emailScores}
+                  title={
+                    brand
+                      ? `${brand.shortName} · Email`
+                      : "Pool · Email"
+                  }
+                />
+              </section>
+            </div>
+          ) : scores ? (
             <div className="animate-rise">
               <div className="mb-3">
                 <h2 className="font-[family-name:var(--font-display)] text-2xl">
                   {brand
-                    ? `${brand.shortName} performance`
-                    : "Pool performance"}
+                    ? `${brand.shortName} · ${channelLabel(channel)}`
+                    : `Pool · ${channelLabel(channel)}`}
                 </h2>
                 <p className="text-sm text-[color:var(--ink-muted)]">
-                  Reply rate, interested share, conversions, and cost
-                  efficiency.
+                  Reply rate, interested share, conversions, and cost efficiency
+                  for {channelLabel(channel).toLowerCase()} only.
                 </p>
               </div>
               <PerformanceScorecards scores={scores} />
@@ -300,37 +377,64 @@ function ReportsInner() {
           {entityId === "all" ? (
             <div className="animate-rise-delay-1">
               <h2 className="mb-3 font-[family-name:var(--font-display)] text-2xl">
-                By company
+                By company · {channelLabel(reportChannel)}
               </h2>
-              <div className="grid gap-3 lg:grid-cols-2">
-                {entityScores.map((row) => (
-                  <EntityScoreRow
-                    key={row.brandId || "all"}
-                    scores={row}
-                    onOpen={() => {
-                      if (row.brandId) setEntityId(row.brandId);
-                    }}
-                  />
-                ))}
-              </div>
+              {reportChannel === "all" ? (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {(["sms", "email"] as CampaignChannel[]).map((ch) => (
+                    <div key={ch} className="space-y-3">
+                      <h3 className="text-sm font-medium uppercase tracking-[0.08em] text-[color:var(--ink-muted)]">
+                        {channelLabel(ch)}
+                      </h3>
+                      {allEntityPerformanceScores(data, false, ch).map(
+                        (row) => (
+                          <EntityScoreRow
+                            key={`${ch}-${row.brandId || "all"}`}
+                            scores={row}
+                            onOpen={() => {
+                              if (row.brandId) {
+                                setEntityId(row.brandId);
+                                setChannel(ch);
+                              }
+                            }}
+                          />
+                        ),
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid gap-3 lg:grid-cols-2">
+                  {entityScores.map((row) => (
+                    <EntityScoreRow
+                      key={row.brandId || "all"}
+                      scores={row}
+                      onOpen={() => {
+                        if (row.brandId) setEntityId(row.brandId);
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           ) : null}
 
           <div className="overflow-hidden rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] animate-rise-delay-2">
             <div className="border-b border-[color:var(--ink-border)] px-5 py-4">
               <h2 className="font-[family-name:var(--font-display)] text-2xl">
-                Best message / campaign copy
+                Best message / campaign copy · {channelLabel(reportChannel)}
               </h2>
               <p className="text-sm text-[color:var(--ink-muted)]">
-                Ranked by interested rate, then reply rate. Scale winners; retire
-                weak copy.
+                Ranked within {channelLabel(reportChannel).toLowerCase()} by
+                interested rate, then reply rate. SMS and email copy are never
+                ranked against each other.
               </p>
             </div>
             {!messageRows.some((r) => r.sent > 0 || r.replies > 0) ? (
               <div className="p-5">
                 <EmptyPanel
-                  title="No campaign results yet"
-                  description="Launch campaigns for this entity to rank which message copy performs best."
+                  title={`No ${channelLabel(reportChannel)} campaign results yet`}
+                  description={`Launch ${channelLabel(reportChannel).toLowerCase()} campaigns for this entity to rank which message copy performs best.`}
                 />
               </div>
             ) : (
@@ -355,7 +459,7 @@ function ReportsInner() {
                       <TableCell>
                         <div className="font-medium">{row.name}</div>
                         <div className="text-xs text-[color:var(--ink-muted)]">
-                          {row.brandName} · {row.channel}
+                          {row.brandName} · {row.channel.toUpperCase()}
                         </div>
                       </TableCell>
                       <TableCell className="max-w-xs">
@@ -387,11 +491,15 @@ function ReportsInner() {
         </div>
       ) : tab === "improve" ? (
         <div className="space-y-6">
+          <p className="text-sm text-[color:var(--ink-muted)] animate-rise">
+            Improve recommendations scoped to{" "}
+            <strong>{channelLabel(reportChannel)}</strong>.
+          </p>
           {improveInsight ? (
             <div className="grid gap-4 lg:grid-cols-3 animate-rise">
               <ImproveCard
                 title="Best source"
-                subtitle="Buy more of this list"
+                subtitle={`Buy more for ${channelLabel(reportChannel)}`}
                 primary={improveInsight.bestSource?.source || "—"}
                 meta={
                   improveInsight.bestSource
@@ -410,7 +518,7 @@ function ReportsInner() {
               />
               <ImproveCard
                 title="Best timing"
-                subtitle="Send in this window"
+                subtitle={`Send ${channelLabel(reportChannel)} in this window`}
                 primary={improveInsight.bestTiming?.label || "—"}
                 meta={
                   improveInsight.bestTiming
@@ -420,11 +528,11 @@ function ReportsInner() {
               />
               <ImproveCard
                 title="Best message"
-                subtitle="Reuse this copy"
+                subtitle={`Reuse this ${channelLabel(reportChannel)} copy`}
                 primary={improveInsight.bestMessage?.name || "—"}
                 meta={
                   improveInsight.bestMessage
-                    ? `${improveInsight.bestMessage.interestedRate ?? 0}% interested · ${compactNumber(improveInsight.bestMessage.replies)} replies`
+                    ? `${improveInsight.bestMessage.interestedRate ?? 0}% interested · ${compactNumber(improveInsight.bestMessage.replies)} replies · ${improveInsight.bestMessage.channel.toUpperCase()}`
                     : "Need campaign replies"
                 }
                 detail={improveInsight.bestMessage?.message}
@@ -436,11 +544,11 @@ function ReportsInner() {
             <div className="overflow-hidden rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] animate-rise-delay-1">
               <div className="border-b border-[color:var(--ink-border)] px-5 py-4">
                 <h2 className="font-[family-name:var(--font-display)] text-2xl">
-                  Improve by company
+                  Improve by company · {channelLabel(reportChannel)}
                 </h2>
                 <p className="text-sm text-[color:var(--ink-muted)]">
                   Source, timing, and message winners side by side — one scan per
-                  entity.
+                  entity for this channel.
                 </p>
               </div>
               <Table>
@@ -525,7 +633,7 @@ function ReportsInner() {
               </section>
               <section className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
                 <h3 className="font-[family-name:var(--font-display)] text-xl">
-                  Message ranking
+                  {channelLabel(reportChannel)} message ranking
                 </h3>
                 <ol className="mt-3 space-y-2">
                   {messageRows
@@ -564,18 +672,19 @@ function ReportsInner() {
       ) : tab === "timing" ? (
         !timingRows.some((r) => r.replies > 0) ? (
           <EmptyPanel
-            title="No timing data yet"
-            description="Replies will bucket into morning / afternoon / evening so you can see which send windows perform best."
+            title={`No ${channelLabel(reportChannel)} timing data yet`}
+            description={`${channelLabel(reportChannel)} replies will bucket into morning / afternoon / evening so you can see which send windows perform best.`}
           />
         ) : (
           <div className="overflow-hidden rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] animate-rise">
             <div className="border-b border-[color:var(--ink-border)] px-5 py-4">
               <h2 className="font-[family-name:var(--font-display)] text-2xl">
-                Performance by time of day
+                {channelLabel(reportChannel)} performance by time of day
               </h2>
               <p className="text-sm text-[color:var(--ink-muted)]">
-                Based on when replies arrived (America/New_York). Use this to
-                pick morning vs afternoon send windows per campaign.
+                Based on when {channelLabel(reportChannel).toLowerCase()} replies
+                arrived (America/New_York). Use this to pick morning vs afternoon
+                send windows per campaign.
               </p>
             </div>
             <Table>
@@ -625,9 +734,10 @@ function ReportsInner() {
                 value={compactNumber(
                   sourceRows.reduce((s, r) => s + r.offered, 0),
                 )}
+                hint={`${compactNumber(sourceRows.reduce((s, r) => s + r.phoneCapable, 0))} phone · ${compactNumber(sourceRows.reduce((s, r) => s + r.emailCapable, 0))} email`}
               />
               <MetricCard
-                label="Replies"
+                label={`${channelLabel(reportChannel)} replies`}
                 value={compactNumber(totalReplies)}
                 hint={
                   totalReplies
@@ -654,17 +764,31 @@ function ReportsInner() {
               <div className="border-b border-[color:var(--ink-border)] px-5 py-4">
                 <h2 className="font-[family-name:var(--font-display)] text-2xl">
                   {brand
-                    ? `${brand.shortName} — results by lead source`
-                    : "Shared pool — results by lead source"}
+                    ? `${brand.shortName} — sources · ${channelLabel(reportChannel)}`
+                    : `Shared pool — sources · ${channelLabel(reportChannel)}`}
                 </h2>
+                <p className="text-sm text-[color:var(--ink-muted)]">
+                  Phone-only vs email-capable counts help you buy lists that match
+                  the channel. Reply columns break out SMS vs email when viewing
+                  both.
+                </p>
               </div>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Source</TableHead>
                     <TableHead>{brand ? "Offered" : "Leads"}</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Email</TableHead>
                     <TableHead>Spend</TableHead>
-                    <TableHead>Replies</TableHead>
+                    {reportChannel === "all" ? (
+                      <>
+                        <TableHead>SMS replies</TableHead>
+                        <TableHead>Email replies</TableHead>
+                      </>
+                    ) : (
+                      <TableHead>Replies</TableHead>
+                    )}
                     <TableHead>Cost / reply</TableHead>
                     <TableHead>Conversions</TableHead>
                     <TableHead>Action</TableHead>
@@ -675,8 +799,21 @@ function ReportsInner() {
                     <TableRow key={row.source}>
                       <TableCell className="font-medium">{row.source}</TableCell>
                       <TableCell>{compactNumber(row.offered)}</TableCell>
+                      <TableCell>{compactNumber(row.phoneCapable)}</TableCell>
+                      <TableCell>{compactNumber(row.emailCapable)}</TableCell>
                       <TableCell>{money(row.costCents)}</TableCell>
-                      <TableCell>{compactNumber(row.replies)}</TableCell>
+                      {reportChannel === "all" ? (
+                        <>
+                          <TableCell>
+                            {compactNumber(row.smsReplies)}
+                          </TableCell>
+                          <TableCell>
+                            {compactNumber(row.emailReplies)}
+                          </TableCell>
+                        </>
+                      ) : (
+                        <TableCell>{compactNumber(row.replies)}</TableCell>
+                      )}
                       <TableCell>
                         {row.costPerReply != null
                           ? money(row.costPerReply)
@@ -749,7 +886,8 @@ function ReportsInner() {
               </h2>
               <p className="text-sm text-[color:var(--ink-muted)]">
                 Texts, emails, setups, and integrations — what each business
-                costs vs replies coming back.
+                costs vs replies coming back. SMS and email spend stay in separate
+                columns.
               </p>
             </div>
             <Table>

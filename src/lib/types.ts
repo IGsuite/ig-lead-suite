@@ -17,6 +17,8 @@ export type LeadStatus =
   | "converted";
 export type VerifyStatus = "unverified" | "valid" | "invalid" | "risky";
 export type CampaignChannel = "sms" | "email";
+/** Filter for reports / analytics. `"all"` keeps both channels visible. */
+export type ChannelFilter = CampaignChannel | "all";
 export type CampaignStatus =
   | "draft"
   | "scheduled"
@@ -238,12 +240,21 @@ export interface EntitySourceResult {
   source: string;
   groupName?: string;
   offered: number;
+  /** Leads with a phone number (SMS-capable). */
+  phoneCapable: number;
+  /** Leads with an email address (email-capable). */
+  emailCapable: number;
   replies: number;
+  /** Reply counts by channel when data allows. */
+  smsReplies: number;
+  emailReplies: number;
   interested: number;
   conversions: number;
   costCents: number;
   costPerReply: number | null;
   recommendation: "scale_up" | "hold" | "cut";
+  /** Which channel this row is scoped to (`all` = combined). */
+  channel: ChannelFilter;
 }
 
 /** Reply performance bucketed by local time-of-day. */
@@ -261,6 +272,8 @@ export interface EntityPerformanceScores {
   brandId: string | null;
   brandName: string;
   shortName: string;
+  /** Channel this scorecard is scoped to. */
+  channel: ChannelFilter;
   offered: number;
   sent: number;
   replies: number;
@@ -303,6 +316,7 @@ export interface CampaignMessageResult {
 export interface EntityImprovementInsight {
   brandId: string | null;
   brandName: string;
+  channel: ChannelFilter;
   bestSource: EntitySourceResult | null;
   worstSource: EntitySourceResult | null;
   bestTiming: TimeOfDayResult | null;

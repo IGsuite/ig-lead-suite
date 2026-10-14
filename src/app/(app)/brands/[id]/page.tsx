@@ -118,22 +118,28 @@ function BrandWorkspaceInner() {
               Inbox
             </Link>
             <Link
-              href={`/reports?entity=${brand.id}`}
+              href={`/reports?entity=${brand.id}&channel=sms`}
               className={cn(buttonVariants({ variant: "outline" }))}
             >
               Reports
             </Link>
             <Link
-              href={`/campaigns?brandId=${brand.id}`}
+              href={`/campaigns?brandId=${brand.id}&channel=sms`}
               className={cn(buttonVariants({ variant: "outline" }))}
             >
-              Campaigns
+              SMS campaigns
             </Link>
             <Link
-              href={`/campaigns/new?brandId=${brand.id}`}
+              href={`/campaigns?brandId=${brand.id}&channel=email`}
+              className={cn(buttonVariants({ variant: "outline" }))}
+            >
+              Email campaigns
+            </Link>
+            <Link
+              href={`/campaigns/new?brandId=${brand.id}&channel=sms`}
               className={cn(buttonVariants())}
             >
-              New campaign
+              New SMS
             </Link>
           </>
         }
@@ -402,29 +408,48 @@ function BrandWorkspaceInner() {
             <h2 className="font-[family-name:var(--font-display)] text-2xl">
               Recent campaigns
             </h2>
-            <div className="mt-3 space-y-2">
-              {campaigns.length === 0 ? (
-                <p className="text-sm text-[color:var(--ink-muted)]">
-                  No campaigns yet for this entity.
-                </p>
-              ) : (
-                campaigns.map((campaign) => (
-                  <div
-                    key={campaign.id}
-                    className="rounded-xl border border-[color:var(--ink-border)] px-3 py-2"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="font-medium">{campaign.name}</div>
-                      <StatusPill status={campaign.status} />
+            <div className="mt-3 space-y-4">
+              {(["sms", "email"] as const).map((ch) => {
+                const list = campaigns.filter((c) => c.channel === ch);
+                return (
+                  <div key={ch}>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <h3 className="text-xs font-medium uppercase tracking-[0.08em] text-[color:var(--ink-muted)]">
+                        {ch === "sms" ? "SMS" : "Email"}
+                      </h3>
+                      <Link
+                        href={`/campaigns?brandId=${brand.id}&channel=${ch}`}
+                        className="text-xs text-[color:var(--ink-soft)] underline-offset-2 hover:underline"
+                      >
+                        Open {ch === "sms" ? "SMS" : "Email"} list
+                      </Link>
                     </div>
-                    <div className="mt-1 text-xs text-[color:var(--ink-muted)]">
-                      {campaign.channel.toUpperCase()} · sent{" "}
-                      {compactNumber(campaign.sentCount)} ·{" "}
-                      {relativeDay(campaign.createdAt)}
-                    </div>
+                    {list.length === 0 ? (
+                      <p className="text-sm text-[color:var(--ink-muted)]">
+                        No {ch === "sms" ? "SMS" : "email"} campaigns yet.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {list.map((campaign) => (
+                          <div
+                            key={campaign.id}
+                            className="rounded-xl border border-[color:var(--ink-border)] px-3 py-2"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="font-medium">{campaign.name}</div>
+                              <StatusPill status={campaign.status} />
+                            </div>
+                            <div className="mt-1 text-xs text-[color:var(--ink-muted)]">
+                              sent {compactNumber(campaign.sentCount)} ·{" "}
+                              {relativeDay(campaign.createdAt)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                ))
-              )}
+                );
+              })}
             </div>
           </div>
 
@@ -486,7 +511,10 @@ function BrandWorkspaceInner() {
                 <TableRow>
                   <TableHead>Source</TableHead>
                   <TableHead>Offered</TableHead>
-                  <TableHead>Replies</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>SMS replies</TableHead>
+                  <TableHead>Email replies</TableHead>
                   <TableHead>Interested</TableHead>
                   <TableHead>Conversions</TableHead>
                   <TableHead>Cost / reply</TableHead>
@@ -498,7 +526,10 @@ function BrandWorkspaceInner() {
                   <TableRow key={row.source}>
                     <TableCell className="font-medium">{row.source}</TableCell>
                     <TableCell>{compactNumber(row.offered)}</TableCell>
-                    <TableCell>{compactNumber(row.replies)}</TableCell>
+                    <TableCell>{compactNumber(row.phoneCapable)}</TableCell>
+                    <TableCell>{compactNumber(row.emailCapable)}</TableCell>
+                    <TableCell>{compactNumber(row.smsReplies)}</TableCell>
+                    <TableCell>{compactNumber(row.emailReplies)}</TableCell>
                     <TableCell>{compactNumber(row.interested)}</TableCell>
                     <TableCell>{compactNumber(row.conversions)}</TableCell>
                     <TableCell>

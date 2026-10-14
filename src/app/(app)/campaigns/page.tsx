@@ -25,18 +25,34 @@ import {
 } from "@/components/ui/table";
 import { usePlatform } from "@/hooks/use-platform";
 import { compactNumber, relativeDay } from "@/lib/client-format";
+import type { CampaignChannel } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function CampaignsInner() {
   const { data, loading, error, refresh } = usePlatform();
   const searchParams = useSearchParams();
+  const initialChannel = searchParams.get("channel");
+  const [channel, setChannel] = useState<CampaignChannel>(
+    initialChannel === "email" ? "email" : "sms",
+  );
   const [entityId, setEntityId] = useState(
     searchParams.get("brandId") || searchParams.get("entity") || "abstract",
   );
 
   const campaigns = useMemo(() => {
     if (!data) return [];
-    return data.campaigns.filter((c) => c.brandId === entityId);
+    return data.campaigns.filter(
+      (c) => c.brandId === entityId && c.channel === channel,
+    );
+  }, [data, entityId, channel]);
+
+  const counts = useMemo(() => {
+    if (!data) return { sms: 0, email: 0 };
+    const forEntity = data.campaigns.filter((c) => c.brandId === entityId);
+    return {
+      sms: forEntity.filter((c) => c.channel === "sms").length,
+      email: forEntity.filter((c) => c.channel === "email").length,
+    };
   }, [data, entityId]);
 
   async function launch(id: string) {
@@ -75,21 +91,43 @@ function CampaignsInner() {
     return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
 
   const brand = data.brands.find((b) => b.id === entityId);
+  const channelLabel = channel === "sms" ? "SMS" : "Email";
 
   return (
     <div>
       <PageHeader
         title="Campaigns"
-        description="Each entity runs its own campaigns only. Ahava never sends under Abstract — pick a portal, then build or launch."
+        description="SMS and email stay separate. Pick a channel, then an entity portal — Ahava never sends under Abstract."
         actions={
           <Link
-            href={`/campaigns/new?brandId=${entityId}`}
+            href={`/campaigns/new?brandId=${entityId}&channel=${channel}`}
             className={cn(buttonVariants())}
           >
-            Build for {brand?.shortName || "entity"}
+            Build {channelLabel} for {brand?.shortName || "entity"}
           </Link>
         }
       />
+
+      <div className="mb-4 flex flex-wrap gap-2 animate-rise">
+        <Button
+          type="button"
+          variant={channel === "sms" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setChannel("sms")}
+        >
+          SMS campaigns
+          <span className="ml-1.5 text-xs opacity-70">({counts.sms})</span>
+        </Button>
+        <Button
+          type="button"
+          variant={channel === "email" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setChannel("email")}
+        >
+          Email campaigns
+          <span className="ml-1.5 text-xs opacity-70">({counts.email})</span>
+        </Button>
+      </div>
 
       <div className="mb-6 max-w-sm space-y-2 animate-rise">
         <label className="text-sm font-medium">Entity portal</label>
@@ -111,31 +149,40 @@ function CampaignsInner() {
           </SelectContent>
         </Select>
         <p className="text-xs text-[color:var(--ink-muted)]">
-          Showing only {brand?.name || "this entity"} campaigns. Other brands are
-          hidden so nothing mixes.
+          Showing only {brand?.name || "this entity"} {channelLabel} campaigns.
+          Other brands and the other channel are hidden so nothing mixes.
         </p>
       </div>
 
       {campaigns.length === 0 ? (
         <EmptyPanel
-          title={`No ${brand?.shortName || "entity"} campaigns`}
-          description="Create a campaign for this portal. Audience still comes from the shared pool, but the offer and send identity stay here."
+          title={`No ${brand?.shortName || "entity"} ${channelLabel} campaigns`}
+          description={`Create a ${channelLabel} campaign for this portal. Audience still comes from the shared pool, but the offer and send identity stay here.`}
           action={
             <Link
-              href={`/campaigns/new?brandId=${entityId}`}
+              href={`/campaigns/new?brandId=${entityId}&channel=${channel}`}
               className={cn(buttonVariants())}
             >
-              Build campaign
+              Build {channelLabel} campaign
             </Link>
           }
         />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] animate-rise">
+          <div className="border-b border-[color:var(--ink-border)] px-5 py-3">
+            <h2 className="font-[family-name:var(--font-display)] text-xl">
+              {channelLabel} · {brand?.shortName || "Entity"}
+            </h2>
+            <p className="text-xs text-[color:var(--ink-muted)]">
+              {channel === "sms"
+                ? "Telnyx SMS — texts only in this list."
+                : "Smartlead / Instantly email — emails only in this list."}
+            </p>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Campaign</TableHead>
-                <TableHead>Channel</TableHead>
                 <TableHead>Progress</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead />
@@ -155,7 +202,6 @@ function CampaignsInner() {
                         : ""}
                     </div>
                   </TableCell>
-                  <TableCell className="uppercase">{campaign.channel}</TableCell>
                   <TableCell>
                     {compactNumber(campaign.sentCount)} /{" "}
                     {compactNumber(campaign.volume)}

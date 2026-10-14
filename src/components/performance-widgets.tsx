@@ -118,51 +118,66 @@ export function BarMeter({
 export function PerformanceScorecards({
   scores,
   className,
+  title,
 }: {
   scores: EntityPerformanceScores;
   className?: string;
+  /** Optional channel heading above the rings. */
+  title?: string;
 }) {
+  const channelHint =
+    scores.channel === "sms"
+      ? "SMS only"
+      : scores.channel === "email"
+        ? "Email only"
+        : "All channels";
+
   return (
-    <div
-      className={cn(
-        "grid gap-3 sm:grid-cols-2 xl:grid-cols-4",
-        className,
-      )}
-    >
-      <RingScore
-        value={scores.replyRate}
-        label="Reply rate"
-        hint={
-          scores.sent
-            ? `${scores.replies} / ${scores.sent} sent`
-            : `${scores.replies} replies`
-        }
-        tone="ink"
-      />
-      <RingScore
-        value={scores.interestedRate}
-        label="Interested"
-        hint={`${scores.interested} interested`}
-        tone="teal"
-      />
-      <RingScore
-        value={scores.conversionRate}
-        label="Conversions"
-        hint={`${scores.conversions} converted`}
-        tone="gold"
-      />
-      <RingScore
-        value={scores.costEfficiencyScore}
-        label="Cost efficiency"
-        hint={
-          scores.costPerInterested != null
-            ? `${money(scores.costPerInterested)} / interested`
-            : scores.spendCents
-              ? `${money(scores.spendCents)} logged`
-              : "Log costs to score"
-        }
-        tone="muted"
-      />
+    <div className={className}>
+      {title ? (
+        <div className="mb-3">
+          <h3 className="font-[family-name:var(--font-display)] text-xl">
+            {title}
+          </h3>
+          <p className="text-xs text-[color:var(--ink-muted)]">{channelHint}</p>
+        </div>
+      ) : null}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <RingScore
+          value={scores.replyRate}
+          label="Reply rate"
+          hint={
+            scores.sent
+              ? `${scores.replies} / ${scores.sent} sent`
+              : `${scores.replies} replies`
+          }
+          tone="ink"
+        />
+        <RingScore
+          value={scores.interestedRate}
+          label="Interested"
+          hint={`${scores.interested} interested`}
+          tone="teal"
+        />
+        <RingScore
+          value={scores.conversionRate}
+          label="Conversions"
+          hint={`${scores.conversions} converted`}
+          tone="gold"
+        />
+        <RingScore
+          value={scores.costEfficiencyScore}
+          label="Cost efficiency"
+          hint={
+            scores.costPerInterested != null
+              ? `${money(scores.costPerInterested)} / interested`
+              : scores.spendCents
+                ? `${money(scores.spendCents)} logged`
+                : "Log costs to score"
+          }
+          tone="muted"
+        />
+      </div>
     </div>
   );
 }
@@ -201,7 +216,12 @@ export function EntityScoreRow({
         <div>
           <div className="font-medium">{scores.brandName}</div>
           <div className="text-xs text-[color:var(--ink-muted)]">
-            {scores.replies} replies · {scores.interested} interested ·{" "}
+            {scores.channel === "sms"
+              ? "SMS"
+              : scores.channel === "email"
+                ? "Email"
+                : "All"}{" "}
+            · {scores.replies} replies · {scores.interested} interested ·{" "}
             {scores.conversions} conversions
           </div>
         </div>

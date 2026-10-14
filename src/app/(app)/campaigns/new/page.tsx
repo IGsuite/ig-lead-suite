@@ -29,11 +29,19 @@ function CampaignBuilderInner() {
   const [brandId, setBrandId] = useState(
     searchParams.get("brandId") || "abstract",
   );
-  const [name, setName] = useState("Abstract — MCA working capital SMS");
-  const [channel, setChannel] = useState<CampaignChannel>("sms");
+  const initialChannel: CampaignChannel =
+    searchParams.get("channel") === "email" ? "email" : "sms";
+  const [channel, setChannel] = useState<CampaignChannel>(initialChannel);
+  const [name, setName] = useState(
+    initialChannel === "email"
+      ? "Abstract — working capital email"
+      : "Abstract — MCA working capital SMS",
+  );
   const [subject, setSubject] = useState("Working capital options from {{brand}}");
   const [message, setMessage] = useState(
-    "Hi {{firstName}}, {{brand}} here — working capital may be available for your business. Reply YES for options, or STOP to opt out.",
+    initialChannel === "email"
+      ? "Hi {{firstName}},\n\n{{brand}} here — working capital may be available for your business. Reply if you want options.\n\nUnsubscribe anytime."
+      : "Hi {{firstName}}, {{brand}} here — working capital may be available for your business. Reply YES for options, or STOP to opt out.",
   );
   const [sourceFilter, setSourceFilter] = useState("all");
   const [groupFilter, setGroupFilter] = useState("all");
@@ -145,7 +153,7 @@ function CampaignBuilderInner() {
         toast.success("Draft campaign saved");
       }
       await refresh();
-      router.push("/campaigns");
+      router.push(`/campaigns?brandId=${brandId}&channel=${channel}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Create failed");
     } finally {
@@ -157,17 +165,19 @@ function CampaignBuilderInner() {
   if (error || !data)
     return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
 
+  const channelLabel = channel === "sms" ? "SMS" : "Email";
+
   return (
     <div>
       <PageHeader
-        title="Campaign builder"
-        description="This campaign belongs to one entity only. Audience comes from the shared pool, but the offer, domain, and tracking stay locked to that portal."
+        title={`${channelLabel} campaign builder`}
+        description={`Building an ${channelLabel} campaign for one entity only. Audience comes from the shared pool, but the offer, domain, and tracking stay locked to that portal — never mixed with the other channel.`}
         actions={
           <Link
-            href={`/campaigns?brandId=${brandId}`}
+            href={`/campaigns?brandId=${brandId}&channel=${channel}`}
             className={cn(buttonVariants({ variant: "outline" }))}
           >
-            Back to {data?.brands.find((b) => b.id === brandId)?.shortName || "campaigns"}
+            Back to {data?.brands.find((b) => b.id === brandId)?.shortName || "campaigns"} {channelLabel}
           </Link>
         }
       />
@@ -205,16 +215,29 @@ function CampaignBuilderInner() {
               <Label>Channel</Label>
               <Select
                 value={channel}
-                onValueChange={(value) => setChannel(value as CampaignChannel)}
+                onValueChange={(value) => {
+                  if (!value) return;
+                  const next = value as CampaignChannel;
+                  setChannel(next);
+                  if (next === "email" && name.toLowerCase().includes("sms")) {
+                    setName(name.replace(/SMS/i, "email"));
+                  }
+                  if (next === "sms" && name.toLowerCase().includes("email")) {
+                    setName(name.replace(/email/i, "SMS"));
+                  }
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="sms">SMS</SelectItem>
-                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="sms">SMS (Telnyx)</SelectItem>
+                  <SelectItem value="email">Email (Smartlead / Instantly)</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-[color:var(--ink-muted)]">
+                Channel is locked for this campaign after save — SMS and email lists stay separate.
+              </p>
             </div>
           </div>
 

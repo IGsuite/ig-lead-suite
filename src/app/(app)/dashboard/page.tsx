@@ -40,8 +40,10 @@ export default function DashboardPage() {
     .filter((p) => p.replies > 0)
     .sort((a, b) => a.costCents / a.replies - b.costCents / b.replies)[0];
   const rotating = data.brands.filter((b) => b.rotationEnabled);
-  const poolScores = entityPerformanceScores(data, "all");
-  const entityScores = allEntityPerformanceScores(data);
+  const poolSmsScores = entityPerformanceScores(data, "all", "sms");
+  const poolEmailScores = entityPerformanceScores(data, "all", "email");
+  const entitySmsScores = allEntityPerformanceScores(data, false, "sms");
+  const entityEmailScores = allEntityPerformanceScores(data, false, "email");
 
   const entityCoverage = data.brands.map((brand) => {
     const offered = data.leads.filter((l) =>
@@ -120,24 +122,56 @@ export default function DashboardPage() {
               Pool performance
             </h2>
             <p className="text-sm text-[color:var(--ink-muted)]">
-              Reply rate, interested, conversions, and cost efficiency across
-              entities.
+              SMS and email scorecards stay separate — reply, interested,
+              conversions, and cost efficiency per channel.
             </p>
           </div>
           <Link
-            href="/reports?tab=performance"
+            href="/reports?tab=performance&channel=all"
             className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
           >
             Full reports
           </Link>
         </div>
-        <PerformanceScorecards scores={poolScores} />
-        <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-          {entityScores.map((row) => (
-            <Link key={row.brandId || "all"} href={`/reports?tab=improve&entity=${row.brandId}`}>
-              <EntityScoreRow scores={row} />
-            </Link>
-          ))}
+        <div className="grid gap-4 xl:grid-cols-2">
+          <section className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
+            <PerformanceScorecards scores={poolSmsScores} title="SMS" />
+          </section>
+          <section className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
+            <PerformanceScorecards scores={poolEmailScores} title="Email" />
+          </section>
+        </div>
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <div>
+            <h3 className="mb-3 text-sm font-medium uppercase tracking-[0.08em] text-[color:var(--ink-muted)]">
+              By company · SMS
+            </h3>
+            <div className="grid gap-3">
+              {entitySmsScores.map((row) => (
+                <Link
+                  key={`sms-${row.brandId || "all"}`}
+                  href={`/reports?tab=improve&entity=${row.brandId}&channel=sms`}
+                >
+                  <EntityScoreRow scores={row} />
+                </Link>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h3 className="mb-3 text-sm font-medium uppercase tracking-[0.08em] text-[color:var(--ink-muted)]">
+              By company · Email
+            </h3>
+            <div className="grid gap-3">
+              {entityEmailScores.map((row) => (
+                <Link
+                  key={`email-${row.brandId || "all"}`}
+                  href={`/reports?tab=improve&entity=${row.brandId}&channel=email`}
+                >
+                  <EntityScoreRow scores={row} />
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
