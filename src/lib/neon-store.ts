@@ -13,6 +13,7 @@ function asJson(value: unknown): Prisma.InputJsonValue {
 import { isLeadEligibleForEntity, normalizeContact } from "@/lib/eligibility";
 import {
   mapCampaign,
+  mapCostEntry,
   mapEntity,
   mapLead,
   mapOptOut,
@@ -25,6 +26,7 @@ import { STORE_VERSION, createSeedData } from "@/lib/seed";
 import type {
   Brand,
   Campaign,
+  CostEntry,
   Lead,
   OptOut,
   PlatformData,
@@ -55,6 +57,7 @@ async function replaceWithSeed(): Promise<PlatformData> {
     await tx.uploadBatch.deleteMany();
     await tx.optOut.deleteMany();
     await tx.providerSpend.deleteMany();
+    await tx.costEntry.deleteMany();
     await tx.entity.deleteMany();
     await tx.platformSettings.deleteMany();
 
@@ -182,6 +185,22 @@ async function replaceWithSeed(): Promise<PlatformData> {
       })),
     });
 
+    if (seed.costEntries.length) {
+      await tx.costEntry.createMany({
+        data: seed.costEntries.map((c) => ({
+          id: c.id,
+          brandId: c.brandId,
+          category: c.category,
+          label: c.label,
+          vendor: c.vendor ?? null,
+          amountCents: c.amountCents,
+          incurredAt: new Date(c.incurredAt),
+          notes: c.notes ?? null,
+          createdAt: new Date(c.createdAt),
+        })),
+      });
+    }
+
     await tx.platformSettings.create({
       data: {
         id: "default",
@@ -205,17 +224,27 @@ async function replaceWithSeed(): Promise<PlatformData> {
 export async function getData(): Promise<PlatformData> {
   await ensureSeeded();
   const prisma = getPrisma();
-  const [brands, leads, uploads, campaigns, replies, optOuts, providerSpend, settings] =
-    await Promise.all([
-      prisma.entity.findMany({ orderBy: { name: "asc" } }),
-      prisma.lead.findMany({ orderBy: { createdAt: "desc" } }),
-      prisma.uploadBatch.findMany({ orderBy: { createdAt: "desc" } }),
-      prisma.campaign.findMany({ orderBy: { createdAt: "desc" } }),
-      prisma.reply.findMany({ orderBy: { createdAt: "desc" } }),
-      prisma.optOut.findMany({ orderBy: { createdAt: "desc" } }),
-      prisma.providerSpend.findMany({ orderBy: { source: "asc" } }),
-      prisma.platformSettings.findUniqueOrThrow({ where: { id: "default" } }),
-    ]);
+  const [
+    brands,
+    leads,
+    uploads,
+    campaigns,
+    replies,
+    optOuts,
+    providerSpend,
+    costEntries,
+    settings,
+  ] = await Promise.all([
+    prisma.entity.findMany({ orderBy: { name: "asc" } }),
+    prisma.lead.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.uploadBatch.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.campaign.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.reply.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.optOut.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.providerSpend.findMany({ orderBy: { source: "asc" } }),
+    prisma.costEntry.findMany({ orderBy: { incurredAt: "desc" } }),
+    prisma.platformSettings.findUniqueOrThrow({ where: { id: "default" } }),
+  ]);
 
   return {
     version: settings.version,
@@ -226,6 +255,7 @@ export async function getData(): Promise<PlatformData> {
     replies: replies.map(mapReply),
     optOuts: optOuts.map(mapOptOut),
     providerSpend: providerSpend.map(mapSpend),
+    costEntries: costEntries.map(mapCostEntry),
     rotation: mapRotation(settings, brands.map(mapEntity)),
   };
 }
@@ -804,6 +834,37 @@ export async function verifyLeads(input?: {
   }
 
   return { verified, invalid, risky };
+}
+
+export async function createCostEntry(
+  input: Omit<CostEntry, "id" | "createdAt">,
+): Promise<CostEntry> {
+  await ensureSeeded();
+  const prisma = getPrisma();
+  const created = await prisma.costEntry.create({
+    data: {
+      id: `cost-${Date.now()}`,
+      brandId: input.brandId,
+      category: input.category,
+      label: input.label,
+      vendor: input.vendor ?? null,
+      amountCents: input.amountCents,
+      incurredAt: new Date(input.incurredAt),
+      notes: input.notes ?? null,
+    },
+  });
+  return mapCostEntry(created);
+}
+
+export async function deleteCostEntry(id: string): Promise<boolean> {
+  await ensureSeeded();
+  const prisma = getPrisma();
+  try {
+    await prisma.costEntry.delete({ where: { id } });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function runAutopilotDay(): Promise<AutopilotRunResult> {

@@ -13,6 +13,7 @@ import { STORE_VERSION, createSeedData } from "@/lib/seed";
 import type {
   Brand,
   Campaign,
+  CostEntry,
   Lead,
   OptOut,
   PlatformData,
@@ -36,6 +37,7 @@ async function ensureStore(): Promise<PlatformData> {
       await writeStore(seed);
       return seed;
     }
+    if (!parsed.costEntries) parsed.costEntries = [];
     return parsed;
   } catch {
     const seed = createSeedData();
@@ -458,6 +460,29 @@ export async function verifyLeads(input?: {
 
   await writeStore(data);
   return { verified, invalid, risky };
+}
+
+export async function createCostEntry(
+  input: Omit<CostEntry, "id" | "createdAt">,
+): Promise<CostEntry> {
+  const data = await ensureStore();
+  const entry: CostEntry = {
+    ...input,
+    id: `cost-${Date.now()}`,
+    createdAt: new Date().toISOString(),
+  };
+  data.costEntries = data.costEntries || [];
+  data.costEntries.unshift(entry);
+  await writeStore(data);
+  return entry;
+}
+
+export async function deleteCostEntry(id: string): Promise<boolean> {
+  const data = await ensureStore();
+  const before = data.costEntries?.length || 0;
+  data.costEntries = (data.costEntries || []).filter((c) => c.id !== id);
+  await writeStore(data);
+  return (data.costEntries?.length || 0) < before;
 }
 
 /** One daily Ferris-wheel pass: each enabled entity gets its own SMS + email blast. */

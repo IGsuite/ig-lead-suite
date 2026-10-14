@@ -2,6 +2,8 @@ import { normalizeRotation } from "@/lib/autopilot";
 import type {
   Brand,
   Campaign,
+  CostCategory,
+  CostEntry,
   EntityDailyQuota,
   Lead,
   OptOut,
@@ -231,6 +233,30 @@ export function mapSpend(row: {
   conversions: number;
 }): ProviderSpend {
   return { ...row };
+}
+
+export function mapCostEntry(row: {
+  id: string;
+  brandId: string | null;
+  category: string;
+  label: string;
+  vendor: string | null;
+  amountCents: number;
+  incurredAt: Date;
+  notes: string | null;
+  createdAt: Date;
+}): CostEntry {
+  return {
+    id: row.id,
+    brandId: row.brandId,
+    category: row.category as CostCategory,
+    label: row.label,
+    vendor: row.vendor ?? undefined,
+    amountCents: row.amountCents,
+    incurredAt: row.incurredAt.toISOString().slice(0, 10),
+    notes: row.notes ?? undefined,
+    createdAt: row.createdAt.toISOString(),
+  };
 }
 
 export function mapRotation(

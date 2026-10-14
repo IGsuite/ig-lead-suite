@@ -154,10 +154,27 @@ model ProviderSpend {
   conversions     Int    @default(0)
 }
 
+/// Manual + auto cost ledger (SMS, email, setup, integrations, list buys)
+model CostEntry {
+  id          String   @id
+  brandId     String?
+  category    String
+  label       String
+  vendor      String?
+  amountCents Int
+  incurredAt  DateTime @db.Date
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([brandId])
+  @@index([category])
+  @@index([incurredAt])
+}
+
 /// Singleton row (id = "default") for rotation + autopilot config
 model PlatformSettings {
   id               String    @id @default("default")
-  version          Int       @default(7)
+  version          Int       @default(8)
   mode             String    @default("round_robin")
   entityOrder      String[]
   notes            String    @default("")

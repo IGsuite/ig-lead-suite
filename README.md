@@ -66,7 +66,7 @@ Sample CSV: [`public/sample-leads.csv`](public/sample-leads.csv).
 ## Lead ops flow
 
 1. **Shared leads** — Upload a provider CSV (source + group). Email and phone are **verified on import**.
-2. **Reports** — Choose an entity (or shared pool) to see which sources win for that business.
+2. **Reports** — **Sources** tab: which lead lists win per company. **Costs & ROI** tab: log SMS, email, setups, integrations, and list spend per entity (or shared overhead) and see cost per reply / interested.
 3. **Campaigns / Autopilot** — Build or spin daily volumes in SignalDesk. SMS goes out through **Telnyx**; cold email through Instantly/Smartlead once keyed.
 4. **Inbox (manual now)** — Replies come back to the number/mailbox that sent them → that entity’s SignalDesk inbox. You triage: Good lead → Email team (manual forward). CRM API later.
 5. **CRM (later)** — n8n pushes interested replies into each entity’s CRM/site. Campaigns themselves stay in SignalDesk so brands never mix.

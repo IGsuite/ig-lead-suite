@@ -6,6 +6,7 @@ import type { AutopilotRunResult } from "@/lib/autopilot";
 import type {
   Brand,
   Campaign,
+  CostEntry,
   Lead,
   OptOut,
   PlatformData,
@@ -119,6 +120,16 @@ export async function ingestReply(input: {
   leadId?: string;
 }): Promise<Reply> {
   return backend().ingestReply(input);
+}
+
+export async function createCostEntry(
+  input: Omit<CostEntry, "id" | "createdAt">,
+): Promise<CostEntry> {
+  return backend().createCostEntry(input);
+}
+
+export async function deleteCostEntry(id: string): Promise<boolean> {
+  return backend().deleteCostEntry(id);
 }
 
 export function costPerReply(spend: {

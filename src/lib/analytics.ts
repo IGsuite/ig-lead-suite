@@ -1,9 +1,105 @@
 import type {
+  CostCategory,
+  CostEntry,
+  EntityCostRollup,
   EntitySourceResult,
   Lead,
   PlatformData,
   Reply,
 } from "@/lib/types";
+
+export const COST_CATEGORIES: CostCategory[] = [
+  "sms",
+  "email",
+  "leads",
+  "setup",
+  "integration",
+  "other",
+];
+
+export function emptyCategoryMap(): Record<CostCategory, number> {
+  return {
+    sms: 0,
+    email: 0,
+    leads: 0,
+    setup: 0,
+    integration: 0,
+    other: 0,
+  };
+}
+
+export function costCategoryLabel(category: CostCategory): string {
+  const map: Record<CostCategory, string> = {
+    sms: "SMS / texts",
+    email: "Email",
+    leads: "Lead lists",
+    setup: "Setup (10DLC, domains)",
+    integration: "Integrations / tools",
+    other: "Other",
+  };
+  return map[category];
+}
+
+/** Roll up costs per entity (+ shared overhead row). */
+export function entityCostRollups(data: PlatformData): EntityCostRollup[] {
+  const entries = data.costEntries || [];
+  const brandIds = [
+    ...data.brands.map((b) => b.id as string | null),
+    null,
+  ];
+
+  return brandIds.map((brandId) => {
+    const brandName =
+      brandId === null
+        ? "Shared / overhead"
+        : data.brands.find((b) => b.id === brandId)?.name || brandId;
+    const byCategory = emptyCategoryMap();
+    let totalCents = 0;
+    for (const entry of entries) {
+      if (entry.brandId !== brandId) continue;
+      byCategory[entry.category] += entry.amountCents;
+      totalCents += entry.amountCents;
+    }
+
+    const replies =
+      brandId === null
+        ? data.replies.length
+        : data.replies.filter((r) => r.brandId === brandId).length;
+    const interested =
+      brandId === null
+        ? data.replies.filter((r) => r.sentiment === "interested").length
+        : data.replies.filter(
+            (r) => r.brandId === brandId && r.sentiment === "interested",
+          ).length;
+    const conversions =
+      brandId === null
+        ? data.leads.filter((l) => l.status === "converted").length
+        : data.leads.filter((l) => l.convertedEntityId === brandId).length;
+
+    return {
+      brandId,
+      brandName,
+      byCategory,
+      totalCents,
+      replies,
+      interested,
+      conversions,
+      costPerReply: replies ? Math.round(totalCents / replies) : null,
+      costPerInterested: interested
+        ? Math.round(totalCents / interested)
+        : null,
+    };
+  });
+}
+
+export function filterCostEntries(
+  entries: CostEntry[],
+  entityId: string | "all" | "shared",
+): CostEntry[] {
+  if (entityId === "all") return entries;
+  if (entityId === "shared") return entries.filter((e) => e.brandId === null);
+  return entries.filter((e) => e.brandId === entityId);
+}
 
 export function entitySourceResults(
   data: PlatformData,

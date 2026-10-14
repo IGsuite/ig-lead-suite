@@ -149,6 +149,40 @@ export interface ProviderSpend {
   conversions: number;
 }
 
+/** Operating / send / setup spend tracked for ROI. */
+export type CostCategory =
+  | "sms"
+  | "email"
+  | "leads"
+  | "setup"
+  | "integration"
+  | "other";
+
+export interface CostEntry {
+  id: string;
+  /** null = shared overhead across all entities */
+  brandId: string | null;
+  category: CostCategory;
+  label: string;
+  vendor?: string;
+  amountCents: number;
+  incurredAt: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface EntityCostRollup {
+  brandId: string | null;
+  brandName: string;
+  byCategory: Record<CostCategory, number>;
+  totalCents: number;
+  replies: number;
+  interested: number;
+  conversions: number;
+  costPerReply: number | null;
+  costPerInterested: number | null;
+}
+
 /** Daily send quota for one entity on the Ferris-wheel autopilot. */
 export interface EntityDailyQuota {
   entityId: string;
@@ -191,5 +225,6 @@ export interface PlatformData {
   replies: Reply[];
   optOuts: OptOut[];
   providerSpend: ProviderSpend[];
+  costEntries: CostEntry[];
   rotation: RotationConfig;
 }
