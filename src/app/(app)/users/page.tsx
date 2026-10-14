@@ -144,7 +144,7 @@ export default function UsersPage() {
             Sign in
           </a>{" "}
           — on Vercel, login is required by default. Default admin:{" "}
-          admin@signaldesk.local (set AUTH_ADMIN_PASSWORD).
+          AUTH_ADMIN_EMAIL (set AUTH_ADMIN_PASSWORD).
         </p>
       ) : null}
 

@@ -81,11 +81,15 @@ function mapDbUser(row: {
   };
 }
 
+/**
+ * Keep the env bootstrap admin in sync with AUTH_ADMIN_EMAIL / AUTH_ADMIN_PASSWORD.
+ * - Creates the admin when the store is empty (or env email is missing)
+ * - Migrates the sole admin's email when AUTH_ADMIN_EMAIL changes
+ * - Resets that admin's password hash when it no longer matches env
+ *
+ * Env is the source of truth for the bootstrap admin identity.
+ */
 export async function ensureDefaultAdmin(): Promise<void> {
-  const byEmail = await getUserByEmail(DEFAULT_ADMIN_EMAIL);
-  if (byEmail) return;
-  const existing = await listUsers();
-  if (existing.length > 0) return;
   const password = resolveBootstrapAdminPassword();
   if (!password) {
     console.warn(
@@ -93,17 +97,51 @@ export async function ensureDefaultAdmin(): Promise<void> {
     );
     return;
   }
+
+  const desiredEmail = DEFAULT_ADMIN_EMAIL;
+  const admin = await getUserByEmail(desiredEmail);
+
+  if (admin) {
+    // Env email present — keep password hash aligned with AUTH_ADMIN_PASSWORD.
+    if (!verifyPassword(password, admin.passwordHash)) {
+      await updateUser(admin.id, { password });
+      console.info(
+        `[auth] Synced admin password for ${desiredEmail} from AUTH_ADMIN_* env`,
+      );
+    }
+    return;
+  }
+
+  const existing = await listUsers();
+  const admins = existing.filter((u) => u.role === "admin");
+
+  // AUTH_ADMIN_EMAIL changed after first boot — migrate the sole admin row.
+  if (admins.length === 1) {
+    const migrated = await updateUser(admins[0].id, {
+      email: desiredEmail,
+      password,
+      name: admins[0].name || "IG Lead Suite Admin",
+    });
+    if (migrated) {
+      console.info(
+        `[auth] Migrated sole admin to ${desiredEmail} from AUTH_ADMIN_* env`,
+      );
+      return;
+    }
+  }
+
   try {
     await createUser({
-      email: DEFAULT_ADMIN_EMAIL,
+      email: desiredEmail,
       name: "IG Lead Suite Admin",
       password,
       role: "admin",
       allowedEntityIds: [],
     });
+    console.info(`[auth] Bootstrapped admin ${desiredEmail} from AUTH_ADMIN_* env`);
   } catch (err) {
     // Concurrent bootstrap or unique race — safe to ignore if admin exists
-    if (await getUserByEmail(DEFAULT_ADMIN_EMAIL)) return;
+    if (await getUserByEmail(desiredEmail)) return;
     throw err;
   }
 }
@@ -232,21 +270,31 @@ export async function createUser(input: {
 export async function updateUser(
   id: string,
   patch: {
+    email?: string;
     name?: string;
     role?: UserRole;
     allowedEntityIds?: string[];
     password?: string;
   },
 ): Promise<AppUserPublic | null> {
+  const nextEmail = patch.email?.trim().toLowerCase();
+
   if (isNeonConfigured()) {
     try {
       const prisma = getPrisma();
       const existing = await prisma.appUser.findUnique({ where: { id } });
       if (!existing) return null;
+      if (nextEmail && nextEmail !== existing.email) {
+        const taken = await prisma.appUser.findUnique({
+          where: { email: nextEmail },
+        });
+        if (taken) throw new Error("Email already registered");
+      }
       const role = patch.role ?? (existing.role as UserRole);
       const row = await prisma.appUser.update({
         where: { id },
         data: {
+          ...(nextEmail ? { email: nextEmail } : {}),
           name: patch.name ?? existing.name,
           role,
           allowedEntityIds:
@@ -267,9 +315,15 @@ export async function updateUser(
   const users = await readJsonUsers();
   const idx = users.findIndex((u) => u.id === id);
   if (idx < 0) return null;
+  if (nextEmail && nextEmail !== users[idx].email) {
+    if (users.some((u) => u.email === nextEmail)) {
+      throw new Error("Email already registered");
+    }
+  }
   const role = patch.role ?? users[idx].role;
   users[idx] = {
     ...users[idx],
+    ...(nextEmail ? { email: nextEmail } : {}),
     name: patch.name ?? users[idx].name,
     role,
     allowedEntityIds:
