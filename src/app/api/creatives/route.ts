@@ -1,0 +1,126 @@
+import { NextResponse } from "next/server";
+import { assertEntityAccess, canAccessEntity, isAdminSession } from "@/lib/acl";
+import { getSession } from "@/lib/auth";
+import {
+  createMessageTemplate,
+  deleteMessageTemplate,
+  getData,
+  updateMessageTemplate,
+} from "@/lib/store";
+import type { CampaignChannel } from "@/lib/types";
+
+type CreativeBody = {
+  action?: string;
+  id?: string;
+  name?: string;
+  channel?: CampaignChannel;
+  subject?: string;
+  body?: string;
+  brandId?: string | null;
+};
+
+export async function GET() {
+  const session = await getSession();
+  const data = await getData();
+  const templates = (data.messageTemplates || []).filter(
+    (t) => !t.brandId || canAccessEntity(session, t.brandId),
+  );
+  return NextResponse.json(templates);
+}
+
+export async function POST(request: Request) {
+  const session = await getSession();
+  const payload = (await request.json()) as CreativeBody;
+
+  if (payload.action === "delete" && payload.id) {
+    const data = await getData();
+    const existing = (data.messageTemplates || []).find(
+      (t) => t.id === payload.id,
+    );
+    if (!existing) {
+      return NextResponse.json({ error: "Template not found" }, { status: 404 });
+    }
+    if (existing.brandId) {
+      const gate = assertEntityAccess(session, existing.brandId);
+      if (!gate.ok) {
+        return NextResponse.json({ error: gate.error }, { status: gate.status });
+      }
+    } else if (!isAdminSession(session)) {
+      return NextResponse.json(
+        { error: "Only admins can delete shared templates" },
+        { status: 403 },
+      );
+    }
+    const ok = await deleteMessageTemplate(payload.id);
+    if (!ok) {
+      return NextResponse.json({ error: "Template not found" }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  if (payload.action === "update" && payload.id) {
+    const data = await getData();
+    const existing = (data.messageTemplates || []).find(
+      (t) => t.id === payload.id,
+    );
+    if (!existing) {
+      return NextResponse.json({ error: "Template not found" }, { status: 404 });
+    }
+    if (existing.brandId) {
+      const gate = assertEntityAccess(session, existing.brandId);
+      if (!gate.ok) {
+        return NextResponse.json({ error: gate.error }, { status: gate.status });
+      }
+    } else if (!isAdminSession(session)) {
+      return NextResponse.json(
+        { error: "Only admins can edit shared templates" },
+        { status: 403 },
+      );
+    }
+    if (payload.brandId) {
+      const gate = assertEntityAccess(session, payload.brandId);
+      if (!gate.ok) {
+        return NextResponse.json({ error: gate.error }, { status: gate.status });
+      }
+    }
+    const updated = await updateMessageTemplate(payload.id, {
+      name: payload.name,
+      channel: payload.channel,
+      subject: payload.subject,
+      body: payload.body,
+      brandId: payload.brandId === undefined ? undefined : payload.brandId,
+    });
+    if (!updated) {
+      return NextResponse.json({ error: "Template not found" }, { status: 404 });
+    }
+    return NextResponse.json(updated);
+  }
+
+  if (!payload.name?.trim() || !payload.channel || !payload.body?.trim()) {
+    return NextResponse.json(
+      { error: "Name, channel, and message body are required" },
+      { status: 400 },
+    );
+  }
+
+  const brandId = payload.brandId ?? null;
+  if (brandId) {
+    const gate = assertEntityAccess(session, brandId);
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.error }, { status: gate.status });
+    }
+  }
+
+  const template = await createMessageTemplate({
+    name: payload.name.trim(),
+    channel: payload.channel,
+    subject:
+      payload.channel === "email"
+        ? payload.subject?.trim() || undefined
+        : undefined,
+    body: payload.body.trim(),
+    brandId,
+  });
+
+  return NextResponse.json(template);
+}

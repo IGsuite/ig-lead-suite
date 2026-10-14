@@ -120,6 +120,22 @@ model Campaign {
   @@index([status])
 }
 
+/// Reusable SMS / email copy — write once, pull into campaigns
+model MessageTemplate {
+  id        String   @id
+  name      String
+  channel   String
+  subject   String?
+  body      String
+  /// null = shared library; otherwise scoped to one entity portal
+  brandId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([channel])
+  @@index([brandId])
+}
+
 /// Ops users — admin sees all entities; member only allowedEntityIds
 model AppUser {
   id                String   @id

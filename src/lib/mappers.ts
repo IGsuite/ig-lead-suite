@@ -2,10 +2,12 @@ import { normalizeRotation } from "@/lib/autopilot";
 import type {
   Brand,
   Campaign,
+  CampaignChannel,
   CostCategory,
   CostEntry,
   EntityDailyQuota,
   Lead,
+  MessageTemplate,
   OptOut,
   ProviderSpend,
   Reply,
@@ -265,6 +267,28 @@ export function mapCostEntry(row: {
     incurredAt: row.incurredAt.toISOString().slice(0, 10),
     notes: row.notes ?? undefined,
     createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export function mapMessageTemplate(row: {
+  id: string;
+  name: string;
+  channel: string;
+  subject: string | null;
+  body: string;
+  brandId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): MessageTemplate {
+  return {
+    id: row.id,
+    name: row.name,
+    channel: row.channel as CampaignChannel,
+    subject: row.subject ?? undefined,
+    body: row.body,
+    brandId: row.brandId,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 

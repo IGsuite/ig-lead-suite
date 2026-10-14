@@ -184,8 +184,8 @@ export default function LeadsPage() {
   return (
     <div>
       <PageHeader
-        title="Shared leads"
-        description="Upload once into the main pool. Email and phone are verified on import, then Autopilot rotates contacts through each entity — never mixing brands."
+        title="Leads"
+        description="Shared pool for every entity. Upload once, verify contacts, then Autopilot rotates offers through each portal — never mixing brands."
       />
 
       <form
@@ -385,8 +385,12 @@ export default function LeadsPage() {
 
       {filtered.length === 0 ? (
         <EmptyPanel
-          title="No leads match"
-          description="Upload a provider CSV or clear filters to see the pool."
+          title={data.leads.length === 0 ? "No leads in the pool yet" : "No leads match"}
+          description={
+            data.leads.length === 0
+              ? "Import a provider CSV above to start the shared pool. Then verify and launch campaigns."
+              : "Clear filters or upload another CSV to see contacts in the shared pool."
+          }
         />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] animate-rise-delay-2">

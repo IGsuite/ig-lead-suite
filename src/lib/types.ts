@@ -143,6 +143,19 @@ export interface Campaign {
   startedAt?: string;
 }
 
+/** Reusable SMS / email blast copy (Creatives library). */
+export interface MessageTemplate {
+  id: string;
+  name: string;
+  channel: CampaignChannel;
+  subject?: string;
+  body: string;
+  /** null = shared across entities; otherwise one portal. */
+  brandId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Reply {
   id: string;
   campaignId: string;
@@ -334,5 +347,6 @@ export interface PlatformData {
   optOuts: OptOut[];
   providerSpend: ProviderSpend[];
   costEntries: CostEntry[];
+  messageTemplates: MessageTemplate[];
   rotation: RotationConfig;
 }

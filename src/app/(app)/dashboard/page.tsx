@@ -66,19 +66,25 @@ export default function DashboardPage() {
         actions={
           <>
             <Link
+              href="/inbox"
+              className={cn(buttonVariants({ variant: "outline" }))}
+            >
+              Inbox
+            </Link>
+            <Link
               href="/leads"
               className={cn(buttonVariants({ variant: "outline" }))}
             >
-              Upload leads
+              Leads
             </Link>
             <Link
-              href="/autopilot"
+              href="/creatives"
               className={cn(buttonVariants({ variant: "outline" }))}
             >
-              Autopilot
+              Creatives
             </Link>
-            <Link href="/reports" className={cn(buttonVariants())}>
-              Reports
+            <Link href="/campaigns" className={cn(buttonVariants())}>
+              Campaigns
             </Link>
           </>
         }
@@ -172,6 +178,35 @@ export default function DashboardPage() {
               ))}
             </div>
           </div>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise-delay-1">
+        <h2 className="font-[family-name:var(--font-display)] text-2xl">
+          Quick links
+        </h2>
+        <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
+          Same order as the sidebar — day-to-day ops first.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {[
+            { href: "/inbox", label: "Inbox" },
+            { href: "/leads", label: "Leads" },
+            { href: "/reports", label: "Reports" },
+            { href: "/campaigns", label: "Campaigns" },
+            { href: "/creatives", label: "Creatives" },
+            { href: "/autopilot", label: "Autopilot" },
+            { href: "/brands", label: "Entities" },
+            { href: "/setup", label: "Go live" },
+          ].map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            >
+              {item.label}
+            </Link>
+          ))}
         </div>
       </section>
 

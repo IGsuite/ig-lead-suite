@@ -8,6 +8,7 @@ import type {
   Campaign,
   CostEntry,
   Lead,
+  MessageTemplate,
   OptOut,
   PlatformData,
   Reply,
@@ -130,6 +131,25 @@ export async function createCostEntry(
 
 export async function deleteCostEntry(id: string): Promise<boolean> {
   return backend().deleteCostEntry(id);
+}
+
+export async function createMessageTemplate(
+  input: Omit<MessageTemplate, "id" | "createdAt" | "updatedAt">,
+): Promise<MessageTemplate> {
+  return backend().createMessageTemplate(input);
+}
+
+export async function updateMessageTemplate(
+  id: string,
+  patch: Partial<
+    Omit<MessageTemplate, "id" | "createdAt" | "updatedAt">
+  >,
+): Promise<MessageTemplate | null> {
+  return backend().updateMessageTemplate(id, patch);
+}
+
+export async function deleteMessageTemplate(id: string): Promise<boolean> {
+  return backend().deleteMessageTemplate(id);
 }
 
 export function costPerReply(spend: {

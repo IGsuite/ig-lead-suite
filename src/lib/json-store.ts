@@ -15,6 +15,7 @@ import type {
   Campaign,
   CostEntry,
   Lead,
+  MessageTemplate,
   OptOut,
   PlatformData,
   Reply,
@@ -50,6 +51,7 @@ async function ensureStore(): Promise<PlatformData> {
       return seed;
     }
     if (!parsed.costEntries) parsed.costEntries = [];
+    if (!parsed.messageTemplates) parsed.messageTemplates = [];
     for (const c of parsed.campaigns || []) {
       if (!c.sendWindowPreset) {
         Object.assign(c, normalizeSendWindow(c));
@@ -522,6 +524,52 @@ export async function deleteCostEntry(id: string): Promise<boolean> {
   data.costEntries = (data.costEntries || []).filter((c) => c.id !== id);
   await writeStore(data);
   return (data.costEntries?.length || 0) < before;
+}
+
+export async function createMessageTemplate(
+  input: Omit<MessageTemplate, "id" | "createdAt" | "updatedAt">,
+): Promise<MessageTemplate> {
+  const data = await ensureStore();
+  const now = new Date().toISOString();
+  const template: MessageTemplate = {
+    ...input,
+    id: `tpl-${Date.now()}`,
+    createdAt: now,
+    updatedAt: now,
+  };
+  data.messageTemplates = data.messageTemplates || [];
+  data.messageTemplates.unshift(template);
+  await writeStore(data);
+  return template;
+}
+
+export async function updateMessageTemplate(
+  id: string,
+  patch: Partial<
+    Omit<MessageTemplate, "id" | "createdAt" | "updatedAt">
+  >,
+): Promise<MessageTemplate | null> {
+  const data = await ensureStore();
+  const idx = (data.messageTemplates || []).findIndex((t) => t.id === id);
+  if (idx < 0) return null;
+  data.messageTemplates[idx] = {
+    ...data.messageTemplates[idx],
+    ...patch,
+    id,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeStore(data);
+  return data.messageTemplates[idx];
+}
+
+export async function deleteMessageTemplate(id: string): Promise<boolean> {
+  const data = await ensureStore();
+  const before = data.messageTemplates?.length || 0;
+  data.messageTemplates = (data.messageTemplates || []).filter(
+    (t) => t.id !== id,
+  );
+  await writeStore(data);
+  return (data.messageTemplates?.length || 0) < before;
 }
 
 /** One daily Ferris-wheel pass: each enabled entity gets its own SMS + email blast. */

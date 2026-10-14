@@ -68,6 +68,9 @@ export function scopePlatformData(
   const costEntries = (data.costEntries || []).filter(
     (c) => !c.brandId || brandSet.has(c.brandId),
   );
+  const messageTemplates = (data.messageTemplates || []).filter(
+    (t) => !t.brandId || brandSet.has(t.brandId),
+  );
   const rotation = {
     ...data.rotation,
     entityOrder: data.rotation.entityOrder.filter((id) => brandSet.has(id)),
@@ -83,6 +86,7 @@ export function scopePlatformData(
     replies,
     optOuts,
     costEntries,
+    messageTemplates,
     rotation,
     currentUser: session,
   };

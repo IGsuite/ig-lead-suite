@@ -1,7 +1,7 @@
 import { defaultQuotas } from "@/lib/autopilot";
 import type { PlatformData } from "@/lib/types";
 
-export const STORE_VERSION = 9;
+export const STORE_VERSION = 10;
 
 export function createSeedData(): PlatformData {
   const now = new Date();
@@ -726,6 +726,56 @@ export function createSeedData(): PlatformData {
       createdAt: l.createdAt,
     }));
 
+  const messageTemplates: PlatformData["messageTemplates"] = [
+    {
+      id: "tpl-sms-wc-shared",
+      name: "Working capital SMS (shared)",
+      channel: "sms",
+      body: "Hi {{firstName}}, {{brand}} here — working capital may be available for your business. Reply YES for options, or STOP to opt out.",
+      brandId: null,
+      createdAt: daysAgo(6),
+      updatedAt: daysAgo(6),
+    },
+    {
+      id: "tpl-email-wc-shared",
+      name: "Working capital email (shared)",
+      channel: "email",
+      subject: "Working capital options from {{brand}}",
+      body: "Hi {{firstName}},\n\n{{brand}} here — working capital may be available for your business. Reply if you want options.\n\nUnsubscribe anytime.",
+      brandId: null,
+      createdAt: daysAgo(6),
+      updatedAt: daysAgo(6),
+    },
+    {
+      id: "tpl-sms-abstract-mca",
+      name: "Abstract MCA opener",
+      channel: "sms",
+      body: "Hi {{firstName}}, Abstract Capital — flexible MCA / working capital for qualified businesses. Reply YES to talk, STOP to opt out.",
+      brandId: "abstract",
+      createdAt: daysAgo(4),
+      updatedAt: daysAgo(4),
+    },
+    {
+      id: "tpl-email-abstract-mca",
+      name: "Abstract MCA email",
+      channel: "email",
+      subject: "{{firstName}}, capital options from Abstract",
+      body: "Hi {{firstName}},\n\nAbstract Capital Group helps small businesses shop MCA, LOC, and term options.\n\nReply to this email if you want a quick look at what may fit.\n\nUnsubscribe anytime.",
+      brandId: "abstract",
+      createdAt: daysAgo(4),
+      updatedAt: daysAgo(4),
+    },
+    {
+      id: "tpl-sms-ahava",
+      name: "Ahava capital with love",
+      channel: "sms",
+      body: "Hi {{firstName}}, Ahava Capital here — working capital with a human touch. Reply YES for options, STOP to opt out.",
+      brandId: "ahava",
+      createdAt: daysAgo(3),
+      updatedAt: daysAgo(3),
+    },
+  ];
+
   return {
     version: STORE_VERSION,
     brands,
@@ -747,6 +797,7 @@ export function createSeedData(): PlatformData {
     campaigns,
     replies,
     optOuts,
+    messageTemplates,
     providerSpend: [
       {
         source: "LeadForge",

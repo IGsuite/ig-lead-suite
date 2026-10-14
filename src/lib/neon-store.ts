@@ -16,6 +16,7 @@ import {
   mapCostEntry,
   mapEntity,
   mapLead,
+  mapMessageTemplate,
   mapOptOut,
   mapReply,
   mapRotation,
@@ -28,6 +29,7 @@ import type {
   Campaign,
   CostEntry,
   Lead,
+  MessageTemplate,
   OptOut,
   PlatformData,
   Reply,
@@ -65,6 +67,7 @@ async function replaceWithSeed(): Promise<PlatformData> {
   await prisma.$transaction(async (tx) => {
     await tx.reply.deleteMany();
     await tx.campaign.deleteMany();
+    await tx.messageTemplate.deleteMany();
     await tx.lead.deleteMany();
     await tx.uploadBatch.deleteMany();
     await tx.optOut.deleteMany();
@@ -220,6 +223,21 @@ async function replaceWithSeed(): Promise<PlatformData> {
       });
     }
 
+    if (seed.messageTemplates?.length) {
+      await tx.messageTemplate.createMany({
+        data: seed.messageTemplates.map((t) => ({
+          id: t.id,
+          name: t.name,
+          channel: t.channel,
+          subject: t.subject ?? null,
+          body: t.body,
+          brandId: t.brandId,
+          createdAt: new Date(t.createdAt),
+          updatedAt: new Date(t.updatedAt),
+        })),
+      });
+    }
+
     await tx.platformSettings.create({
       data: {
         id: "default",
@@ -252,6 +270,7 @@ export async function getData(): Promise<PlatformData> {
     optOuts,
     providerSpend,
     costEntries,
+    messageTemplates,
     settings,
   ] = await Promise.all([
     prisma.entity.findMany({ orderBy: { name: "asc" } }),
@@ -262,6 +281,7 @@ export async function getData(): Promise<PlatformData> {
     prisma.optOut.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.providerSpend.findMany({ orderBy: { source: "asc" } }),
     prisma.costEntry.findMany({ orderBy: { incurredAt: "desc" } }),
+    prisma.messageTemplate.findMany({ orderBy: { updatedAt: "desc" } }),
     prisma.platformSettings.findUniqueOrThrow({ where: { id: "default" } }),
   ]);
 
@@ -275,6 +295,7 @@ export async function getData(): Promise<PlatformData> {
     optOuts: optOuts.map(mapOptOut),
     providerSpend: providerSpend.map(mapSpend),
     costEntries: costEntries.map(mapCostEntry),
+    messageTemplates: messageTemplates.map(mapMessageTemplate),
     rotation: mapRotation(settings, brands.map(mapEntity)),
   };
 }
@@ -1084,4 +1105,56 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
   });
 
   return { ranAt, nextRunAt, legs };
+}
+
+export async function createMessageTemplate(
+  input: Omit<MessageTemplate, "id" | "createdAt" | "updatedAt">,
+): Promise<MessageTemplate> {
+  const prisma = getPrisma();
+  const id = `tpl-${Date.now()}`;
+  const row = await prisma.messageTemplate.create({
+    data: {
+      id,
+      name: input.name,
+      channel: input.channel,
+      subject: input.subject ?? null,
+      body: input.body,
+      brandId: input.brandId,
+    },
+  });
+  return mapMessageTemplate(row);
+}
+
+export async function updateMessageTemplate(
+  id: string,
+  patch: Partial<
+    Omit<MessageTemplate, "id" | "createdAt" | "updatedAt">
+  >,
+): Promise<MessageTemplate | null> {
+  const prisma = getPrisma();
+  const existing = await prisma.messageTemplate.findUnique({ where: { id } });
+  if (!existing) return null;
+  const row = await prisma.messageTemplate.update({
+    where: { id },
+    data: {
+      name: patch.name ?? existing.name,
+      channel: patch.channel ?? existing.channel,
+      subject:
+        patch.subject === undefined ? existing.subject : patch.subject ?? null,
+      body: patch.body ?? existing.body,
+      brandId:
+        patch.brandId === undefined ? existing.brandId : patch.brandId,
+    },
+  });
+  return mapMessageTemplate(row);
+}
+
+export async function deleteMessageTemplate(id: string): Promise<boolean> {
+  const prisma = getPrisma();
+  try {
+    await prisma.messageTemplate.delete({ where: { id } });
+    return true;
+  } catch {
+    return false;
+  }
 }

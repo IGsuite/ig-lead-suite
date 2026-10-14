@@ -54,11 +54,21 @@ function CampaignBuilderInner() {
   const [sendWindowStart, setSendWindowStart] = useState("09:00");
   const [sendWindowEnd, setSendWindowEnd] = useState("12:00");
   const [saving, setSaving] = useState(false);
+  const [templateId, setTemplateId] = useState("");
 
   const sources = useMemo(() => {
     if (!data) return [];
     return Array.from(new Set(data.leads.map((l) => l.source))).sort();
   }, [data]);
+
+  const usableTemplates = useMemo(() => {
+    if (!data) return [];
+    return (data.messageTemplates || []).filter(
+      (t) =>
+        t.channel === channel &&
+        (t.brandId === null || t.brandId === brandId),
+    );
+  }, [data, channel, brandId]);
 
   const groups = useMemo(() => {
     if (!data) return [];
@@ -219,6 +229,7 @@ function CampaignBuilderInner() {
                   if (!value) return;
                   const next = value as CampaignChannel;
                   setChannel(next);
+                  setTemplateId("");
                   if (next === "email" && name.toLowerCase().includes("sms")) {
                     setName(name.replace(/SMS/i, "email"));
                   }
@@ -289,6 +300,48 @@ function CampaignBuilderInner() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Use template</Label>
+            <Select
+              value={templateId || "__none__"}
+              onValueChange={(value) => {
+                if (!value || value === "__none__") {
+                  setTemplateId("");
+                  return;
+                }
+                const tpl = usableTemplates.find((t) => t.id === value);
+                if (!tpl) return;
+                setTemplateId(tpl.id);
+                setMessage(tpl.body);
+                if (tpl.channel === "email" && tpl.subject) {
+                  setSubject(tpl.subject);
+                }
+                toast.message(`Loaded “${tpl.name}” from Creatives`);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Pick from Creatives library" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Write from scratch</SelectItem>
+                {usableTemplates.map((tpl) => (
+                  <SelectItem key={tpl.id} value={tpl.id}>
+                    {tpl.name}
+                    {tpl.brandId ? "" : " · shared"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-[color:var(--ink-muted)]">
+              {usableTemplates.length
+                ? "Shared + this entity’s templates for the selected channel."
+                : "No matching templates — create some under Creatives."}{" "}
+              <Link href="/creatives" className="underline underline-offset-2">
+                Open Creatives
+              </Link>
+            </p>
           </div>
 
           {channel === "email" ? (
