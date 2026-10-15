@@ -1,8 +1,12 @@
 import { isNeonConfigured } from "@/lib/db";
-import { isLeadEligibleForEntity } from "@/lib/eligibility";
+import {
+  isLeadEligibleForEntity,
+  normalizeContact,
+} from "@/lib/eligibility";
 import * as jsonStore from "@/lib/json-store";
 import * as neonStore from "@/lib/neon-store";
 import type { AutopilotRunResult } from "@/lib/autopilot";
+import { verifyContact } from "@/lib/verify";
 import type {
   AdAsset,
   AdFolder,
@@ -22,6 +26,14 @@ import type {
 
 export { isLeadEligibleForEntity };
 export { isNeonConfigured };
+
+export type CreateLeadResult =
+  | { ok: true; lead: Lead }
+  | {
+      ok: false;
+      code: "validation" | "opt_out" | "duplicate";
+      error: string;
+    };
 
 function backend() {
   return isNeonConfigured() ? neonStore : jsonStore;
@@ -66,6 +78,110 @@ export async function importLeads(input: {
   }>;
 }): Promise<{ batch: UploadBatch; imported: Lead[]; duplicates: number }> {
   return backend().importLeads(input);
+}
+
+/** Create one lead in the shared pool (source defaults to Manual). */
+export async function createLead(input: {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  source?: string;
+  groupName?: string;
+}): Promise<CreateLeadResult> {
+  const email = input.email?.trim() || undefined;
+  const phone = input.phone?.trim() || undefined;
+  const firstName = input.firstName?.trim() || undefined;
+  const lastName = input.lastName?.trim() || undefined;
+  const source = input.source?.trim() || "Manual";
+  const groupName = input.groupName?.trim() || "Manual";
+
+  if (!email && !phone) {
+    return {
+      ok: false,
+      code: "validation",
+      error: "Phone or email is required",
+    };
+  }
+
+  const verified = verifyContact({ email, phone });
+  if (email && verified.emailStatus === "invalid") {
+    return {
+      ok: false,
+      code: "validation",
+      error: "Invalid email format",
+    };
+  }
+  if (phone && verified.phoneStatus === "invalid") {
+    return {
+      ok: false,
+      code: "validation",
+      error: "Invalid phone number",
+    };
+  }
+
+  const data = await getData();
+  const emailNorm = email ? normalizeContact(email) : null;
+  const phoneNorm = phone ? normalizeContact(phone) : null;
+
+  for (const opt of data.optOuts) {
+    const contact = normalizeContact(opt.contact);
+    if (
+      (emailNorm && contact === emailNorm) ||
+      (phoneNorm && contact === phoneNorm)
+    ) {
+      return {
+        ok: false,
+        code: "opt_out",
+        error: "Contact is on the global opt-out list",
+      };
+    }
+  }
+
+  for (const lead of data.leads) {
+    if (
+      emailNorm &&
+      lead.email &&
+      normalizeContact(lead.email) === emailNorm
+    ) {
+      return {
+        ok: false,
+        code: "duplicate",
+        error: "A lead with this email already exists",
+      };
+    }
+    if (
+      phoneNorm &&
+      lead.phone &&
+      normalizeContact(lead.phone) === phoneNorm
+    ) {
+      return {
+        ok: false,
+        code: "duplicate",
+        error: "A lead with this phone already exists",
+      };
+    }
+  }
+
+  const result = await importLeads({
+    filename: "manual-entry",
+    source,
+    groupName,
+    purchaseDate: new Date().toISOString().slice(0, 10),
+    costCents: 0,
+    rows: [{ email, phone, firstName, lastName }],
+  });
+
+  const lead = result.imported[0];
+  if (!lead) {
+    return {
+      ok: false,
+      code: "duplicate",
+      error: "Lead could not be created (duplicate or opted out)",
+    };
+  }
+
+  return { ok: true, lead };
 }
 
 export async function verifyLeads(input?: {

@@ -7,6 +7,14 @@ import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/state-panels";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -27,6 +35,14 @@ import {
 import { usePlatform } from "@/hooks/use-platform";
 import { compactNumber, money, relativeDay } from "@/lib/client-format";
 
+const EMPTY_MANUAL = {
+  firstName: "",
+  lastName: "",
+  phone: "",
+  email: "",
+  source: "Manual",
+};
+
 export default function LeadsPage() {
   const { data, loading, error, refresh } = usePlatform();
   const [source, setSource] = useState("LeadForge");
@@ -41,6 +57,10 @@ export default function LeadsPage() {
   const [query, setQuery] = useState("");
   const [groupFilter, setGroupFilter] = useState("all");
   const [verifyFilter, setVerifyFilter] = useState("all");
+  const [addOpen, setAddOpen] = useState(false);
+  const [manual, setManual] = useState(EMPTY_MANUAL);
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
   const groups = useMemo(() => {
     if (!data) return [];
@@ -178,6 +198,59 @@ export default function LeadsPage() {
     }
   }
 
+  function openAddLead() {
+    setManual(EMPTY_MANUAL);
+    setAddError(null);
+    setAddOpen(true);
+  }
+
+  async function onAddLead(e: React.FormEvent) {
+    e.preventDefault();
+    setAddError(null);
+    if (!manual.phone.trim() && !manual.email.trim()) {
+      setAddError("Phone or email is required");
+      return;
+    }
+    setAdding(true);
+    try {
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: manual.firstName.trim() || undefined,
+          lastName: manual.lastName.trim() || undefined,
+          phone: manual.phone.trim() || undefined,
+          email: manual.email.trim() || undefined,
+          source: manual.source.trim() || "Manual",
+        }),
+      });
+      const json = (await res.json()) as {
+        error?: string;
+        code?: string;
+        lead?: { id: string; firstName?: string; lastName?: string };
+      };
+      if (!res.ok) {
+        const msg = json.error || "Could not add lead";
+        setAddError(msg);
+        toast.error(msg);
+        return;
+      }
+      const name =
+        [json.lead?.firstName, json.lead?.lastName].filter(Boolean).join(" ") ||
+        "Lead";
+      toast.success(`${name} added to the shared pool`);
+      setAddOpen(false);
+      setManual(EMPTY_MANUAL);
+      await refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not add lead";
+      setAddError(msg);
+      toast.error(msg);
+    } finally {
+      setAdding(false);
+    }
+  }
+
   if (loading) return <LoadingPanel label="Loading lead pool…" />;
   if (error || !data)
     return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
@@ -250,9 +323,17 @@ export default function LeadsPage() {
             onChange={(e) => setFile(e.target.files?.[0] || null)}
           />
         </div>
-        <div className="flex items-end">
-          <Button type="submit" className="w-full" disabled={uploading}>
+        <div className="flex items-end gap-2">
+          <Button type="submit" className="flex-1" disabled={uploading}>
             {uploading ? "Importing…" : "Import CSV"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0"
+            onClick={openAddLead}
+          >
+            Add lead
           </Button>
         </div>
         <p className="text-xs text-[color:var(--ink-muted)] md:col-span-2 xl:col-span-6">
@@ -262,9 +343,116 @@ export default function LeadsPage() {
           <a className="underline underline-offset-2" href="/sample-leads.csv">
             Download sample CSV
           </a>
-          .
+          . Or use <strong>Add lead</strong> for a single contact (source Manual).
         </p>
       </form>
+
+      <Dialog
+        open={addOpen}
+        onOpenChange={(open) => {
+          setAddOpen(open);
+          if (!open) {
+            setAddError(null);
+            setManual(EMPTY_MANUAL);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md" showCloseButton>
+          <DialogHeader>
+            <DialogTitle>Add lead</DialogTitle>
+            <DialogDescription>
+              Add one contact to the shared pool. Phone or email is required.
+              Source defaults to Manual.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={onAddLead} className="grid gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="manual-first">First name</Label>
+                <Input
+                  id="manual-first"
+                  value={manual.firstName}
+                  onChange={(e) =>
+                    setManual((m) => ({ ...m, firstName: e.target.value }))
+                  }
+                  placeholder="Jane"
+                  autoComplete="given-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="manual-last">Last name</Label>
+                <Input
+                  id="manual-last"
+                  value={manual.lastName}
+                  onChange={(e) =>
+                    setManual((m) => ({ ...m, lastName: e.target.value }))
+                  }
+                  placeholder="Doe"
+                  autoComplete="family-name"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manual-phone">Phone</Label>
+              <Input
+                id="manual-phone"
+                type="tel"
+                value={manual.phone}
+                onChange={(e) =>
+                  setManual((m) => ({ ...m, phone: e.target.value }))
+                }
+                placeholder="+1 555 0100"
+                autoComplete="tel"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manual-email">Email</Label>
+              <Input
+                id="manual-email"
+                type="email"
+                value={manual.email}
+                onChange={(e) =>
+                  setManual((m) => ({ ...m, email: e.target.value }))
+                }
+                placeholder="jane@example.com"
+                autoComplete="email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manual-source">Source</Label>
+              <Input
+                id="manual-source"
+                value={manual.source}
+                onChange={(e) =>
+                  setManual((m) => ({ ...m, source: e.target.value }))
+                }
+                placeholder="Manual"
+              />
+            </div>
+            {addError ? (
+              <p
+                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+                role="alert"
+              >
+                {addError}
+              </p>
+            ) : null}
+            <DialogFooter className="mx-0 mb-0 rounded-none border-0 bg-transparent p-0 pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={adding}
+                onClick={() => setAddOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={adding}>
+                {adding ? "Saving…" : "Save lead"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5 animate-rise-delay-1">
         <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
@@ -395,8 +583,8 @@ export default function LeadsPage() {
           title={data.leads.length === 0 ? "No leads in the pool yet" : "No leads match"}
           description={
             data.leads.length === 0
-              ? "Import a provider CSV above to start the shared pool. Then verify and launch campaigns."
-              : "Clear filters or upload another CSV to see contacts in the shared pool."
+              ? "Import a provider CSV or use Add lead to start the shared pool. Then verify and launch campaigns."
+              : "Clear filters, upload another CSV, or add a lead to see contacts in the shared pool."
           }
         />
       ) : (
