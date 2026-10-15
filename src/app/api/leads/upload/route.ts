@@ -108,7 +108,7 @@ export async function POST(request: Request) {
       ]),
     }));
 
-    const emptyContact = rows.filter((r) => !r.email && !r.phone).length;
+    const skippedEmpty = rows.filter((r) => !r.email && !r.phone).length;
     const usable = rows.filter((r) => r.email || r.phone);
 
     if (!usable.length) {
@@ -121,7 +121,7 @@ export async function POST(request: Request) {
           code: "missing_contact_columns",
           headers,
           rowCount: rows.length,
-          skippedEmpty: emptyContact,
+          skippedEmpty,
         },
         { status: 400 },
       );
