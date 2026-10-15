@@ -17,16 +17,43 @@ function normHeader(key: string): string {
     .replace(/[\s-]+/g, "_");
 }
 
-function pick(row: Record<string, string>, keys: string[]): string | undefined {
+function rowMap(row: Record<string, string>): Map<string, string> {
   const normalized = new Map<string, string>();
   for (const [k, v] of Object.entries(row)) {
     normalized.set(normHeader(k), typeof v === "string" ? v : String(v ?? ""));
   }
+  return normalized;
+}
+
+function pickFrom(
+  normalized: Map<string, string>,
+  keys: string[],
+): string | undefined {
   for (const key of keys) {
     const value = normalized.get(normHeader(key));
     if (value?.trim()) return value.trim();
   }
   return undefined;
+}
+
+/** Split "Jane Doe" / "Doe, Jane" when first/last columns are absent. */
+function splitFullName(full: string): { first?: string; last?: string } {
+  const name = full.trim().replace(/\s+/g, " ");
+  if (!name) return {};
+  if (name.includes(",")) {
+    const [last, ...rest] = name.split(",").map((p) => p.trim()).filter(Boolean);
+    const first = rest.join(" ").trim();
+    return {
+      first: first || undefined,
+      last: last || undefined,
+    };
+  }
+  const parts = name.split(" ");
+  if (parts.length === 1) return { first: parts[0] };
+  return {
+    first: parts[0],
+    last: parts.slice(1).join(" "),
+  };
 }
 
 export async function POST(request: Request) {
@@ -80,33 +107,61 @@ export async function POST(request: Request) {
     }
 
     const headers = (parsed.meta.fields || []).map(normHeader);
-    const rows = parsed.data.map((row) => ({
-      email: pick(row, ["email", "email_address", "e_mail", "e-mail", "mail"]),
-      phone: pick(row, [
+    const rows = parsed.data.map((row) => {
+      const cols = rowMap(row);
+      const email = pickFrom(cols, [
+        "email",
+        "email_address",
+        "emailaddress",
+        "e_mail",
+        "e-mail",
+        "mail",
+        "contact_email",
+      ]);
+      const phone = pickFrom(cols, [
         "phone",
-        "mobile",
-        "cell",
         "phone_number",
         "phonenumber",
+        "mobile",
         "mobile_number",
+        "cell",
         "cell_phone",
-      ]),
-      firstName: pick(row, [
+        "cellphone",
+        "telephone",
+        "tel",
+        "contact_phone",
+      ]);
+      let firstName = pickFrom(cols, [
         "first_name",
         "firstname",
         "first",
         "fname",
         "given_name",
-      ]),
-      lastName: pick(row, [
+      ]);
+      let lastName = pickFrom(cols, [
         "last_name",
         "lastname",
         "last",
         "lname",
         "surname",
         "family_name",
-      ]),
-    }));
+      ]);
+      if (!firstName && !lastName) {
+        const full = pickFrom(cols, [
+          "name",
+          "full_name",
+          "fullname",
+          "contact_name",
+          "lead_name",
+        ]);
+        if (full) {
+          const split = splitFullName(full);
+          firstName = split.first;
+          lastName = split.last;
+        }
+      }
+      return { email, phone, firstName, lastName };
+    });
 
     const skippedEmpty = rows.filter((r) => !r.email && !r.phone).length;
     const usable = rows.filter((r) => r.email || r.phone);

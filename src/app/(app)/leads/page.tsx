@@ -352,8 +352,9 @@ export default function LeadsPage() {
           Tag each buy with a source (provider) and a group (which file). On
           import we automatically verify email + phone format so bad contacts
           don’t bounce. Columns: email / phone / first_name / last_name (spaces
-          OK — e.g. Email Address, Phone Number). Max ~5,000 rows or 5&nbsp;MB
-          per file.{" "}
+          OK — e.g. Email Address, Phone Number, Mobile). A single Name /
+          Full Name column is split when first/last are missing. Max ~5,000
+          rows or 5&nbsp;MB per file.{" "}
           <a className="underline underline-offset-2" href="/sample-leads.csv">
             Download sample CSV
           </a>
