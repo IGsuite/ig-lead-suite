@@ -141,7 +141,7 @@ export async function importLeads(input: {
     }
 
     if (!row.email && !row.phone) {
-      duplicates += 1;
+      // Caller should filter these; keep as skip, not "duplicate".
       continue;
     }
 

@@ -2,84 +2,175 @@ import { NextResponse } from "next/server";
 import Papa from "papaparse";
 import { importLeads } from "@/lib/store";
 
+/** Hobby default is ~10s; bulk CSV + Neon write needs headroom on Pro / Fluid. */
+export const maxDuration = 60;
+
+const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB multipart body is well under Vercel limits
+const MAX_ROWS = 5_000;
+
+/** Normalize CSV headers: BOM, case, spaces/dashes → underscores. */
+function normHeader(key: string): string {
+  return key
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
 function pick(row: Record<string, string>, keys: string[]): string | undefined {
+  const normalized = new Map<string, string>();
+  for (const [k, v] of Object.entries(row)) {
+    normalized.set(normHeader(k), typeof v === "string" ? v : String(v ?? ""));
+  }
   for (const key of keys) {
-    const found = Object.entries(row).find(
-      ([k]) => k.trim().toLowerCase() === key.toLowerCase(),
-    );
-    if (found?.[1]?.trim()) return found[1].trim();
+    const value = normalized.get(normHeader(key));
+    if (value?.trim()) return value.trim();
   }
   return undefined;
 }
 
 export async function POST(request: Request) {
-  const form = await request.formData();
-  const file = form.get("file");
-  const source = String(form.get("source") || "").trim();
-  const groupName = String(form.get("groupName") || "General").trim();
-  const purchaseDate = String(form.get("purchaseDate") || "").trim();
-  const costDollars = Number(form.get("costDollars") || 0);
+  try {
+    const form = await request.formData();
+    const file = form.get("file");
+    const source = String(form.get("source") || "").trim();
+    const groupName = String(form.get("groupName") || "General").trim();
+    const purchaseDate = String(form.get("purchaseDate") || "").trim();
+    const costDollars = Number(form.get("costDollars") || 0);
 
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "CSV file is required" }, { status: 400 });
-  }
-  if (!source || !purchaseDate || !Number.isFinite(costDollars)) {
+    if (!(file instanceof File)) {
+      return NextResponse.json({ error: "CSV file is required" }, { status: 400 });
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      return NextResponse.json(
+        {
+          error: `CSV is too large (${Math.round(file.size / 1024)} KB). Max is ${MAX_FILE_BYTES / 1024 / 1024} MB (~${MAX_ROWS.toLocaleString()} rows).`,
+        },
+        { status: 400 },
+      );
+    }
+    if (!source || !purchaseDate || !Number.isFinite(costDollars)) {
+      return NextResponse.json(
+        { error: "Source, purchase date, and cost are required" },
+        { status: 400 },
+      );
+    }
+
+    const text = await file.text();
+    const parsed = Papa.parse<Record<string, string>>(text, {
+      header: true,
+      skipEmptyLines: "greedy",
+      transformHeader: (h) => normHeader(h),
+    });
+
+    if (parsed.errors.length && !parsed.data.length) {
+      return NextResponse.json(
+        { error: parsed.errors[0]?.message || "Could not parse CSV" },
+        { status: 400 },
+      );
+    }
+
+    if (parsed.data.length > MAX_ROWS) {
+      return NextResponse.json(
+        {
+          error: `CSV has ${parsed.data.length.toLocaleString()} rows; max is ${MAX_ROWS.toLocaleString()} per upload. Split the file and import in batches.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    const headers = (parsed.meta.fields || []).map(normHeader);
+    const rows = parsed.data.map((row) => ({
+      email: pick(row, ["email", "email_address", "e_mail", "e-mail", "mail"]),
+      phone: pick(row, [
+        "phone",
+        "mobile",
+        "cell",
+        "phone_number",
+        "phonenumber",
+        "mobile_number",
+        "cell_phone",
+      ]),
+      firstName: pick(row, [
+        "first_name",
+        "firstname",
+        "first",
+        "fname",
+        "given_name",
+      ]),
+      lastName: pick(row, [
+        "last_name",
+        "lastname",
+        "last",
+        "lname",
+        "surname",
+        "family_name",
+      ]),
+    }));
+
+    const emptyContact = rows.filter((r) => !r.email && !r.phone).length;
+    const usable = rows.filter((r) => r.email || r.phone);
+
+    if (!usable.length) {
+      const headerHint = headers.length
+        ? `Found columns: ${headers.slice(0, 12).join(", ")}${headers.length > 12 ? "…" : ""}.`
+        : "No header row detected.";
+      return NextResponse.json(
+        {
+          error: `No rows with email or phone. Use columns like email, phone, first_name, last_name (spaces OK: "Email Address", "Phone Number"). ${headerHint}`,
+          code: "missing_contact_columns",
+          headers,
+          rowCount: rows.length,
+          skippedEmpty: emptyContact,
+        },
+        { status: 400 },
+      );
+    }
+
+    const result = await importLeads({
+      filename: file.name,
+      source,
+      groupName,
+      purchaseDate,
+      costCents: Math.round(costDollars * 100),
+      rows: usable,
+    });
+
+    // Mutually exclusive buckets for the toast (phone/email can disagree).
+    let valid = 0;
+    let invalid = 0;
+    let risky = 0;
+    for (const l of result.imported) {
+      const statuses = [l.emailStatus, l.phoneStatus];
+      if (statuses.includes("invalid")) invalid += 1;
+      else if (statuses.includes("risky")) risky += 1;
+      else if (statuses.includes("valid")) valid += 1;
+    }
+
+    return NextResponse.json({
+      batch: result.batch,
+      importedCount: result.imported.length,
+      duplicateCount: result.duplicates,
+      skippedEmpty,
+      rowCount: rows.length,
+      verifiedOnImport: {
+        valid,
+        invalid,
+        risky,
+      },
+    });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Upload failed unexpectedly";
+    console.error("[leads/upload]", message);
     return NextResponse.json(
-      { error: "Source, purchase date, and cost are required" },
-      { status: 400 },
+      {
+        error:
+          message.includes("timed out") || message.includes("TIMEOUT")
+            ? "Import timed out. Try a smaller CSV (under 1,000 rows) and retry."
+            : `Import failed: ${message}`,
+      },
+      { status: 500 },
     );
   }
-
-  const text = await file.text();
-  const parsed = Papa.parse<Record<string, string>>(text, {
-    header: true,
-    skipEmptyLines: true,
-  });
-
-  if (parsed.errors.length && !parsed.data.length) {
-    return NextResponse.json(
-      { error: parsed.errors[0]?.message || "Could not parse CSV" },
-      { status: 400 },
-    );
-  }
-
-  const rows = parsed.data.map((row) => ({
-    email: pick(row, ["email", "email_address", "e-mail"]),
-    phone: pick(row, ["phone", "mobile", "cell", "phone_number"]),
-    firstName: pick(row, ["first_name", "firstname", "first", "fname"]),
-    lastName: pick(row, ["last_name", "lastname", "last", "lname"]),
-  }));
-
-  const result = await importLeads({
-    filename: file.name,
-    source,
-    groupName,
-    purchaseDate,
-    costCents: Math.round(costDollars * 100),
-    rows,
-  });
-
-  const valid = result.imported.filter(
-    (l) => l.emailStatus === "valid" || l.phoneStatus === "valid",
-  ).length;
-  const invalid = result.imported.filter(
-    (l) => l.emailStatus === "invalid" || l.phoneStatus === "invalid",
-  ).length;
-  const risky = result.imported.filter(
-    (l) =>
-      (l.emailStatus === "risky" || l.phoneStatus === "risky") &&
-      l.emailStatus !== "invalid" &&
-      l.phoneStatus !== "invalid",
-  ).length;
-
-  return NextResponse.json({
-    batch: result.batch,
-    importedCount: result.imported.length,
-    duplicateCount: result.duplicates,
-    verifiedOnImport: {
-      valid,
-      invalid,
-      risky,
-    },
-  });
 }

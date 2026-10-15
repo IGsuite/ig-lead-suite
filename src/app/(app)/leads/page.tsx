@@ -148,17 +148,29 @@ export default function LeadsPage() {
       form.set("purchaseDate", purchaseDate);
       form.set("costDollars", costDollars);
       const res = await fetch("/api/leads/upload", { method: "POST", body: form });
-      const json = (await res.json()) as {
+      const json = (await res.json().catch(() => ({}))) as {
         error?: string;
         importedCount?: number;
         duplicateCount?: number;
+        skippedEmpty?: number;
         verifiedOnImport?: { valid?: number; invalid?: number; risky?: number };
       };
       if (!res.ok) throw new Error(json.error || "Upload failed");
-      const v = json.verifiedOnImport;
-      toast.success(
-        `Imported ${json.importedCount} into ${groupName} · ${json.duplicateCount} duplicates removed · verified ${v?.valid ?? 0} valid / ${v?.risky ?? 0} risky / ${v?.invalid ?? 0} invalid`,
-      );
+      if ((json.importedCount ?? 0) === 0) {
+        toast.message(
+          `No new leads imported · ${json.duplicateCount ?? 0} duplicates` +
+            (json.skippedEmpty
+              ? ` · ${json.skippedEmpty} rows missing email/phone`
+              : ""),
+        );
+      } else {
+        const v = json.verifiedOnImport;
+        toast.success(
+          `Imported ${json.importedCount} into ${groupName} · ${json.duplicateCount ?? 0} duplicates` +
+            (json.skippedEmpty ? ` · ${json.skippedEmpty} skipped empty` : "") +
+            ` · verified ${v?.valid ?? 0} valid / ${v?.risky ?? 0} risky / ${v?.invalid ?? 0} invalid`,
+        );
+      }
       setFile(null);
       await refresh();
     } catch (err) {
@@ -339,7 +351,9 @@ export default function LeadsPage() {
         <p className="text-xs text-[color:var(--ink-muted)] md:col-span-2 xl:col-span-6">
           Tag each buy with a source (provider) and a group (which file). On
           import we automatically verify email + phone format so bad contacts
-          don’t bounce. Expected columns: email, phone, first_name, last_name.{" "}
+          don’t bounce. Columns: email / phone / first_name / last_name (spaces
+          OK — e.g. Email Address, Phone Number). Max ~5,000 rows or 5&nbsp;MB
+          per file.{" "}
           <a className="underline underline-offset-2" href="/sample-leads.csv">
             Download sample CSV
           </a>

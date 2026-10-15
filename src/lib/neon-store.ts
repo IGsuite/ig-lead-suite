@@ -248,7 +248,7 @@ export async function importLeads(input: {
     }
 
     if (!row.email && !row.phone) {
-      duplicates += 1;
+      // Caller should filter these; keep as skip, not "duplicate".
       continue;
     }
 
@@ -290,72 +290,77 @@ export async function importLeads(input: {
     createdAt: new Date().toISOString(),
   };
 
-  await prisma.$transaction(async (tx) => {
-    await tx.uploadBatch.create({
-      data: {
-        id: batch.id,
-        filename: batch.filename,
-        source: batch.source,
-        groupName: batch.groupName,
-        purchaseDate: new Date(batch.purchaseDate),
-        costCents: batch.costCents,
-        rowCount: batch.rowCount,
-        duplicateCount: batch.duplicateCount,
-        importedCount: batch.importedCount,
-        createdAt: new Date(batch.createdAt),
-      },
-    });
-
-    if (imported.length) {
-      await tx.lead.createMany({
-        data: imported.map((l) => ({
-          id: l.id,
-          email: l.email ?? null,
-          phone: l.phone ?? null,
-          firstName: l.firstName ?? null,
-          lastName: l.lastName ?? null,
-          source: l.source,
-          groupName: l.groupName,
-          purchaseDate: new Date(l.purchaseDate),
-          costCents: l.costCents,
-          offeredEntityIds: l.offeredEntityIds,
-          lastEntityId: l.lastEntityId,
-          convertedEntityId: l.convertedEntityId,
-          status: l.status,
-          optedOut: l.optedOut,
-          emailStatus: l.emailStatus,
-          phoneStatus: l.phoneStatus,
-          verifyNotes: l.verifyNotes ?? null,
-          verifiedAt: l.verifiedAt ? new Date(l.verifiedAt) : null,
-          uploadBatchId: l.uploadBatchId ?? null,
-          createdAt: new Date(l.createdAt),
-        })),
+  const CHUNK = 250;
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.uploadBatch.create({
+        data: {
+          id: batch.id,
+          filename: batch.filename,
+          source: batch.source,
+          groupName: batch.groupName,
+          purchaseDate: new Date(batch.purchaseDate),
+          costCents: batch.costCents,
+          rowCount: batch.rowCount,
+          duplicateCount: batch.duplicateCount,
+          importedCount: batch.importedCount,
+          createdAt: new Date(batch.createdAt),
+        },
       });
-    }
 
-    const spend = await tx.providerSpend.findUnique({
-      where: { source: input.source },
-    });
-    if (spend) {
-      await tx.providerSpend.update({
+      for (let i = 0; i < imported.length; i += CHUNK) {
+        const slice = imported.slice(i, i + CHUNK);
+        await tx.lead.createMany({
+          data: slice.map((l) => ({
+            id: l.id,
+            email: l.email ?? null,
+            phone: l.phone ?? null,
+            firstName: l.firstName ?? null,
+            lastName: l.lastName ?? null,
+            source: l.source,
+            groupName: l.groupName,
+            purchaseDate: new Date(l.purchaseDate),
+            costCents: l.costCents,
+            offeredEntityIds: l.offeredEntityIds,
+            lastEntityId: l.lastEntityId,
+            convertedEntityId: l.convertedEntityId,
+            status: l.status,
+            optedOut: l.optedOut,
+            emailStatus: l.emailStatus,
+            phoneStatus: l.phoneStatus,
+            verifyNotes: l.verifyNotes ?? null,
+            verifiedAt: l.verifiedAt ? new Date(l.verifiedAt) : null,
+            uploadBatchId: l.uploadBatchId ?? null,
+            createdAt: new Date(l.createdAt),
+          })),
+        });
+      }
+
+      const spend = await tx.providerSpend.findUnique({
         where: { source: input.source },
-        data: {
-          leadsPurchased: spend.leadsPurchased + imported.length,
-          costCents: spend.costCents + input.costCents,
-        },
       });
-    } else {
-      await tx.providerSpend.create({
-        data: {
-          source: input.source,
-          leadsPurchased: imported.length,
-          costCents: input.costCents,
-          replies: 0,
-          conversions: 0,
-        },
-      });
-    }
-  });
+      if (spend) {
+        await tx.providerSpend.update({
+          where: { source: input.source },
+          data: {
+            leadsPurchased: spend.leadsPurchased + imported.length,
+            costCents: spend.costCents + input.costCents,
+          },
+        });
+      } else {
+        await tx.providerSpend.create({
+          data: {
+            source: input.source,
+            leadsPurchased: imported.length,
+            costCents: input.costCents,
+            replies: 0,
+            conversions: 0,
+          },
+        });
+      }
+    },
+    { timeout: 55_000 },
+  );
 
   return { batch, imported, duplicates };
 }
