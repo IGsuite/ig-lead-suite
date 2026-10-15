@@ -6,14 +6,25 @@ import { ensureDefaultAdmin } from "@/lib/users-store";
 import { isAdminSession } from "@/lib/acl";
 
 export async function GET() {
-  await ensureDefaultAdmin();
-  const session = await getSession();
-  const data = await getData();
-  const scoped = scopePlatformData(data, session);
-  return NextResponse.json({
-    ...scoped,
-    storageMode: getStorageMode(),
-  });
+  try {
+    await ensureDefaultAdmin();
+    const session = await getSession();
+    const data = await getData();
+    const scoped = scopePlatformData(data, session);
+    return NextResponse.json({
+      ...scoped,
+      storageMode: getStorageMode(),
+    });
+  } catch (err) {
+    console.error("[api/platform] GET failed:", err);
+    return NextResponse.json(
+      {
+        error:
+          err instanceof Error ? err.message : "Failed to load platform data",
+      },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(request: Request) {

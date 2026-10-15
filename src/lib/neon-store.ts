@@ -59,8 +59,14 @@ export async function getData(): Promise<PlatformData> {
     prisma.campaign.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.reply.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.optOut.findMany({ orderBy: { createdAt: "desc" } }),
-    prisma.providerSpend.findMany({ orderBy: { source: "asc" } }),
-    prisma.costEntry.findMany({ orderBy: { incurredAt: "desc" } }),
+    safeFindMany(
+      () => prisma.providerSpend.findMany({ orderBy: { source: "asc" } }),
+      "ProviderSpend",
+    ),
+    safeFindMany(
+      () => prisma.costEntry.findMany({ orderBy: { incurredAt: "desc" } }),
+      "CostEntry",
+    ),
     safeFindMany(
       () => prisma.messageTemplate.findMany({ orderBy: { updatedAt: "desc" } }),
       "MessageTemplate",
