@@ -64,7 +64,7 @@ export interface LeadSendEvent {
   campaignId: string;
   channel: CampaignChannel;
   messageFingerprint: string;
-  mode: CampaignPoolMode;
+  mode?: CampaignPoolMode;
   sentAt: string;
 }
 
@@ -158,7 +158,7 @@ export interface Brand {
   /** Whether this entity is included in shared-pool offer rotation. */
   rotationEnabled: boolean;
   /** Brand social page links shown on Social Media / entity hub. */
-  socialLinks: SocialLinks;
+  socialLinks?: SocialLinks;
   notes?: string;
 }
 
@@ -367,7 +367,7 @@ export interface RotationConfig {
    * Cursor into the fair-ordered eligible pool for Auto wheel walks.
    * Advances after each Autopilot pass so the same slice is not reused daily.
    */
-  poolCursor: number;
+  poolCursor?: number;
 }
 
 /** Source performance for one entity portal. */
@@ -472,9 +472,9 @@ export interface PlatformData {
   messageTemplates: MessageTemplate[];
   adFolders: AdFolder[];
   adAssets: AdAsset[];
-  socialCampaigns: SocialCampaign[];
-  socialConnections: SocialConnection[];
+  socialCampaigns?: SocialCampaign[];
+  socialConnections?: SocialConnection[];
   /** Durable send history for Auto wheel / Own campaign rotation. */
-  sendEvents: LeadSendEvent[];
+  sendEvents?: LeadSendEvent[];
   rotation: RotationConfig;
 }
