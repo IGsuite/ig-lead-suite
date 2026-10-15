@@ -45,6 +45,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local deploy scratch / junk uploads (never commit)
+.deploy-tmp/
+.up_*.json
+*.b64
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
