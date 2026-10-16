@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { assertEntityAccess, canAccessEntity } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
-import { createCampaign, getData, launchCampaign } from "@/lib/store";
+import {
+  createCampaign,
+  getData,
+  launchCampaign,
+  setCampaignStatus,
+} from "@/lib/store";
 import type {
   CampaignChannel,
   CampaignPoolMode,
@@ -62,6 +67,32 @@ export async function POST(request: Request) {
       deferredReason: result.reason,
       windowLabel: result.windowLabel,
     });
+  }
+
+  if (body.action === "cancel" && body.id) {
+    const data = await getData();
+    const existing = data.campaigns.find((c) => c.id === body.id);
+    if (!existing) {
+      return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+    }
+    const gate = assertEntityAccess(session, existing.brandId);
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.error }, { status: gate.status });
+    }
+    if (
+      existing.status === "completed" ||
+      existing.status === "cancelled"
+    ) {
+      return NextResponse.json(
+        { error: `Campaign already ${existing.status}` },
+        { status: 400 },
+      );
+    }
+    const updated = await setCampaignStatus(body.id, "cancelled");
+    if (!updated) {
+      return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+    }
+    return NextResponse.json(updated);
   }
 
   if (

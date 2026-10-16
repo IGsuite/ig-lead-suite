@@ -24,7 +24,8 @@ export type CampaignStatus =
   | "scheduled"
   | "sending"
   | "paused"
-  | "completed";
+  | "completed"
+  | "cancelled";
 /** Auto = shared-pool Ferris wheel; Own = standalone entity campaign. */
 export type CampaignPoolMode = "auto" | "own";
 export type ReplySentiment =

@@ -238,6 +238,18 @@ export async function createCampaign(
   return campaign;
 }
 
+export async function setCampaignStatus(
+  id: string,
+  status: Campaign["status"],
+): Promise<Campaign | null> {
+  const data = await ensureStore();
+  const campaign = data.campaigns.find((c) => c.id === id);
+  if (!campaign) return null;
+  campaign.status = status;
+  await writeStore(data);
+  return campaign;
+}
+
 export async function launchCampaign(id: string): Promise<LaunchResult | null> {
   const data = await ensureStore();
   const campaign = data.campaigns.find((c) => c.id === id);
