@@ -86,16 +86,36 @@ export function applyVerification(lead: Lead): Lead {
   };
 }
 
+/**
+ * Send-time gate: always re-check format so garbage never goes out,
+ * even when preferVerified is off or stored status is stale.
+ * When preferVerified is on, also require valid|risky (not unverified).
+ */
 export function contactOkForChannel(
   lead: Lead,
   channel: "sms" | "email",
   preferVerified: boolean,
 ): boolean {
-  if (!preferVerified) return true;
+  const live = verifyContact({ email: lead.email, phone: lead.phone });
   if (channel === "email") {
     if (!lead.email) return false;
-    return lead.emailStatus === "valid" || lead.emailStatus === "risky";
+    if (live.emailStatus === "invalid") return false;
+    if (!preferVerified) return true;
+    return live.emailStatus === "valid" || live.emailStatus === "risky";
   }
   if (!lead.phone) return false;
-  return lead.phoneStatus === "valid" || lead.phoneStatus === "risky";
+  if (live.phoneStatus === "invalid") return false;
+  if (!preferVerified) return true;
+  return live.phoneStatus === "valid" || live.phoneStatus === "risky";
+}
+
+/** True when the lead has at least one contact that is not format-invalid. */
+export function hasUsableContact(input: {
+  email?: string;
+  phone?: string;
+}): boolean {
+  const live = verifyContact(input);
+  const emailOk = Boolean(input.email?.trim()) && live.emailStatus !== "invalid";
+  const phoneOk = Boolean(input.phone?.trim()) && live.phoneStatus !== "invalid";
+  return emailOk || phoneOk;
 }

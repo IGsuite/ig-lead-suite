@@ -126,6 +126,7 @@ export async function replaceWithSeed(): Promise<PlatformData> {
         phone: l.phone ?? null,
         firstName: l.firstName ?? null,
         lastName: l.lastName ?? null,
+        businessName: l.businessName ?? null,
         source: l.source,
         groupName: l.groupName,
         purchaseDate: new Date(l.purchaseDate),

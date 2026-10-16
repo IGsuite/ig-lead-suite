@@ -18,6 +18,7 @@ export async function POST(request: Request) {
     lastName?: string;
     email?: string;
     phone?: string;
+    businessName?: string;
     source?: string;
     groupName?: string;
   };
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
     lastName: body.lastName,
     email: body.email,
     phone: body.phone,
+    businessName: body.businessName,
     source: body.source,
     groupName: body.groupName,
   });

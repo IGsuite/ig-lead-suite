@@ -200,11 +200,14 @@ export async function importLeads(input: {
     phone?: string;
     firstName?: string;
     lastName?: string;
+    businessName?: string;
+    source?: string;
+    groupName?: string;
   }>;
 }): Promise<{ batch: UploadBatch; imported: Lead[]; duplicates: number }> {
   await ensureSeeded();
   const prisma = getPrisma();
-  const groupName = input.groupName?.trim() || "General";
+  const defaultGroup = input.groupName?.trim() || "General";
   const [existingLeads, optOuts] = await Promise.all([
     prisma.lead.findMany({ select: { email: true, phone: true } }),
     prisma.optOut.findMany({ select: { contact: true } }),
@@ -226,8 +229,10 @@ export async function importLeads(input: {
     input.rows.length > 0
       ? Math.round(input.costCents / input.rows.length)
       : 0;
+  const LEAD_INSERT_CHUNK = 500;
 
-  for (const row of input.rows) {
+  for (let idx = 0; idx < input.rows.length; idx += 1) {
+    const row = input.rows[idx];
     const emailKey = row.email ? `e:${normalizeContact(row.email)}` : null;
     const phoneKey = row.phone ? `p:${normalizeContact(row.phone)}` : null;
     const optedKeyEmail = row.email
@@ -248,18 +253,18 @@ export async function importLeads(input: {
     }
 
     if (!row.email && !row.phone) {
-      // Caller should filter these; keep as skip, not "duplicate".
       continue;
     }
 
     const lead = applyVerification({
-      id: `lead-${Date.now()}-${imported.length}`,
+      id: `${batchId}-${imported.length}-${idx}`,
       email: row.email?.trim() || undefined,
       phone: row.phone?.trim() || undefined,
       firstName: row.firstName?.trim() || undefined,
       lastName: row.lastName?.trim() || undefined,
-      source: input.source,
-      groupName,
+      businessName: row.businessName?.trim() || undefined,
+      source: row.source?.trim() || input.source,
+      groupName: row.groupName?.trim() || defaultGroup,
       purchaseDate: input.purchaseDate,
       costCents: costPerLead,
       offeredEntityIds: [],
@@ -281,7 +286,7 @@ export async function importLeads(input: {
     id: batchId,
     filename: input.filename,
     source: input.source,
-    groupName,
+    groupName: defaultGroup,
     purchaseDate: input.purchaseDate,
     costCents: input.costCents,
     rowCount: input.rows.length,
@@ -290,77 +295,73 @@ export async function importLeads(input: {
     createdAt: new Date().toISOString(),
   };
 
-  const CHUNK = 250;
-  await prisma.$transaction(
-    async (tx) => {
-      await tx.uploadBatch.create({
-        data: {
-          id: batch.id,
-          filename: batch.filename,
-          source: batch.source,
-          groupName: batch.groupName,
-          purchaseDate: new Date(batch.purchaseDate),
-          costCents: batch.costCents,
-          rowCount: batch.rowCount,
-          duplicateCount: batch.duplicateCount,
-          importedCount: batch.importedCount,
-          createdAt: new Date(batch.createdAt),
-        },
-      });
-
-      for (let i = 0; i < imported.length; i += CHUNK) {
-        const slice = imported.slice(i, i + CHUNK);
-        await tx.lead.createMany({
-          data: slice.map((l) => ({
-            id: l.id,
-            email: l.email ?? null,
-            phone: l.phone ?? null,
-            firstName: l.firstName ?? null,
-            lastName: l.lastName ?? null,
-            source: l.source,
-            groupName: l.groupName,
-            purchaseDate: new Date(l.purchaseDate),
-            costCents: l.costCents,
-            offeredEntityIds: l.offeredEntityIds,
-            lastEntityId: l.lastEntityId,
-            convertedEntityId: l.convertedEntityId,
-            status: l.status,
-            optedOut: l.optedOut,
-            emailStatus: l.emailStatus,
-            phoneStatus: l.phoneStatus,
-            verifyNotes: l.verifyNotes ?? null,
-            verifiedAt: l.verifiedAt ? new Date(l.verifiedAt) : null,
-            uploadBatchId: l.uploadBatchId ?? null,
-            createdAt: new Date(l.createdAt),
-          })),
-        });
-      }
-
-      const spend = await tx.providerSpend.findUnique({
-        where: { source: input.source },
-      });
-      if (spend) {
-        await tx.providerSpend.update({
-          where: { source: input.source },
-          data: {
-            leadsPurchased: spend.leadsPurchased + imported.length,
-            costCents: spend.costCents + input.costCents,
-          },
-        });
-      } else {
-        await tx.providerSpend.create({
-          data: {
-            source: input.source,
-            leadsPurchased: imported.length,
-            costCents: input.costCents,
-            replies: 0,
-            conversions: 0,
-          },
-        });
-      }
+  // Batch row first, then chunked inserts outside one giant tx (avoids 30k timeouts).
+  await prisma.uploadBatch.create({
+    data: {
+      id: batch.id,
+      filename: batch.filename,
+      source: batch.source,
+      groupName: batch.groupName,
+      purchaseDate: new Date(batch.purchaseDate),
+      costCents: batch.costCents,
+      rowCount: batch.rowCount,
+      duplicateCount: batch.duplicateCount,
+      importedCount: batch.importedCount,
+      createdAt: new Date(batch.createdAt),
     },
-    { timeout: 55_000 },
-  );
+  });
+
+  for (let i = 0; i < imported.length; i += LEAD_INSERT_CHUNK) {
+    const slice = imported.slice(i, i + LEAD_INSERT_CHUNK);
+    await prisma.lead.createMany({
+      data: slice.map((l) => ({
+        id: l.id,
+        email: l.email ?? null,
+        phone: l.phone ?? null,
+        firstName: l.firstName ?? null,
+        lastName: l.lastName ?? null,
+        businessName: l.businessName ?? null,
+        source: l.source,
+        groupName: l.groupName,
+        purchaseDate: new Date(l.purchaseDate),
+        costCents: l.costCents,
+        offeredEntityIds: l.offeredEntityIds,
+        lastEntityId: l.lastEntityId,
+        convertedEntityId: l.convertedEntityId,
+        status: l.status,
+        optedOut: l.optedOut,
+        emailStatus: l.emailStatus,
+        phoneStatus: l.phoneStatus,
+        verifyNotes: l.verifyNotes ?? null,
+        verifiedAt: l.verifiedAt ? new Date(l.verifiedAt) : null,
+        uploadBatchId: l.uploadBatchId ?? null,
+        createdAt: new Date(l.createdAt),
+      })),
+    });
+  }
+
+  const spend = await prisma.providerSpend.findUnique({
+    where: { source: input.source },
+  });
+  if (spend) {
+    await prisma.providerSpend.update({
+      where: { source: input.source },
+      data: {
+        leadsPurchased: spend.leadsPurchased + imported.length,
+        costCents: spend.costCents + input.costCents,
+      },
+    });
+  } else {
+    await prisma.providerSpend.create({
+      data: {
+        source: input.source,
+        leadsPurchased: imported.length,
+        costCents: input.costCents,
+        replies: 0,
+        conversions: 0,
+      },
+    });
+  }
 
   return { batch, imported, duplicates };
 }

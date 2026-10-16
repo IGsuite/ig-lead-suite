@@ -4,7 +4,8 @@ The **ops app is built**. Neon + Telnyx SMS + Smartlead are keyed. What’s left
 
 ## Already done in IG Lead Suite
 
-- [x] Shared lead upload + groups + verify-on-import  
+- [x] Shared lead upload + groups + verify-on-import (up to **30k rows**/upload, chunked Neon inserts, flexible vendor headers, skip invalid contacts on import + send)  
+  - Soft platform limit: some Vercel plans reject request bodies over ~**4.5 MB** — split large CSVs if upload fails with a body/size error. `maxDuration` is set to 300s for Pro/Fluid.
 - [x] Entity portals (Abstract, Ahava, Take More, Venture, TYH)  
 - [x] Entity-scoped campaigns + reports + inbox (hard isolation)  
 - [x] Campaign **send windows** (morning / afternoon / evening / custom)  

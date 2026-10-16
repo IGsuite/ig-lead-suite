@@ -38,6 +38,7 @@ import { compactNumber, money, relativeDay } from "@/lib/client-format";
 const EMPTY_MANUAL = {
   firstName: "",
   lastName: "",
+  businessName: "",
   phone: "",
   email: "",
   source: "Manual",
@@ -120,6 +121,7 @@ export default function LeadsPage() {
       return [
         lead.firstName,
         lead.lastName,
+        lead.businessName,
         lead.email,
         lead.phone,
         lead.source,
@@ -153,21 +155,30 @@ export default function LeadsPage() {
         importedCount?: number;
         duplicateCount?: number;
         skippedEmpty?: number;
+        skippedInvalid?: number;
         verifiedOnImport?: { valid?: number; invalid?: number; risky?: number };
       };
       if (!res.ok) throw new Error(json.error || "Upload failed");
+      const skipBits = [
+        json.skippedEmpty
+          ? `${json.skippedEmpty} missing email/phone`
+          : null,
+        json.skippedInvalid
+          ? `${json.skippedInvalid} invalid contact`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
       if ((json.importedCount ?? 0) === 0) {
         toast.message(
           `No new leads imported · ${json.duplicateCount ?? 0} duplicates` +
-            (json.skippedEmpty
-              ? ` · ${json.skippedEmpty} rows missing email/phone`
-              : ""),
+            (skipBits ? ` · ${skipBits}` : ""),
         );
       } else {
         const v = json.verifiedOnImport;
         toast.success(
           `Imported ${json.importedCount} into ${groupName} · ${json.duplicateCount ?? 0} duplicates` +
-            (json.skippedEmpty ? ` · ${json.skippedEmpty} skipped empty` : "") +
+            (skipBits ? ` · skipped ${skipBits}` : "") +
             ` · verified ${v?.valid ?? 0} valid / ${v?.risky ?? 0} risky / ${v?.invalid ?? 0} invalid`,
         );
       }
@@ -231,6 +242,7 @@ export default function LeadsPage() {
         body: JSON.stringify({
           firstName: manual.firstName.trim() || undefined,
           lastName: manual.lastName.trim() || undefined,
+          businessName: manual.businessName.trim() || undefined,
           phone: manual.phone.trim() || undefined,
           email: manual.email.trim() || undefined,
           source: manual.source.trim() || "Manual",
@@ -293,6 +305,9 @@ export default function LeadsPage() {
             placeholder="LeadForge"
             required
           />
+          <p className="text-[11px] text-[color:var(--ink-muted)]">
+            Required for reporting. Overrides CSV source columns.
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="groupName">Group / list name</Label>
@@ -349,16 +364,21 @@ export default function LeadsPage() {
           </Button>
         </div>
         <p className="text-xs text-[color:var(--ink-muted)] md:col-span-2 xl:col-span-6">
-          Tag each buy with a source (provider) and a group (which file). On
-          import we automatically verify email + phone format so bad contacts
-          don’t bounce. Columns: email / phone / first_name / last_name (spaces
-          OK — e.g. Email Address, Phone Number, Mobile). A single Name /
-          Full Name column is split when first/last are missing. Max ~5,000
-          rows or 5&nbsp;MB per file.{" "}
+          <strong className="text-[color:var(--ink)]">What matters:</strong>{" "}
+          each row needs a valid <strong>email or phone</strong> (required for
+          sends). Capture <strong>first/last name</strong>,{" "}
+          <strong>business/company</strong>, and set <strong>Source</strong>{" "}
+          here (or map CSV source/group). Headers auto-map across vendors —
+          email, phone, mobile, first_name, last_name, name, company,
+          business_name, source, list/group (spaces OK). Extra columns are
+          ignored. Invalid contacts are skipped on import and blocked again at
+          send. Up to <strong>30,000 rows</strong> / ~20&nbsp;MB per upload
+          (chunked DB writes); if the host rejects large bodies (~4.5&nbsp;MB on
+          some plans) or times out, split the CSV and import each batch.{" "}
           <a className="underline underline-offset-2" href="/sample-leads.csv">
             Download sample CSV
           </a>
-          . Or use <strong>Add lead</strong> for a single contact (source Manual).
+          . Or use <strong>Add lead</strong> for a single contact.
         </p>
       </form>
 
@@ -376,8 +396,9 @@ export default function LeadsPage() {
           <DialogHeader>
             <DialogTitle>Add lead</DialogTitle>
             <DialogDescription>
-              Add one contact to the shared pool. Phone or email is required.
-              Source defaults to Manual.
+              Add one contact to the shared pool. Email or phone is required
+              (valid format). Name, business, and source help personalization
+              and reporting.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={onAddLead} className="grid gap-3">
@@ -406,6 +427,18 @@ export default function LeadsPage() {
                   autoComplete="family-name"
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="manual-business">Business name</Label>
+              <Input
+                id="manual-business"
+                value={manual.businessName}
+                onChange={(e) =>
+                  setManual((m) => ({ ...m, businessName: e.target.value }))
+                }
+                placeholder="Acme LLC"
+                autoComplete="organization"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="manual-phone">Phone</Label>
@@ -507,7 +540,7 @@ export default function LeadsPage() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name, email, phone, source, group…"
+            placeholder="Search name, business, email, phone, source…"
             className="max-w-md"
           />
           <div className="w-full sm:w-44">
@@ -628,6 +661,7 @@ export default function LeadsPage() {
                         "Unknown"}
                     </Link>
                     <div className="text-xs text-[color:var(--ink-muted)]">
+                      {lead.businessName ? `${lead.businessName} · ` : ""}
                       {lead.email || "—"} · {lead.phone || "—"}
                     </div>
                     {lead.optedOut ? (

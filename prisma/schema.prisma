@@ -46,6 +46,8 @@ model Lead {
   phone             String?
   firstName         String?
   lastName          String?
+  /// Company / DBA / merchant name from vendor CSVs
+  businessName      String?
   source            String
   /// Optional buy/list group within a source (e.g. "Week 12 MCA file")
   groupName         String    @default("General")
@@ -73,6 +75,7 @@ model Lead {
   @@index([optedOut])
   @@index([emailStatus])
   @@index([phoneStatus])
+  @@index([businessName])
 }
 
 /// Durable send / assignment history for fair Auto wheel + Own campaign rotation
@@ -349,7 +352,7 @@ model SocialConnection {
 /// Singleton row (id = "default") for rotation + autopilot config
 model PlatformSettings {
   id               String    @id @default("default")
-  version          Int       @default(13)
+  version          Int       @default(14)
   mode             String    @default("round_robin")
   entityOrder      String[]
   notes            String    @default("")

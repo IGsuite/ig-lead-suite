@@ -10,6 +10,7 @@ import {
   sendTelnyxSms,
 } from "@/lib/providers/telnyx";
 import type { Brand, Campaign, Lead } from "@/lib/types";
+import { contactOkForChannel } from "@/lib/verify";
 
 export type CampaignSendSummary = {
   attempted: number;
@@ -57,6 +58,18 @@ export async function deliverCampaignBatch(input: {
     "";
 
   for (const lead of input.leads) {
+    // Double-check at send: never deliver to format-invalid email/phone.
+    if (
+      !contactOkForChannel(
+        lead,
+        input.campaign.channel,
+        input.campaign.preferVerified ?? true,
+      )
+    ) {
+      failed += 1;
+      continue;
+    }
+
     if (delivered + failed >= liveCap && isTelnyxConfigured()) {
       // Remaining contacts still count as queued/mock for demo safety.
       delivered += 1;

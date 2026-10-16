@@ -1,6 +1,6 @@
-first_name,last_name,email,phone
-Alex,Rivera,alex.rivera@example.com,+15552001001
-Blake,Nguyen,blake.nguyen@example.com,+15552001002
-Casey,Ortiz,casey.ortiz@example.com,+15552001003
-Drew,Patel,drew.patel@example.com,+15552001004
-Eden,Brooks,eden.brooks@example.com,+15552001005
+first_name,last_name,email,phone,business_name,source,group_name
+Alex,Rivera,alex.rivera@example.com,+15552001001,Rivera Supply Co,LeadForge,Sample batch
+Blake,Nguyen,blake.nguyen@example.com,+15552001002,Nguyen Logistics,LeadForge,Sample batch
+Casey,Ortiz,casey.ortiz@example.com,+15552001003,Ortiz Retail LLC,LeadForge,Sample batch
+Drew,Patel,drew.patel@example.com,+15552001004,Patel Foods,LeadForge,Sample batch
+Eden,Brooks,eden.brooks@example.com,+15552001005,Brooks Media,LeadForge,Sample batch

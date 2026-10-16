@@ -1,67 +1,30 @@
 import { NextResponse } from "next/server";
 import Papa from "papaparse";
+import {
+  HEADER_ALIAS_HELP,
+  MAX_UPLOAD_BYTES,
+  MAX_UPLOAD_ROWS,
+  mapCsvRow,
+  normHeader,
+} from "@/lib/lead-csv";
 import { importLeads } from "@/lib/store";
+import { hasUsableContact, verifyContact } from "@/lib/verify";
 
-/** Hobby default is ~10s; bulk CSV + Neon write needs headroom on Pro / Fluid. */
-export const maxDuration = 60;
+/**
+ * Bulk CSV + Neon chunked writes need headroom.
+ * Pro / Fluid can go higher; Hobby still caps shorter — split files if timeouts persist.
+ */
+export const maxDuration = 300;
 
-const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB multipart body is well under Vercel limits
-const MAX_ROWS = 5_000;
-
-/** Normalize CSV headers: BOM, case, spaces/dashes → underscores. */
-function normHeader(key: string): string {
-  return key
-    .replace(/^\uFEFF/, "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_");
-}
-
-function rowMap(row: Record<string, string>): Map<string, string> {
-  const normalized = new Map<string, string>();
-  for (const [k, v] of Object.entries(row)) {
-    normalized.set(normHeader(k), typeof v === "string" ? v : String(v ?? ""));
-  }
-  return normalized;
-}
-
-function pickFrom(
-  normalized: Map<string, string>,
-  keys: string[],
-): string | undefined {
-  for (const key of keys) {
-    const value = normalized.get(normHeader(key));
-    if (value?.trim()) return value.trim();
-  }
-  return undefined;
-}
-
-/** Split "Jane Doe" / "Doe, Jane" when first/last columns are absent. */
-function splitFullName(full: string): { first?: string; last?: string } {
-  const name = full.trim().replace(/\s+/g, " ");
-  if (!name) return {};
-  if (name.includes(",")) {
-    const [last, ...rest] = name.split(",").map((p) => p.trim()).filter(Boolean);
-    const first = rest.join(" ").trim();
-    return {
-      first: first || undefined,
-      last: last || undefined,
-    };
-  }
-  const parts = name.split(" ");
-  if (parts.length === 1) return { first: parts[0] };
-  return {
-    first: parts[0],
-    last: parts.slice(1).join(" "),
-  };
-}
+const MAX_FILE_BYTES = MAX_UPLOAD_BYTES;
+const MAX_ROWS = MAX_UPLOAD_ROWS;
 
 export async function POST(request: Request) {
   try {
     const form = await request.formData();
     const file = form.get("file");
-    const source = String(form.get("source") || "").trim();
-    const groupName = String(form.get("groupName") || "General").trim();
+    const formSource = String(form.get("source") || "").trim();
+    const formGroup = String(form.get("groupName") || "General").trim();
     const purchaseDate = String(form.get("purchaseDate") || "").trim();
     const costDollars = Number(form.get("costDollars") || 0);
 
@@ -71,12 +34,15 @@ export async function POST(request: Request) {
     if (file.size > MAX_FILE_BYTES) {
       return NextResponse.json(
         {
-          error: `CSV is too large (${Math.round(file.size / 1024)} KB). Max is ${MAX_FILE_BYTES / 1024 / 1024} MB (~${MAX_ROWS.toLocaleString()} rows).`,
+          error: `CSV is too large (${Math.round(file.size / 1024)} KB). Max is ${MAX_FILE_BYTES / 1024 / 1024} MB (~${MAX_ROWS.toLocaleString()} rows). Split the file if your host rejects bodies over ~4.5 MB.`,
+          code: "file_too_large",
+          maxRows: MAX_ROWS,
+          maxBytes: MAX_FILE_BYTES,
         },
         { status: 400 },
       );
     }
-    if (!source || !purchaseDate || !Number.isFinite(costDollars)) {
+    if (!formSource || !purchaseDate || !Number.isFinite(costDollars)) {
       return NextResponse.json(
         { error: "Source, purchase date, and cost are required" },
         { status: 400 },
@@ -100,71 +66,51 @@ export async function POST(request: Request) {
     if (parsed.data.length > MAX_ROWS) {
       return NextResponse.json(
         {
-          error: `CSV has ${parsed.data.length.toLocaleString()} rows; max is ${MAX_ROWS.toLocaleString()} per upload. Split the file and import in batches.`,
+          error: `CSV has ${parsed.data.length.toLocaleString()} rows; max is ${MAX_ROWS.toLocaleString()} per upload. Split into batches of ≤${MAX_ROWS.toLocaleString()} and import each file.`,
+          code: "too_many_rows",
+          rowCount: parsed.data.length,
+          maxRows: MAX_ROWS,
         },
         { status: 400 },
       );
     }
 
     const headers = (parsed.meta.fields || []).map(normHeader);
-    const rows = parsed.data.map((row) => {
-      const cols = rowMap(row);
-      const email = pickFrom(cols, [
-        "email",
-        "email_address",
-        "emailaddress",
-        "e_mail",
-        "e-mail",
-        "mail",
-        "contact_email",
-      ]);
-      const phone = pickFrom(cols, [
-        "phone",
-        "phone_number",
-        "phonenumber",
-        "mobile",
-        "mobile_number",
-        "cell",
-        "cell_phone",
-        "cellphone",
-        "telephone",
-        "tel",
-        "contact_phone",
-      ]);
-      let firstName = pickFrom(cols, [
-        "first_name",
-        "firstname",
-        "first",
-        "fname",
-        "given_name",
-      ]);
-      let lastName = pickFrom(cols, [
-        "last_name",
-        "lastname",
-        "last",
-        "lname",
-        "surname",
-        "family_name",
-      ]);
-      if (!firstName && !lastName) {
-        const full = pickFrom(cols, [
-          "name",
-          "full_name",
-          "fullname",
-          "contact_name",
-          "lead_name",
-        ]);
-        if (full) {
-          const split = splitFullName(full);
-          firstName = split.first;
-          lastName = split.last;
-        }
-      }
-      return { email, phone, firstName, lastName };
-    });
+    let skippedEmpty = 0;
+    let skippedInvalid = 0;
+    const usable: Array<{
+      email?: string;
+      phone?: string;
+      firstName?: string;
+      lastName?: string;
+      businessName?: string;
+      source?: string;
+      groupName?: string;
+    }> = [];
 
-    const skippedEmpty = rows.filter((r) => !r.email && !r.phone).length;
-    const usable = rows.filter((r) => r.email || r.phone);
+    for (const row of parsed.data) {
+      const mapped = mapCsvRow(row);
+      if (!mapped.email && !mapped.phone) {
+        skippedEmpty += 1;
+        continue;
+      }
+      if (
+        !hasUsableContact({ email: mapped.email, phone: mapped.phone })
+      ) {
+        skippedInvalid += 1;
+        continue;
+      }
+      // Form Source / Group win when set; CSV fills gaps for per-row vendor tags.
+      usable.push({
+        email: mapped.email,
+        phone: mapped.phone,
+        firstName: mapped.firstName,
+        lastName: mapped.lastName,
+        businessName: mapped.businessName,
+        source: formSource || mapped.source,
+        groupName: formGroup || mapped.groupName || "General",
+      });
+    }
 
     if (!usable.length) {
       const headerHint = headers.length
@@ -172,11 +118,12 @@ export async function POST(request: Request) {
         : "No header row detected.";
       return NextResponse.json(
         {
-          error: `No rows with email or phone. Use columns like email, phone, first_name, last_name (spaces OK: "Email Address", "Phone Number"). ${headerHint}`,
+          error: `No rows with a usable email or phone. ${HEADER_ALIAS_HELP} ${headerHint}`,
           code: "missing_contact_columns",
           headers,
-          rowCount: rows.length,
+          rowCount: parsed.data.length,
           skippedEmpty,
+          skippedInvalid,
         },
         { status: 400 },
       );
@@ -184,8 +131,8 @@ export async function POST(request: Request) {
 
     const result = await importLeads({
       filename: file.name,
-      source,
-      groupName,
+      source: formSource,
+      groupName: formGroup,
       purchaseDate,
       costCents: Math.round(costDollars * 100),
       rows: usable,
@@ -202,12 +149,24 @@ export async function POST(request: Request) {
       else if (statuses.includes("valid")) valid += 1;
     }
 
+    // Re-verify counts from import path for response clarity
+    let flaggedInvalidContact = 0;
+    for (const l of result.imported) {
+      const live = verifyContact({ email: l.email, phone: l.phone });
+      if (live.emailStatus === "invalid" || live.phoneStatus === "invalid") {
+        flaggedInvalidContact += 1;
+      }
+    }
+
     return NextResponse.json({
       batch: result.batch,
       importedCount: result.imported.length,
       duplicateCount: result.duplicates,
       skippedEmpty,
-      rowCount: rows.length,
+      skippedInvalid,
+      flaggedInvalidContact,
+      rowCount: parsed.data.length,
+      maxRows: MAX_ROWS,
       verifiedOnImport: {
         valid,
         invalid,
@@ -222,8 +181,9 @@ export async function POST(request: Request) {
       {
         error:
           message.includes("timed out") || message.includes("TIMEOUT")
-            ? "Import timed out. Try a smaller CSV (under 1,000 rows) and retry."
+            ? `Import timed out. Split the CSV into batches under ${Math.floor(MAX_ROWS / 3).toLocaleString()} rows and retry.`
             : `Import failed: ${message}`,
+        code: "import_failed",
       },
       { status: 500 },
     );

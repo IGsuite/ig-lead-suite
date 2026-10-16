@@ -75,6 +75,9 @@ export async function importLeads(input: {
     phone?: string;
     firstName?: string;
     lastName?: string;
+    businessName?: string;
+    source?: string;
+    groupName?: string;
   }>;
 }): Promise<{ batch: UploadBatch; imported: Lead[]; duplicates: number }> {
   return backend().importLeads(input);
@@ -86,6 +89,7 @@ export async function createLead(input: {
   lastName?: string;
   email?: string;
   phone?: string;
+  businessName?: string;
   source?: string;
   groupName?: string;
 }): Promise<CreateLeadResult> {
@@ -93,6 +97,7 @@ export async function createLead(input: {
   const phone = input.phone?.trim() || undefined;
   const firstName = input.firstName?.trim() || undefined;
   const lastName = input.lastName?.trim() || undefined;
+  const businessName = input.businessName?.trim() || undefined;
   const source = input.source?.trim() || "Manual";
   const groupName = input.groupName?.trim() || "Manual";
 
@@ -169,7 +174,7 @@ export async function createLead(input: {
     groupName,
     purchaseDate: new Date().toISOString().slice(0, 10),
     costCents: 0,
-    rows: [{ email, phone, firstName, lastName }],
+    rows: [{ email, phone, firstName, lastName, businessName }],
   });
 
   const lead = result.imported[0];

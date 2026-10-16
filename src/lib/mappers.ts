@@ -70,6 +70,7 @@ type LeadRow = {
   phone: string | null;
   firstName: string | null;
   lastName: string | null;
+  businessName?: string | null;
   source: string;
   groupName: string;
   purchaseDate: Date;
@@ -125,6 +126,7 @@ export function mapLead(row: LeadRow): Lead {
     phone: row.phone ?? undefined,
     firstName: row.firstName ?? undefined,
     lastName: row.lastName ?? undefined,
+    businessName: row.businessName ?? undefined,
     source: row.source,
     groupName: row.groupName,
     purchaseDate: isoDate(row.purchaseDate),

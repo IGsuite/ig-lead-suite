@@ -99,9 +99,12 @@ export async function importLeads(input: {
     phone?: string;
     firstName?: string;
     lastName?: string;
+    businessName?: string;
+    source?: string;
+    groupName?: string;
   }>;
 }): Promise<{ batch: UploadBatch; imported: Lead[]; duplicates: number }> {
-  const groupName = input.groupName?.trim() || "General";
+  const defaultGroup = input.groupName?.trim() || "General";
   const data = await ensureStore();
   const existingKeys = new Set<string>();
   for (const lead of data.leads) {
@@ -120,7 +123,8 @@ export async function importLeads(input: {
       ? Math.round(input.costCents / input.rows.length)
       : 0;
 
-  for (const row of input.rows) {
+  for (let idx = 0; idx < input.rows.length; idx += 1) {
+    const row = input.rows[idx];
     const emailKey = row.email ? `e:${normalizeContact(row.email)}` : null;
     const phoneKey = row.phone ? `p:${normalizeContact(row.phone)}` : null;
     const optedKeyEmail = row.email
@@ -141,18 +145,18 @@ export async function importLeads(input: {
     }
 
     if (!row.email && !row.phone) {
-      // Caller should filter these; keep as skip, not "duplicate".
       continue;
     }
 
     const lead = applyVerification({
-      id: `lead-${Date.now()}-${imported.length}`,
+      id: `${batchId}-${imported.length}-${idx}`,
       email: row.email?.trim() || undefined,
       phone: row.phone?.trim() || undefined,
       firstName: row.firstName?.trim() || undefined,
       lastName: row.lastName?.trim() || undefined,
-      source: input.source,
-      groupName,
+      businessName: row.businessName?.trim() || undefined,
+      source: row.source?.trim() || input.source,
+      groupName: row.groupName?.trim() || defaultGroup,
       purchaseDate: input.purchaseDate,
       costCents: costPerLead,
       offeredEntityIds: [],
@@ -174,7 +178,7 @@ export async function importLeads(input: {
     id: batchId,
     filename: input.filename,
     source: input.source,
-    groupName,
+    groupName: defaultGroup,
     purchaseDate: input.purchaseDate,
     costCents: input.costCents,
     rowCount: input.rows.length,

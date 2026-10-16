@@ -2,7 +2,7 @@ import { defaultQuotas } from "@/lib/autopilot";
 import type { PlatformData } from "@/lib/types";
 import { buildSeedCollections } from "@/lib/seed-demo";
 
-export const STORE_VERSION = 13;
+export const STORE_VERSION = 14;
 
 export { materializeSeedAdAssets } from "@/lib/seed-assets";
 

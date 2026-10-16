@@ -168,6 +168,8 @@ export interface Lead {
   phone?: string;
   firstName?: string;
   lastName?: string;
+  /** Company / DBA / merchant name. */
+  businessName?: string;
   source: string;
   groupName: string;
   purchaseDate: string;

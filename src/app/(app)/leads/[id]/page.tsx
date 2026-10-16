@@ -122,6 +122,12 @@ export default function LeadDetailPage() {
           </h2>
           <dl className="mt-4 space-y-3 text-sm">
             <div>
+              <dt className="text-xs text-[color:var(--ink-muted)]">
+                Business
+              </dt>
+              <dd className="mt-0.5">{lead.businessName || "—"}</dd>
+            </div>
+            <div>
               <dt className="text-xs text-[color:var(--ink-muted)]">Email</dt>
               <dd className="mt-0.5 flex items-center gap-2">
                 {lead.email || "—"}
