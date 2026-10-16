@@ -138,7 +138,7 @@ export default function LeadsPage() {
   async function onUpload(e: React.FormEvent) {
     e.preventDefault();
     if (!file) {
-      toast.error("Choose a CSV file first");
+      toast.error("Choose a CSV or Excel (.xlsx) file first");
       return;
     }
     setUploading(true);
@@ -306,7 +306,7 @@ export default function LeadsPage() {
             required
           />
           <p className="text-[11px] text-[color:var(--ink-muted)]">
-            Required for reporting. Overrides CSV source columns.
+            Required for reporting. Overrides file source columns.
           </p>
         </div>
         <div className="space-y-2">
@@ -342,17 +342,17 @@ export default function LeadsPage() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="file">CSV file</Label>
+          <Label htmlFor="file">CSV or Excel file</Label>
           <Input
             id="file"
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.xlsx,.xls,.xlsm,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             onChange={(e) => setFile(e.target.files?.[0] || null)}
           />
         </div>
         <div className="flex items-end gap-2">
           <Button type="submit" className="flex-1" disabled={uploading}>
-            {uploading ? "Importing…" : "Import CSV"}
+            {uploading ? "Importing…" : "Import file"}
           </Button>
           <Button
             type="button"
@@ -368,13 +368,15 @@ export default function LeadsPage() {
           each row needs a valid <strong>email or phone</strong> (required for
           sends). Capture <strong>first/last name</strong>,{" "}
           <strong>business/company</strong>, and set <strong>Source</strong>{" "}
-          here (or map CSV source/group). Headers auto-map across vendors —
-          email, phone, mobile, first_name, last_name, name, company,
-          business_name, source, list/group (spaces OK). Extra columns are
-          ignored. Invalid contacts are skipped on import and blocked again at
-          send. Up to <strong>30,000 rows</strong> / ~20&nbsp;MB per upload
-          (chunked DB writes); if the host rejects large bodies (~4.5&nbsp;MB on
-          some plans) or times out, split the CSV and import each batch.{" "}
+          here (or map source/group columns). Accepts <strong>CSV</strong> or{" "}
+          <strong>Excel (.xlsx / .xls)</strong> — first sheet only. Headers
+          auto-map across vendors — email, phone, mobile, first_name,
+          last_name, name, company, business_name, source, list/group (spaces
+          OK). Extra columns are ignored. Invalid contacts are skipped on
+          import and blocked again at send. Up to <strong>30,000 rows</strong>{" "}
+          / ~20&nbsp;MB per upload (chunked DB writes); if the host rejects
+          large bodies (~4.5&nbsp;MB on some plans) or times out, split the
+          file and import each batch.{" "}
           <a className="underline underline-offset-2" href="/sample-leads.csv">
             Download sample CSV
           </a>
@@ -631,8 +633,8 @@ export default function LeadsPage() {
           title={data.leads.length === 0 ? "No leads in the pool yet" : "No leads match"}
           description={
             data.leads.length === 0
-              ? "Import a provider CSV or use Add lead to start the shared pool. Then verify and launch campaigns."
-              : "Clear filters, upload another CSV, or add a lead to see contacts in the shared pool."
+              ? "Import a provider CSV or Excel file, or use Add lead to start the shared pool. Then verify and launch campaigns."
+              : "Clear filters, upload another CSV/Excel file, or add a lead to see contacts in the shared pool."
           }
         />
       ) : (

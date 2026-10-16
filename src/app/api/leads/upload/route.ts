@@ -1,23 +1,49 @@
 import { NextResponse } from "next/server";
 import Papa from "papaparse";
 import {
+  EXCEL_AS_CSV_ERROR,
   HEADER_ALIAS_HELP,
   MAX_UPLOAD_BYTES,
   MAX_UPLOAD_ROWS,
+  formatFoundColumns,
+  hasExcelMagic,
+  isExcelUpload,
   mapCsvRow,
   normHeader,
+  parseExcelBuffer,
+  sanitizeHeadersForDisplay,
+  type ParsedLeadTable,
 } from "@/lib/lead-csv";
 import { importLeads } from "@/lib/store";
 import { hasUsableContact, verifyContact } from "@/lib/verify";
 
 /**
- * Bulk CSV + Neon chunked writes need headroom.
+ * Bulk CSV/Excel + Neon chunked writes need headroom.
  * Pro / Fluid can go higher; Hobby still caps shorter — split files if timeouts persist.
  */
 export const maxDuration = 300;
 
 const MAX_FILE_BYTES = MAX_UPLOAD_BYTES;
 const MAX_ROWS = MAX_UPLOAD_ROWS;
+
+function parseCsvText(text: string): ParsedLeadTable {
+  const parsed = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: "greedy",
+    transformHeader: (h) => normHeader(h),
+  });
+
+  if (parsed.errors.length && !parsed.data.length) {
+    throw new Error(parsed.errors[0]?.message || "Could not parse CSV");
+  }
+
+  const headers = (parsed.meta.fields || []).map(normHeader);
+  return {
+    data: parsed.data,
+    headers,
+    format: "csv",
+  };
+}
 
 export async function POST(request: Request) {
   try {
@@ -29,12 +55,15 @@ export async function POST(request: Request) {
     const costDollars = Number(form.get("costDollars") || 0);
 
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: "CSV file is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "CSV or Excel (.xlsx) file is required" },
+        { status: 400 },
+      );
     }
     if (file.size > MAX_FILE_BYTES) {
       return NextResponse.json(
         {
-          error: `CSV is too large (${Math.round(file.size / 1024)} KB). Max is ${MAX_FILE_BYTES / 1024 / 1024} MB (~${MAX_ROWS.toLocaleString()} rows). Split the file if your host rejects bodies over ~4.5 MB.`,
+          error: `File is too large (${Math.round(file.size / 1024)} KB). Max is ${MAX_FILE_BYTES / 1024 / 1024} MB (~${MAX_ROWS.toLocaleString()} rows). Split the file if your host rejects bodies over ~4.5 MB.`,
           code: "file_too_large",
           maxRows: MAX_ROWS,
           maxBytes: MAX_FILE_BYTES,
@@ -49,33 +78,65 @@ export async function POST(request: Request) {
       );
     }
 
-    const text = await file.text();
-    const parsed = Papa.parse<Record<string, string>>(text, {
-      header: true,
-      skipEmptyLines: "greedy",
-      transformHeader: (h) => normHeader(h),
-    });
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    const excelByName = isExcelUpload(file);
+    const excelByMagic = hasExcelMagic(bytes);
 
-    if (parsed.errors.length && !parsed.data.length) {
-      return NextResponse.json(
-        { error: parsed.errors[0]?.message || "Could not parse CSV" },
-        { status: 400 },
-      );
+    let table: ParsedLeadTable;
+
+    if (excelByName || excelByMagic) {
+      try {
+        table = parseExcelBuffer(buffer);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "unknown error";
+        return NextResponse.json(
+          {
+            error: `Could not read Excel file. ${EXCEL_AS_CSV_ERROR} (${msg})`,
+            code: "excel_parse_failed",
+          },
+          { status: 400 },
+        );
+      }
+    } else {
+      const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+      // Heuristic: OOXML path fragments in "CSV" text
+      if (
+        /xl\/(worksheets|drawings|sharedStrings)/i.test(text.slice(0, 8000)) ||
+        /\[Content_Types\]\.xml/i.test(text.slice(0, 2000))
+      ) {
+        return NextResponse.json(
+          { error: EXCEL_AS_CSV_ERROR, code: "excel_not_csv" },
+          { status: 400 },
+        );
+      }
+      try {
+        table = parseCsvText(text);
+      } catch (err) {
+        return NextResponse.json(
+          {
+            error:
+              err instanceof Error ? err.message : "Could not parse CSV",
+            code: "csv_parse_failed",
+          },
+          { status: 400 },
+        );
+      }
     }
 
-    if (parsed.data.length > MAX_ROWS) {
+    if (table.data.length > MAX_ROWS) {
       return NextResponse.json(
         {
-          error: `CSV has ${parsed.data.length.toLocaleString()} rows; max is ${MAX_ROWS.toLocaleString()} per upload. Split into batches of ≤${MAX_ROWS.toLocaleString()} and import each file.`,
+          error: `File has ${table.data.length.toLocaleString()} rows; max is ${MAX_ROWS.toLocaleString()} per upload. Split into batches of ≤${MAX_ROWS.toLocaleString()} and import each file.`,
           code: "too_many_rows",
-          rowCount: parsed.data.length,
+          rowCount: table.data.length,
           maxRows: MAX_ROWS,
         },
         { status: 400 },
       );
     }
 
-    const headers = (parsed.meta.fields || []).map(normHeader);
+    const headers = table.headers.map(normHeader);
     let skippedEmpty = 0;
     let skippedInvalid = 0;
     const usable: Array<{
@@ -88,7 +149,7 @@ export async function POST(request: Request) {
       groupName?: string;
     }> = [];
 
-    for (const row of parsed.data) {
+    for (const row of table.data) {
       const mapped = mapCsvRow(row);
       if (!mapped.email && !mapped.phone) {
         skippedEmpty += 1;
@@ -100,7 +161,7 @@ export async function POST(request: Request) {
         skippedInvalid += 1;
         continue;
       }
-      // Form Source / Group win when set; CSV fills gaps for per-row vendor tags.
+      // Form Source / Group win when set; file fills gaps for per-row vendor tags.
       usable.push({
         email: mapped.email,
         phone: mapped.phone,
@@ -113,17 +174,17 @@ export async function POST(request: Request) {
     }
 
     if (!usable.length) {
-      const headerHint = headers.length
-        ? `Found columns: ${headers.slice(0, 12).join(", ")}${headers.length > 12 ? "…" : ""}.`
-        : "No header row detected.";
+      const safeHeaders = sanitizeHeadersForDisplay(headers);
+      const headerHint = formatFoundColumns(headers);
       return NextResponse.json(
         {
           error: `No rows with a usable email or phone. ${HEADER_ALIAS_HELP} ${headerHint}`,
           code: "missing_contact_columns",
-          headers,
-          rowCount: parsed.data.length,
+          headers: safeHeaders,
+          rowCount: table.data.length,
           skippedEmpty,
           skippedInvalid,
+          format: table.format,
         },
         { status: 400 },
       );
@@ -165,8 +226,9 @@ export async function POST(request: Request) {
       skippedEmpty,
       skippedInvalid,
       flaggedInvalidContact,
-      rowCount: parsed.data.length,
+      rowCount: table.data.length,
       maxRows: MAX_ROWS,
+      format: table.format,
       verifiedOnImport: {
         valid,
         invalid,
@@ -181,7 +243,7 @@ export async function POST(request: Request) {
       {
         error:
           message.includes("timed out") || message.includes("TIMEOUT")
-            ? `Import timed out. Split the CSV into batches under ${Math.floor(MAX_ROWS / 3).toLocaleString()} rows and retry.`
+            ? `Import timed out. Split the file into batches under ${Math.floor(MAX_ROWS / 3).toLocaleString()} rows and retry.`
             : `Import failed: ${message}`,
         code: "import_failed",
       },
