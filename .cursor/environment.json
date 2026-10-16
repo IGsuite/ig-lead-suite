@@ -1,0 +1,11 @@
+{
+  "name": "IG Lead Suite",
+  "install": "npm ci",
+  "start": "if curl -sf -o /dev/null --max-time 2 http://127.0.0.1:43123/api/providers/status; then exit 0; fi\nexec npm run dev",
+  "ports": [
+    {
+      "name": "web",
+      "port": 43123
+    }
+  ]
+}
