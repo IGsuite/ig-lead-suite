@@ -10,6 +10,7 @@ const toneMap: Record<string, string> = {
   draft: "bg-slate-100 text-slate-700 border-slate-200",
   completed: "bg-emerald-100 text-emerald-900 border-emerald-200",
   paused: "bg-orange-100 text-orange-950 border-orange-200",
+  cancelled: "bg-rose-100 text-rose-950 border-rose-200",
   scheduled: "bg-indigo-100 text-indigo-950 border-indigo-200",
   available: "bg-emerald-50 text-emerald-900 border-emerald-200",
   contacted: "bg-sky-50 text-sky-900 border-sky-200",
