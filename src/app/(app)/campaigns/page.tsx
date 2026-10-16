@@ -86,6 +86,22 @@ function CampaignsInner() {
     }
   }
 
+  async function cancelCampaign(id: string) {
+    try {
+      const res = await fetch("/api/campaigns", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel", id }),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error || "Could not cancel campaign");
+      toast.success("Campaign canceled (paused) — no further sends");
+      await refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Cancel failed");
+    }
+  }
+
   if (loading) return <LoadingPanel />;
   if (error || !data)
     return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
@@ -245,21 +261,45 @@ function CampaignsInner() {
                     <StatusPill status={campaign.status} />
                   </TableCell>
                   <TableCell className="text-right">
-                    {campaign.status === "draft" ||
-                    campaign.status === "scheduled" ? (
-                      <Button size="sm" onClick={() => launch(campaign.id)}>
-                        Launch
-                      </Button>
-                    ) : (
-                      <Link
-                        href="/inbox"
-                        className={cn(
-                          buttonVariants({ size: "sm", variant: "ghost" }),
-                        )}
-                      >
-                        Inbox
-                      </Link>
-                    )}
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {campaign.status === "draft" ||
+                      campaign.status === "scheduled" ? (
+                        <Button size="sm" onClick={() => launch(campaign.id)}>
+                          Launch
+                        </Button>
+                      ) : campaign.status === "sending" ? (
+                        <Link
+                          href="/inbox"
+                          className={cn(
+                            buttonVariants({ size: "sm", variant: "ghost" }),
+                          )}
+                        >
+                          Inbox
+                        </Link>
+                      ) : null}
+                      {campaign.status === "draft" ||
+                      campaign.status === "scheduled" ||
+                      campaign.status === "sending" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void cancelCampaign(campaign.id)}
+                        >
+                          Cancel
+                        </Button>
+                      ) : null}
+                      {campaign.status === "paused" ||
+                      campaign.status === "completed" ? (
+                        <Link
+                          href="/inbox"
+                          className={cn(
+                            buttonVariants({ size: "sm", variant: "ghost" }),
+                          )}
+                        >
+                          Inbox
+                        </Link>
+                      ) : null}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

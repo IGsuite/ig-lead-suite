@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { assertEntityAccess, canAccessEntity } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
-import { createCampaign, getData, launchCampaign } from "@/lib/store";
+import {
+  createCampaign,
+  getData,
+  launchCampaign,
+  setCampaignStatus,
+} from "@/lib/store";
 import type {
   CampaignChannel,
   CampaignPoolMode,
+  CampaignStatus,
   SendWindowPreset,
 } from "@/lib/types";
 import { normalizeSendWindow } from "@/lib/send-window";
@@ -21,7 +27,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const session = await getSession();
   const body = (await request.json()) as {
-    action?: string;
+    action?: "launch" | "pause" | "cancel" | string;
     id?: string;
     brandId?: string;
     name?: string;
@@ -62,6 +68,28 @@ export async function POST(request: Request) {
       deferredReason: result.reason,
       windowLabel: result.windowLabel,
     });
+  }
+
+  if (
+    (body.action === "pause" || body.action === "cancel") &&
+    body.id
+  ) {
+    const data = await getData();
+    const existing = data.campaigns.find((c) => c.id === body.id);
+    if (!existing) {
+      return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+    }
+    const gate = assertEntityAccess(session, existing.brandId);
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.error }, { status: gate.status });
+    }
+    const nextStatus: CampaignStatus =
+      body.action === "cancel" ? "paused" : "paused";
+    const updated = await setCampaignStatus(body.id, nextStatus);
+    if (!updated) {
+      return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+    }
+    return NextResponse.json(updated);
   }
 
   if (

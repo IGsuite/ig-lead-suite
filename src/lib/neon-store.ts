@@ -370,6 +370,7 @@ export async function importLeads(input: {
 export {
   createCampaign,
   launchCampaign,
+  setCampaignStatus,
   applyOptOut,
   markReply,
   ingestReply,

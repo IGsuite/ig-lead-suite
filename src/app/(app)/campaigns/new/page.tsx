@@ -18,6 +18,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { usePlatform } from "@/hooks/use-platform";
+import {
+  serializeAudienceFilter,
+  toggleAudienceValue,
+} from "@/lib/audience-filters";
 import { compactNumber } from "@/lib/client-format";
 import type {
   CampaignChannel,
@@ -48,8 +52,8 @@ function CampaignBuilderInner() {
       ? "Hi {{firstName}},\n\n{{brand}} here — working capital may be available for your business. Reply if you want options.\n\nUnsubscribe anytime."
       : "Hi {{firstName}}, {{brand}} here — working capital may be available for your business. Reply YES for options, or STOP to opt out.",
   );
-  const [sourceFilter, setSourceFilter] = useState("all");
-  const [groupFilter, setGroupFilter] = useState("all");
+  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [preferUnoffered, setPreferUnoffered] = useState(true);
   const [preferVerified, setPreferVerified] = useState(true);
   const [volume, setVolume] = useState(1500);
@@ -85,8 +89,16 @@ function CampaignBuilderInner() {
     return data.leads.filter((lead) => {
       if (lead.optedOut || lead.status === "opted_out") return false;
       if (lead.status === "converted" || lead.convertedEntityId) return false;
-      if (sourceFilter !== "all" && lead.source !== sourceFilter) return false;
-      if (groupFilter !== "all" && lead.groupName !== groupFilter) return false;
+      if (
+        selectedSources.length > 0 &&
+        !selectedSources.includes(lead.source)
+      )
+        return false;
+      if (
+        selectedGroups.length > 0 &&
+        !selectedGroups.includes(lead.groupName)
+      )
+        return false;
       if (channel === "sms" && !lead.phone) return false;
       if (channel === "email" && !lead.email) return false;
       if (preferUnoffered && lead.offeredEntityIds.includes(brandId)) return false;
@@ -108,8 +120,8 @@ function CampaignBuilderInner() {
     }).length;
   }, [
     data,
-    sourceFilter,
-    groupFilter,
+    selectedSources,
+    selectedGroups,
     channel,
     preferUnoffered,
     preferVerified,
@@ -128,8 +140,8 @@ function CampaignBuilderInner() {
           channel,
           subject: channel === "email" ? subject : undefined,
           message,
-          sourceFilter,
-          groupFilter,
+          sourceFilter: serializeAudienceFilter(selectedSources),
+          groupFilter: serializeAudienceFilter(selectedGroups),
           preferUnoffered,
           preferVerified,
           mode,
@@ -265,46 +277,66 @@ function CampaignBuilderInner() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Audience source</Label>
-              <Select
-                value={sourceFilter}
-                onValueChange={(value) => {
-                  if (value) setSourceFilter(value);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All sources</SelectItem>
-                  {sources.map((source) => (
-                    <SelectItem key={source} value={source}>
-                      {source}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Audience sources</Label>
+              <p className="text-xs text-[color:var(--ink-muted)]">
+                Pick one or more. Leave all unchecked = every source.
+              </p>
+              <div className="max-h-40 space-y-2 overflow-y-auto rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel-hover)] px-3 py-2">
+                {sources.length === 0 ? (
+                  <p className="text-xs text-[color:var(--ink-muted)]">
+                    No sources in the pool yet.
+                  </p>
+                ) : (
+                  sources.map((source) => (
+                    <label
+                      key={source}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedSources.includes(source)}
+                        onChange={(e) =>
+                          setSelectedSources((prev) =>
+                            toggleAudienceValue(prev, source, e.target.checked),
+                          )
+                        }
+                      />
+                      <span>{source}</span>
+                    </label>
+                  ))
+                )}
+              </div>
             </div>
             <div className="space-y-2">
-              <Label>Audience group</Label>
-              <Select
-                value={groupFilter}
-                onValueChange={(value) => {
-                  if (value) setGroupFilter(value);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All groups</SelectItem>
-                  {groups.map((group) => (
-                    <SelectItem key={group} value={group}>
-                      {group}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>Audience groups</Label>
+              <p className="text-xs text-[color:var(--ink-muted)]">
+                Pick one or more. Leave all unchecked = every group.
+              </p>
+              <div className="max-h-40 space-y-2 overflow-y-auto rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel-hover)] px-3 py-2">
+                {groups.length === 0 ? (
+                  <p className="text-xs text-[color:var(--ink-muted)]">
+                    No groups in the pool yet.
+                  </p>
+                ) : (
+                  groups.map((group) => (
+                    <label
+                      key={group}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedGroups.includes(group)}
+                        onChange={(e) =>
+                          setSelectedGroups((prev) =>
+                            toggleAudienceValue(prev, group, e.target.checked),
+                          )
+                        }
+                      />
+                      <span>{group}</span>
+                    </label>
+                  ))
+                )}
+              </div>
             </div>
           </div>
 

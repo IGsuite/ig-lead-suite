@@ -86,6 +86,21 @@ export async function createCampaign(
   return mapCampaign(created);
 }
 
+export async function setCampaignStatus(
+  id: string,
+  status: Campaign["status"],
+): Promise<Campaign | null> {
+  await ensureSeeded();
+  const prisma = getPrisma();
+  const existing = await prisma.campaign.findUnique({ where: { id } });
+  if (!existing) return null;
+  const updated = await prisma.campaign.update({
+    where: { id },
+    data: { status },
+  });
+  return mapCampaign(updated);
+}
+
 export async function launchCampaign(id: string): Promise<LaunchResult | null> {
   await ensureSeeded();
   const prisma = getPrisma();

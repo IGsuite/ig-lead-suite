@@ -215,6 +215,13 @@ export async function launchCampaign(id: string) {
   return backend().launchCampaign(id);
 }
 
+export async function setCampaignStatus(
+  id: string,
+  status: Campaign["status"],
+) {
+  return backend().setCampaignStatus(id, status);
+}
+
 export async function runAutopilotDay(): Promise<AutopilotRunResult> {
   return backend().runAutopilotDay();
 }
