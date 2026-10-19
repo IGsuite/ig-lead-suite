@@ -141,11 +141,11 @@ export default function SetupPage() {
     },
     {
       id: "smoke",
-      title: "8. Smoke test",
+      title: "8. Smoke test, then blast",
       youDo:
-        "Upload 2–3 leads → tiny campaign inside a send window → reply → Inbox → Email team.",
-      href: "/leads",
-      hrefLabel: "Upload leads",
+        "Upload leads → Campaigns → Build (Own, SMS) → {{firstName}} + STOP → volume → Launch inside the send window. Cancel pauses. Live cap defaults to 2000 SMS/Launch (SMS_LIVE_CAP, hard max 10000). Finish Telnyx 10DLC Campaign first.",
+      href: "/campaigns/new",
+      hrefLabel: "Build campaign",
     },
   ];
 

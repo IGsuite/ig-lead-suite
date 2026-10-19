@@ -4,6 +4,7 @@ import {
   isColdEmailConfigured,
 } from "@/lib/providers/email";
 import { isTelnyxConfigured } from "@/lib/providers/telnyx";
+import { LIVE_CAP_DEFAULT, LIVE_CAP_MAX, resolveLiveCap } from "@/lib/send";
 import { isNeonConfigured } from "@/lib/store";
 
 function hasAnyCampaign(
@@ -40,6 +41,11 @@ export async function GET() {
     hasSmartleadCampaign: hasAnyCampaign("SMARTLEAD"),
     hasInstantlyCampaign: hasAnyCampaign("INSTANTLY"),
     hasTelnyxFrom: Boolean(process.env.TELNYX_FROM_NUMBER?.trim()),
+    /** Max live Telnyx SMS API calls per Launch batch (safety net). */
+    smsLiveCap: resolveLiveCap("sms"),
+    emailLiveCap: resolveLiveCap("email"),
+    liveCapDefault: LIVE_CAP_DEFAULT,
+    liveCapMax: LIVE_CAP_MAX,
     checklist: {
       neon: isNeonConfigured(),
       telnyxKey: isTelnyxConfigured(),
