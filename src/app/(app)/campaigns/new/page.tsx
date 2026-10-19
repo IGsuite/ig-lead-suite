@@ -52,6 +52,8 @@ function CampaignBuilderInner() {
       ? "Hi {{firstName}},\n\n{{brand}} here — working capital may be available for your business. Reply if you want options.\n\nUnsubscribe anytime."
       : "Hi {{firstName}}, {{brand}} here — working capital may be available for your business. Reply YES for options, or STOP to opt out.",
   );
+  const [imageUrl, setImageUrl] = useState("");
+  const [imageAlt, setImageAlt] = useState("");
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [preferUnoffered, setPreferUnoffered] = useState(true);
@@ -140,6 +142,8 @@ function CampaignBuilderInner() {
           channel,
           subject: channel === "email" ? subject : undefined,
           message,
+          imageUrl: channel === "email" ? imageUrl.trim() || null : null,
+          imageAlt: channel === "email" ? imageAlt.trim() || null : null,
           sourceFilter: serializeAudienceFilter(selectedSources),
           groupFilter: serializeAudienceFilter(selectedGroups),
           preferUnoffered,
@@ -167,14 +171,22 @@ function CampaignBuilderInner() {
         const launched = (await launchRes.json()) as {
           deferred?: boolean;
           windowLabel?: string;
+          emptyAudience?: boolean;
+          eligibleCount?: number;
         };
         if (launched.deferred) {
           toast.message(
             `Scheduled — outside send window (${launched.windowLabel || "window"}). Launch again during the window.`,
           );
+        } else if (launched.emptyAudience) {
+          toast.error(
+            "No eligible leads matched (source/group, verified-only, or “not yet offered this entity”). Widen filters or uncheck Prefer unoffered, then launch again.",
+          );
         } else {
+          const n = launched.eligibleCount;
+          const countLabel = typeof n === "number" ? `${n} contact(s) ` : "";
           toast.success(
-            "Campaign launched through IG Lead Suite → Telnyx / Smartlead",
+            `Launched ${countLabel}through IG Lead Suite → Telnyx / Smartlead`,
           );
         }
       } else {
@@ -400,8 +412,39 @@ function CampaignBuilderInner() {
             <p className="text-xs text-[color:var(--ink-muted)]">
               Tokens: {"{{firstName}}"}, {"{{brand}}"}. STOP / unsubscribe handled
               globally.
+              {channel === "email"
+                ? " Plain text is the fallback; HTML is generated for richer inboxes."
+                : ""}
             </p>
           </div>
+
+          {channel === "email" ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Image URL (optional)</Label>
+                <Input
+                  type="url"
+                  placeholder="https://…/hero.png"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                />
+                <p className="text-xs text-[color:var(--ink-muted)]">
+                  Public https URL embedded in the HTML email only — not in the
+                  plain-text fallback. Later, Ads library creatives can supply
+                  this URL; for now paste any hosted image.
+                </p>
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Image alt text</Label>
+                <Input
+                  placeholder="Offer graphic"
+                  value={imageAlt}
+                  onChange={(e) => setImageAlt(e.target.value)}
+                  disabled={!imageUrl.trim()}
+                />
+              </div>
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label>Campaign mode</Label>
@@ -528,12 +571,24 @@ function CampaignBuilderInner() {
             </Button>
             <Button
               type="button"
-              disabled={saving}
+              disabled={saving || audienceCount === 0}
               onClick={() => void create("scheduled")}
+              title={
+                audienceCount === 0
+                  ? "No eligible leads — widen source/group filters or uncheck Prefer unoffered"
+                  : undefined
+              }
             >
               Launch now
             </Button>
           </div>
+          {audienceCount === 0 ? (
+            <p className="text-sm text-[color:var(--danger,#b91c1c)]">
+              Audience is empty with current filters. Common cause for a retest:
+              the lead was already offered this entity — uncheck “Prefer leads not
+              yet offered this entity”.
+            </p>
+          ) : null}
         </form>
 
         <aside className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise-delay-1">

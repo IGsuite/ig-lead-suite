@@ -211,6 +211,11 @@ export interface Campaign {
   channel: CampaignChannel;
   subject?: string;
   message: string;
+  /** Optional HTML override for email; when unset, HTML is built from message + image. */
+  htmlMessage?: string | null;
+  /** Public image URL for HTML email only (plain-text fallback omits it). */
+  imageUrl?: string | null;
+  imageAlt?: string | null;
   sourceFilter: string | "all";
   groupFilter: string | "all";
   preferUnoffered: boolean;

@@ -178,6 +178,9 @@ export function mapCampaign(row: {
   channel: string;
   subject: string | null;
   message: string;
+  htmlMessage?: string | null;
+  imageUrl?: string | null;
+  imageAlt?: string | null;
   sourceFilter: string;
   groupFilter: string;
   preferUnoffered: boolean;
@@ -208,6 +211,9 @@ export function mapCampaign(row: {
     channel: row.channel as Campaign["channel"],
     subject: row.subject ?? undefined,
     message: row.message,
+    htmlMessage: row.htmlMessage ?? null,
+    imageUrl: row.imageUrl ?? null,
+    imageAlt: row.imageAlt ?? null,
     sourceFilter: row.sourceFilter,
     groupFilter: row.groupFilter,
     preferUnoffered: row.preferUnoffered,

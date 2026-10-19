@@ -1,3 +1,4 @@
+import { buildEmailBodies } from "@/lib/email-html";
 import {
   emailProviderName,
   isColdEmailConfigured,
@@ -36,12 +37,20 @@ function personalize(
   campaign: Campaign,
   brand: Brand,
   lead: Lead,
-): { subject?: string; body: string } {
+): { subject?: string; body: string; htmlBody?: string } {
   const vars = { firstName: lead.firstName, brand: brand.shortName };
   if (campaign.channel === "email") {
+    const bodies = buildEmailBodies({
+      message: campaign.message,
+      htmlMessage: campaign.htmlMessage,
+      imageUrl: campaign.imageUrl,
+      imageAlt: campaign.imageAlt,
+      vars,
+    });
     return {
       subject: renderEmailTemplate(campaign.subject || "Hello", vars),
-      body: renderEmailTemplate(campaign.message, vars),
+      body: bodies.text,
+      htmlBody: bodies.html,
     };
   }
   return { body: renderSmsTemplate(campaign.message, vars) };
@@ -165,6 +174,9 @@ export async function deliverCampaignBatch(input: {
         to: lead.email,
         subject: copy.subject || "Hello",
         body: copy.body,
+        htmlBody: copy.htmlBody,
+        imageUrl: input.campaign.imageUrl || undefined,
+        imageAlt: input.campaign.imageAlt || undefined,
         fromName: input.brand.shortName,
         firstName: lead.firstName,
         lastName: lead.lastName,

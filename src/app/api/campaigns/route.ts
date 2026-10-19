@@ -34,6 +34,9 @@ export async function POST(request: Request) {
     channel?: CampaignChannel;
     subject?: string;
     message?: string;
+    htmlMessage?: string | null;
+    imageUrl?: string | null;
+    imageAlt?: string | null;
     sourceFilter?: string;
     groupFilter?: string;
     preferUnoffered?: boolean;
@@ -67,6 +70,8 @@ export async function POST(request: Request) {
       deferred: result.deferred,
       deferredReason: result.reason,
       windowLabel: result.windowLabel,
+      emptyAudience: result.emptyAudience ?? false,
+      eligibleCount: result.eligibleCount,
     });
   }
 
@@ -115,12 +120,28 @@ export async function POST(request: Request) {
     timezone: body.timezone,
   });
 
+  const imageUrl =
+    body.channel === "email" && body.imageUrl?.trim()
+      ? body.imageUrl.trim()
+      : null;
+  const imageAlt =
+    body.channel === "email" && body.imageAlt?.trim()
+      ? body.imageAlt.trim()
+      : null;
+  const htmlMessage =
+    body.channel === "email" && body.htmlMessage?.trim()
+      ? body.htmlMessage.trim()
+      : null;
+
   const campaign = await createCampaign({
     brandId: body.brandId,
     name: body.name,
     channel: body.channel,
     subject: body.subject,
     message: body.message,
+    htmlMessage,
+    imageUrl,
+    imageAlt,
     sourceFilter: body.sourceFilter || "all",
     groupFilter: body.groupFilter || "all",
     preferUnoffered: body.preferUnoffered ?? true,

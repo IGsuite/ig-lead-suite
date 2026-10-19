@@ -34,6 +34,15 @@ See **[SETUP.md](SETUP.md)** and the in-app **Go live** page (`/setup`).
 
 **Current:** Neon live · Telnyx SMS keyed · Smartlead keyed · **10DLC Brand approved (OK)** · **next = register 10DLC Campaign** for volume SMS · optional stable `PUBLIC_APP_URL` (Vercel project: `ig-lead-suite`).
 
+## Email HTML + images
+
+Own email campaigns can include a public image URL. At send time the suite builds:
+
+- **HTML** — personalized copy + optional `<img>`
+- **Plain text** — same copy, no image
+
+Stored on `Campaign` as `imageUrl` / `imageAlt` / optional `htmlMessage`. Neon: `npm run db:push` after pull. Smartlead must accept HTML sequences; custom fields `email_html`, `email_text`, `image_url` are attached on lead upload. SMS path is unchanged.
+
 ## Campaign send windows
 
 Each campaign (and Autopilot quota) has a **send window**: morning / afternoon / evening / custom / any (America/New_York).
@@ -149,7 +158,7 @@ Yes — **creators work here**. Open **Ads** in the sidebar (`/creatives`):
 3. **AI wording** (Create / Improve / Winners / Tips) is scoped to the selected company. After a draft: **Shorter** / **Stronger CTA** / **Softer** / **More variants**.
 4. **Use in form** or **Save as template**, then **Campaigns → Use template** for that entity.
 5. ACL: members only see entities they can access; shared library edits are admin-only.
-6. Not a Canva clone — image-heavy email layouts stay in **Smartlead**.
+6. Not a Canva clone — for richer email, **Campaigns → Build email** accepts an optional public **image URL** (HTML + plain-text fallback). Ads library files are auth-gated today; later those creatives can feed the same image URL into email (and social ads) without a drag-drop designer.
 
 AI keys (any one):
 
