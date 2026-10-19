@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Check, Copy, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { ErrorPanel, LoadingPanel } from "@/components/state-panels";
@@ -25,6 +26,27 @@ import {
 import { usePlatform } from "@/hooks/use-platform";
 import type { AppUserPublic, UserRole } from "@/lib/types";
 
+type InviteShare = {
+  email: string;
+  temporaryPassword: string;
+  loginUrl: string;
+  inviteLink: string;
+  shareText: string;
+  copyAllText: string;
+  title: string;
+};
+
+type UserWithInvite = AppUserPublic & {
+  temporaryPassword?: string;
+  loginUrl?: string;
+  inviteLink?: string;
+  shareText?: string;
+  copyAllText?: string;
+  error?: string;
+};
+
+type CopyKind = "invite" | "all" | "link" | "password" | null;
+
 export default function UsersPage() {
   const { data, loading, error, refresh } = usePlatform();
   const [users, setUsers] = useState<AppUserPublic[]>([]);
@@ -36,6 +58,9 @@ export default function UsersPage() {
   const [role, setRole] = useState<UserRole>("member");
   const [allowed, setAllowed] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [inviteShare, setInviteShare] = useState<InviteShare | null>(null);
+  const [copiedKind, setCopiedKind] = useState<CopyKind>(null);
 
   const loadUsers = useCallback(async () => {
     setLoadErr(null);
@@ -69,6 +94,47 @@ export default function UsersPage() {
     );
   }
 
+  function showInviteFromResponse(json: UserWithInvite, title: string) {
+    if (!json.temporaryPassword || !json.loginUrl || !json.shareText) return;
+    const inviteLink = json.inviteLink || json.loginUrl;
+    const copyAllText =
+      json.copyAllText ||
+      [
+        `Login: ${inviteLink}`,
+        `Email: ${json.email}`,
+        `Temporary password: ${json.temporaryPassword}`,
+      ].join("\n");
+    setInviteShare({
+      email: json.email,
+      temporaryPassword: json.temporaryPassword,
+      loginUrl: json.loginUrl,
+      inviteLink,
+      shareText: json.shareText,
+      copyAllText,
+      title,
+    });
+    setCopiedKind(null);
+  }
+
+  async function copyInviteField(kind: Exclude<CopyKind, null>, text: string) {
+    if (!inviteShare) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKind(kind);
+      toast.success(
+        kind === "invite"
+          ? "Invite message copied"
+          : kind === "all"
+            ? "Login details copied"
+            : kind === "link"
+              ? "Login link copied"
+              : "Password copied",
+      );
+    } catch {
+      toast.error("Could not copy — select the text manually");
+    }
+  }
+
   async function create(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -79,14 +145,16 @@ export default function UsersPage() {
         body: JSON.stringify({
           email,
           name,
-          password,
+          // Omit empty password so the API generates a temporary one.
+          ...(password.trim() ? { password: password.trim() } : {}),
           role,
           allowedEntityIds: role === "admin" ? [] : allowed,
         }),
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as UserWithInvite;
       if (!res.ok) throw new Error(json.error || "Create failed");
-      toast.success("User created");
+      toast.success("User created — share the login details below");
+      showInviteFromResponse(json, "Share these login details now");
       setEmail("");
       setName("");
       setPassword("");
@@ -99,6 +167,28 @@ export default function UsersPage() {
     }
   }
 
+  async function resetPassword(user: AppUserPublic) {
+    setResettingId(user.id);
+    try {
+      const res = await fetch("/api/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: user.id, resetPassword: true }),
+      });
+      const json = (await res.json()) as UserWithInvite;
+      if (!res.ok) throw new Error(json.error || "Reset failed");
+      toast.success("Temporary password set — share it below");
+      showInviteFromResponse(
+        json,
+        `New temporary password for ${user.email}`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Reset failed");
+    } finally {
+      setResettingId(null);
+    }
+  }
+
   async function remove(id: string) {
     try {
       const res = await fetch(`/api/users?id=${encodeURIComponent(id)}`, {
@@ -107,6 +197,10 @@ export default function UsersPage() {
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error || "Delete failed");
       toast.success("User removed");
+      const removed = users.find((u) => u.id === id);
+      if (inviteShare && removed?.email === inviteShare.email) {
+        setInviteShare(null);
+      }
       await loadUsers();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delete failed");
@@ -134,7 +228,7 @@ export default function UsersPage() {
     <div>
       <PageHeader
         title="Users & access"
-        description="Give teammates access to specific company portals only. The lead pool stays shared; campaigns, inbox, and reports stay isolated."
+        description="Give teammates access to specific company portals only. The lead pool stays shared; campaigns, inbox, and reports stay isolated. No invite email is sent — copy the login details after create or reset."
       />
 
       {sessionRole === "anon" ? (
@@ -148,6 +242,140 @@ export default function UsersPage() {
         </p>
       ) : null}
 
+      {inviteShare ? (
+        <div
+          className="mb-8 space-y-3 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise"
+          role="status"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-[family-name:var(--font-display)] text-xl">
+                {inviteShare.title}
+              </h2>
+              <p className="mt-1 text-sm text-[color:var(--ink-soft)]">
+                Shown once here — share from this UI (Slack, text, etc.). No
+                invite email is sent. Passwords are hashed and cannot be
+                retrieved later — use Reset password if you lose this.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                onClick={() =>
+                  void copyInviteField("invite", inviteShare.shareText)
+                }
+              >
+                {copiedKind === "invite" ? (
+                  <>
+                    <Check data-icon="inline-start" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy data-icon="inline-start" />
+                    Copy invite message
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  void copyInviteField("all", inviteShare.copyAllText)
+                }
+              >
+                {copiedKind === "all" ? (
+                  <>
+                    <Check data-icon="inline-start" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy data-icon="inline-start" />
+                    Copy all
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <dt className="text-[color:var(--ink-muted)]">
+                Invite / login link (email prefilled)
+              </dt>
+              <dd className="flex flex-wrap items-center gap-2">
+                <a
+                  href={inviteShare.inviteLink}
+                  className="underline break-all"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {inviteShare.inviteLink}
+                </a>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    void copyInviteField("link", inviteShare.inviteLink)
+                  }
+                >
+                  {copiedKind === "link" ? (
+                    <Check data-icon="inline-start" />
+                  ) : (
+                    <Copy data-icon="inline-start" />
+                  )}
+                  Copy link
+                </Button>
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[color:var(--ink-muted)]">Email</dt>
+              <dd className="font-medium">{inviteShare.email}</dd>
+            </div>
+            <div>
+              <dt className="text-[color:var(--ink-muted)]">
+                Temporary password
+              </dt>
+              <dd className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-base tracking-wide">
+                  {inviteShare.temporaryPassword}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    void copyInviteField(
+                      "password",
+                      inviteShare.temporaryPassword,
+                    )
+                  }
+                >
+                  {copiedKind === "password" ? (
+                    <Check data-icon="inline-start" />
+                  ) : (
+                    <Copy data-icon="inline-start" />
+                  )}
+                  Copy
+                </Button>
+              </dd>
+            </div>
+          </dl>
+          <pre className="overflow-x-auto rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--bg)] p-3 text-xs whitespace-pre-wrap text-[color:var(--ink-soft)]">
+            {inviteShare.shareText}
+          </pre>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setInviteShare(null)}
+          >
+            Dismiss
+          </Button>
+        </div>
+      ) : null}
+
       <form
         onSubmit={create}
         className="mb-8 space-y-4 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise"
@@ -155,6 +383,10 @@ export default function UsersPage() {
         <h2 className="font-[family-name:var(--font-display)] text-xl">
           Add user
         </h2>
+        <p className="text-sm text-[color:var(--ink-soft)]">
+          Leave password blank to auto-generate a temporary one, then copy the
+          login instructions to send manually (Slack, text, etc.).
+        </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Name</Label>
@@ -170,10 +402,11 @@ export default function UsersPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label>Password</Label>
+            <Label>Password (optional)</Label>
             <Input
-              type="password"
-              required
+              type="text"
+              autoComplete="new-password"
+              placeholder="Auto-generated if blank"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -248,13 +481,24 @@ export default function UsersPage() {
                         .join(", ") || "—"}
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void remove(u.id)}
-                  >
-                    Remove
-                  </Button>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={resettingId === u.id}
+                      onClick={() => void resetPassword(u)}
+                    >
+                      <RefreshCw data-icon="inline-start" />
+                      {resettingId === u.id ? "Resetting…" : "Reset password"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void remove(u.id)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

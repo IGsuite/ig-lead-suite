@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
+import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { ErrorPanel, LoadingPanel } from "@/components/state-panels";
@@ -30,6 +31,8 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+type DraftTone = "soft" | "growth";
+
 function CampaignBuilderInner() {
   const { data, loading, error, refresh } = usePlatform();
   const router = useRouter();
@@ -52,6 +55,8 @@ function CampaignBuilderInner() {
       ? "Hi {{firstName}},\n\n{{brand}} here — working capital may be available for your business. Reply if you want options.\n\nUnsubscribe anytime."
       : "Hi {{firstName}}, {{brand}} here — working capital may be available for your business. Reply YES for options, or STOP to opt out.",
   );
+  const [imageUrl, setImageUrl] = useState("");
+  const [imageAlt, setImageAlt] = useState("");
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [preferUnoffered, setPreferUnoffered] = useState(true);
@@ -63,6 +68,8 @@ function CampaignBuilderInner() {
   const [sendWindowStart, setSendWindowStart] = useState("09:00");
   const [sendWindowEnd, setSendWindowEnd] = useState("12:00");
   const [saving, setSaving] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+  const [draftTone, setDraftTone] = useState<DraftTone>("soft");
   const [templateId, setTemplateId] = useState("");
 
   const sources = useMemo(() => {
@@ -128,6 +135,51 @@ function CampaignBuilderInner() {
     brandId,
   ]);
 
+  async function draftWithAi() {
+    setDrafting(true);
+    try {
+      const res = await fetch("/api/campaigns/draft-copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel,
+          brandId,
+          tone: draftTone,
+        }),
+      });
+      const payload = (await res.json()) as {
+        error?: string;
+        subject?: string;
+        message?: string;
+        notice?: string;
+        mode?: string;
+      };
+      if (!res.ok) {
+        throw new Error(payload.error || "Draft failed");
+      }
+      if (!payload.message?.trim()) {
+        throw new Error("No message returned");
+      }
+      setMessage(payload.message);
+      if (channel === "email" && payload.subject?.trim()) {
+        setSubject(payload.subject.trim());
+      }
+      if (payload.notice) {
+        toast.message(payload.notice);
+      } else {
+        toast.success(
+          payload.mode === "live"
+            ? "Draft filled with ChatGPT"
+            : "Draft filled",
+        );
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Draft failed");
+    } finally {
+      setDrafting(false);
+    }
+  }
+
   async function create(status: "draft" | "scheduled") {
     setSaving(true);
     try {
@@ -140,6 +192,8 @@ function CampaignBuilderInner() {
           channel,
           subject: channel === "email" ? subject : undefined,
           message,
+          imageUrl: channel === "email" ? imageUrl.trim() || null : null,
+          imageAlt: channel === "email" ? imageAlt.trim() || null : null,
           sourceFilter: serializeAudienceFilter(selectedSources),
           groupFilter: serializeAudienceFilter(selectedGroups),
           preferUnoffered,
@@ -167,14 +221,24 @@ function CampaignBuilderInner() {
         const launched = (await launchRes.json()) as {
           deferred?: boolean;
           windowLabel?: string;
+          emptyAudience?: boolean;
+          eligibleCount?: number;
         };
         if (launched.deferred) {
           toast.message(
             `Scheduled — outside send window (${launched.windowLabel || "window"}). Launch again during the window.`,
           );
+        } else if (launched.emptyAudience) {
+          toast.error(
+            "No eligible leads matched (source/group, verified-only, or “not yet offered this entity”). Widen filters or uncheck Prefer unoffered, then launch again.",
+          );
         } else {
+          const n = launched.eligibleCount;
+          const countLabel = typeof n === "number" ? `${n} contact(s) ` : "";
           toast.success(
-            "Campaign launched through IG Lead Suite → Telnyx / Smartlead",
+            channel === "email"
+              ? `Launched ${countLabel}— CRM subject/body pushed to Smartlead (needs Active campaign + connected mailbox)`
+              : `Launched ${countLabel}through IG Lead Suite → Telnyx SMS`,
           );
         }
       } else {
@@ -382,6 +446,44 @@ function CampaignBuilderInner() {
             </p>
           </div>
 
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="space-y-2 min-w-[10rem]">
+                <Label>AI tone</Label>
+                <Select
+                  value={draftTone}
+                  onValueChange={(value) =>
+                    setDraftTone(value === "growth" ? "growth" : "soft")
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="soft">Soft (consultative)</SelectItem>
+                    <SelectItem value="growth">
+                      Growth (working capital options)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={drafting || saving}
+                onClick={() => void draftWithAi()}
+              >
+                <Sparkles className="size-3.5" />
+                {drafting ? "Drafting…" : "Draft with AI"}
+              </Button>
+            </div>
+            <p className="text-xs text-[color:var(--ink-muted)]">
+              Uses OpenAI when <code className="text-[0.7rem]">OPENAI_API_KEY</code>{" "}
+              is set; otherwise a financing-safe demo draft. Ads still use Gemini.
+            </p>
+          </div>
+
           {channel === "email" ? (
             <div className="space-y-2">
               <Label>Subject</Label>
@@ -400,8 +502,39 @@ function CampaignBuilderInner() {
             <p className="text-xs text-[color:var(--ink-muted)]">
               Tokens: {"{{firstName}}"}, {"{{brand}}"}. STOP / unsubscribe handled
               globally.
+              {channel === "email"
+                ? " Plain text is the fallback; HTML is generated for richer inboxes."
+                : ""}
             </p>
           </div>
+
+          {channel === "email" ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Image URL (optional)</Label>
+                <Input
+                  type="url"
+                  placeholder="https://…/hero.png"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                />
+                <p className="text-xs text-[color:var(--ink-muted)]">
+                  Public https URL embedded in the HTML email only — not in the
+                  plain-text fallback. Later, Ads library creatives can supply
+                  this URL; for now paste any hosted image.
+                </p>
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Image alt text</Label>
+                <Input
+                  placeholder="Offer graphic"
+                  value={imageAlt}
+                  onChange={(e) => setImageAlt(e.target.value)}
+                  disabled={!imageUrl.trim()}
+                />
+              </div>
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label>Campaign mode</Label>
@@ -528,12 +661,24 @@ function CampaignBuilderInner() {
             </Button>
             <Button
               type="button"
-              disabled={saving}
+              disabled={saving || audienceCount === 0}
               onClick={() => void create("scheduled")}
+              title={
+                audienceCount === 0
+                  ? "No eligible leads — widen source/group filters or uncheck Prefer unoffered"
+                  : undefined
+              }
             >
               Launch now
             </Button>
           </div>
+          {audienceCount === 0 ? (
+            <p className="text-sm text-[color:var(--danger,#b91c1c)]">
+              Audience is empty with current filters. Common cause for a retest:
+              the lead was already offered this entity — uncheck “Prefer leads not
+              yet offered this entity”.
+            </p>
+          ) : null}
         </form>
 
         <aside className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise-delay-1">

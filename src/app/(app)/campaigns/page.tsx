@@ -67,17 +67,25 @@ function CampaignsInner() {
         deferred?: boolean;
         windowLabel?: string;
         channel?: string;
+        emptyAudience?: boolean;
+        eligibleCount?: number;
       };
       if (!res.ok) throw new Error(json.error || "Could not launch campaign");
       if (json.deferred) {
         toast.message(
           `Outside send window (${json.windowLabel || "window"}). Campaign scheduled — launch again during the window.`,
         );
+      } else if (json.emptyAudience) {
+        toast.error(
+          "No eligible leads matched this campaign (source/group filters, verified-only, or “not yet offered this entity”). Widen filters or uncheck Prefer unoffered, then launch again.",
+        );
       } else {
+        const n = json.eligibleCount;
+        const countLabel = typeof n === "number" ? `${n} lead(s) ` : "";
         toast.success(
           json.channel === "email"
-            ? "Launched through IG Lead Suite → Smartlead/Instantly"
-            : "Launched through IG Lead Suite → Telnyx SMS",
+            ? `Launched ${countLabel}— CRM subject/body pushed to Smartlead (needs Active campaign + connected mailbox)`
+            : `Launched ${countLabel}through IG Lead Suite → Telnyx SMS`,
         );
       }
       await refresh();

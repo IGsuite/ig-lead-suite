@@ -69,6 +69,9 @@ export async function createCampaign(
       channel: input.channel,
       subject: input.subject ?? null,
       message: input.message,
+      htmlMessage: input.htmlMessage ?? null,
+      imageUrl: input.imageUrl ?? null,
+      imageAlt: input.imageAlt ?? null,
       sourceFilter: input.sourceFilter,
       groupFilter: input.groupFilter,
       preferUnoffered: input.preferUnoffered,
@@ -159,7 +162,26 @@ export async function launchCampaign(id: string): Promise<LaunchResult | null> {
   });
   const eligible = pick.selected;
 
-  if (brandRow && eligible.length) {
+  if (eligible.length === 0) {
+    const updated = await prisma.campaign.update({
+      where: { id },
+      data: {
+        // Stay draft so the user can widen filters and launch again.
+        status: "draft",
+        sentCount: 0,
+        mode: campaign.mode || "own",
+      },
+    });
+    return {
+      campaign: mapCampaign(updated),
+      deferred: false,
+      emptyAudience: true,
+      eligibleCount: 0,
+      reason: "empty_audience",
+    };
+  }
+
+  if (brandRow) {
     await deliverCampaignBatch({
       campaign,
       brand: mapEntity(brandRow),
@@ -232,7 +254,12 @@ export async function launchCampaign(id: string): Promise<LaunchResult | null> {
   });
 
   const updated = await prisma.campaign.findUniqueOrThrow({ where: { id } });
-  return { campaign: mapCampaign(updated), deferred: false };
+  return {
+    campaign: mapCampaign(updated),
+    deferred: false,
+    emptyAudience: false,
+    eligibleCount: eligible.length,
+  };
 }
 
 export async function applyOptOut(input: {

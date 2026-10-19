@@ -127,6 +127,11 @@ model Campaign {
   channel         String
   subject         String?
   message         String
+  /// Optional HTML body override (email). When null, HTML is built from message + image.
+  htmlMessage     String?
+  /// Public image URL embedded in HTML email (https…). Plain-text fallback omits it.
+  imageUrl        String?
+  imageAlt        String?
   sourceFilter    String    @default("all")
   groupFilter     String    @default("all")
   preferUnoffered Boolean   @default(true)
