@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { assertEntityAccess, isAdminSession } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
+import {
+  buildInviteShare,
+  generateTemporaryPassword,
+} from "@/lib/invite-credentials";
 import type { UserRole } from "@/lib/types";
 import {
   createUser,
@@ -32,12 +36,11 @@ export async function POST(request: Request) {
     role?: UserRole;
     allowedEntityIds?: string[];
   };
-  if (!body.email || !body.password) {
-    return NextResponse.json(
-      { error: "Email and password required" },
-      { status: 400 },
-    );
+  if (!body.email?.trim()) {
+    return NextResponse.json({ error: "Email required" }, { status: 400 });
   }
+  const temporaryPassword =
+    body.password?.trim() || generateTemporaryPassword();
   const role: UserRole = body.role === "admin" ? "admin" : "member";
   const allowedEntityIds = body.allowedEntityIds || [];
   if (role === "member") {
@@ -50,14 +53,29 @@ export async function POST(request: Request) {
     }
   }
   try {
+    const name = body.name || body.email;
     const user = await createUser({
       email: body.email,
-      name: body.name || body.email,
-      password: body.password,
+      name,
+      password: temporaryPassword,
       role,
       allowedEntityIds,
     });
-    return NextResponse.json(user);
+    const invite = buildInviteShare({
+      email: user.email,
+      temporaryPassword,
+      name: user.name,
+    });
+    // No invite email is sent — admin must copy/share these credentials once.
+    return NextResponse.json({
+      ...user,
+      temporaryPassword: invite.temporaryPassword,
+      loginUrl: invite.loginUrl,
+      inviteLink: invite.inviteLink,
+      shareText: invite.shareText,
+      copyAllText: invite.copyAllText,
+      inviteEmailSent: false,
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Create failed" },
@@ -77,19 +95,44 @@ export async function PATCH(request: Request) {
     role?: UserRole;
     allowedEntityIds?: string[];
     password?: string;
+    /** When true, generate a fresh temporary password and return share copy. */
+    resetPassword?: boolean;
   };
   if (!body.id) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
+
+  const temporaryPassword = body.resetPassword
+    ? body.password?.trim() || generateTemporaryPassword()
+    : body.password?.trim() || undefined;
+
   const user = await updateUser(body.id, {
     name: body.name,
     role: body.role,
     allowedEntityIds: body.allowedEntityIds,
-    password: body.password,
+    password: temporaryPassword,
   });
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
+
+  if (temporaryPassword) {
+    const invite = buildInviteShare({
+      email: user.email,
+      temporaryPassword,
+      name: user.name,
+    });
+    return NextResponse.json({
+      ...user,
+      temporaryPassword: invite.temporaryPassword,
+      loginUrl: invite.loginUrl,
+      inviteLink: invite.inviteLink,
+      shareText: invite.shareText,
+      copyAllText: invite.copyAllText,
+      inviteEmailSent: false,
+    });
+  }
+
   return NextResponse.json(user);
 }
 

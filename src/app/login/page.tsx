@@ -10,7 +10,10 @@ import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/brand";
 function LoginInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState("admin@signaldesk.local");
+  const emailFromLink = searchParams.get("email")?.trim() || "";
+  const [email, setEmail] = useState(
+    () => emailFromLink || "admin@signaldesk.local",
+  );
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
