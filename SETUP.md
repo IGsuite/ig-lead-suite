@@ -70,6 +70,10 @@ SMARTLEAD_API_KEY=...
 SMARTLEAD_CAMPAIGN_ID=...
 ```
 
+**Copy ownership:** Create subject/body only in **IG Lead Suite**. On **Launch**, the app pauses the Smartlead campaign if needed, writes your CRM subject + message (HTML if present) onto sequence #1 (creating a one-step stub if empty), sets the campaign **Active**, then adds leads. You do **not** recreate the email sequence in Smartlead.
+
+**Still required in Smartlead:** campaign stays **Active** and a **mailbox is connected**. Smartlead handles warmup/sending; Lead Suite owns the words.
+
 Webhook: `${PUBLIC_APP_URL}/api/webhooks/email` (event **EMAIL_REPLY**).
 
 **HTML / image emails:** Campaigns → Build email can store an optional public **image URL** (+ alt). IG Lead Suite builds a personalized HTML body (with image) and a plain-text fallback (no image), and passes `email_html` / `email_text` / `image_url` as Smartlead lead custom fields. Set the Smartlead campaign sequence to **HTML** (not plain-only) and reference those fields if you want the CRM copy/image in the send. After pulling this schema change: `npm run db:push` (Neon-safe; no migration files).
@@ -102,7 +106,8 @@ AUTH_ADMIN_PASSWORD=your-strong-password # required on Vercel — do not use cha
 
 1. **Campaigns → Build** → pick Morning or Afternoon (or custom hours)  
 2. Launch outside the window → stays **scheduled**  
-3. Launch inside the window → sends through IG Lead Suite → Telnyx / Smartlead  
+3. Launch inside the window → SMS via Telnyx; email → CRM copy pushed to Smartlead sequence, then leads added  
+
 4. **Reports → Send timing** to compare which windows get better replies  
 5. **Reports → Performance / Improve** for reply rates, best copy, and what to scale next  
 
@@ -124,8 +129,22 @@ AUTH_ADMIN_PASSWORD=...          # required on Vercel (not changeme)
 # SITE_ACCESS_CODE=...           # optional
 # AUTH_REQUIRED=true             # local lock / explicit
 # AUTH_REQUIRED=false            # unlock a deploy (not recommended)
+# OPENAI_API_KEY=...             # optional — Campaigns → Build → Draft with AI
+# AI_GATEWAY_API_KEY=...         # optional — Ads Gemini wording
 # N8N_WEBHOOK_URL=...            # later
 ```
+
+### Optional: OpenAI for campaign copy
+
+1. Create a key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+2. Vercel → Project **`ig-lead-suite`** → Settings → Environment Variables  
+   - Name: `OPENAI_API_KEY`  
+   - Value: your key  
+   - Environments: Production + Preview (and Development if you use `vercel env pull`)
+3. Redeploy so the runtime picks up the var
+4. **Campaigns → Build** → pick Soft or Growth tone → **Draft with AI** fills subject/body (`{{firstName}}` / `{{brand}}`, STOP/unsubscribe)
+
+Without the key the button still works with a financing-safe demo draft and a clear toast. Ads creatives continue to use Gemini / AI Gateway keys separately.
 
 ## Realistic outcome while 10DLC Campaign is pending
 

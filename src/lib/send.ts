@@ -170,6 +170,14 @@ export async function deliverCampaignBatch(input: {
         continue;
       }
       liveAttempts += 1;
+      // Unpersonalized HTML for Smartlead sequence (keep {{firstName}} merge tags).
+      const sequenceHtmlBodies = buildEmailBodies({
+        message: input.campaign.message,
+        htmlMessage: input.campaign.htmlMessage,
+        imageUrl: input.campaign.imageUrl,
+        imageAlt: input.campaign.imageAlt,
+        vars: { firstName: "{{firstName}}", brand: "{{brand}}" },
+      });
       const result = await sendColdEmail({
         to: lead.email,
         subject: copy.subject || "Hello",
@@ -181,6 +189,12 @@ export async function deliverCampaignBatch(input: {
         firstName: lead.firstName,
         lastName: lead.lastName,
         brandId: input.brand.id,
+        brandName: input.brand.shortName,
+        // Smartlead sequence is updated from CRM templates (merge tags),
+        // so Launch copy stays owned by IG Lead Suite — not Smartlead UI.
+        sequenceSubject: input.campaign.subject || "Hello",
+        sequenceBody: input.campaign.message,
+        sequenceHtml: sequenceHtmlBodies.html,
       });
       if (result.mode === "live") sawLive = true;
       else sawMock = true;

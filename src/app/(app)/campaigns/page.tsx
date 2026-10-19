@@ -84,7 +84,7 @@ function CampaignsInner() {
         const countLabel = typeof n === "number" ? `${n} lead(s) ` : "";
         toast.success(
           json.channel === "email"
-            ? `Launched ${countLabel}through IG Lead Suite → Smartlead/Instantly`
+            ? `Launched ${countLabel}— CRM subject/body pushed to Smartlead (needs Active campaign + connected mailbox)`
             : `Launched ${countLabel}through IG Lead Suite → Telnyx SMS`,
         );
       }
