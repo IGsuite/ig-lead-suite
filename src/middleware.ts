@@ -15,6 +15,8 @@ const PUBLIC_PATHS = [
   "/api/auth/session",
   "/api/webhooks/",
   "/api/providers/status",
+  // No secrets echoed — used by Go live checklist / ops probes
+  "/api/providers/ten-dlc",
 ];
 
 function isPublic(pathname: string): boolean {

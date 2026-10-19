@@ -17,18 +17,20 @@ The **ops app is built**. Neon + Telnyx SMS + Smartlead are keyed. What’s left
 - [x] Telnyx SMS + Smartlead email providers  
 - [x] Inbound webhooks: `/api/webhooks/telnyx`, `/api/webhooks/email`  
 - [x] Neon database connected  
+- [x] Campaign **Cancel** (pauses — no further sends) + multi-select sources/groups  
+- [x] Merge tags: `{{firstName}}`, `{{brand}}` (not `{FirstName}`)  
 
 ## Status snapshot
 
 | Piece | Status |
 |---|---|
 | Neon | Live |
-| Telnyx send (API + number) | Live — register 10DLC **Campaign** before heavy volume |
+| Telnyx send (API + number) | Live — filtered / low throughput until 10DLC **Campaign** ACTIVE + number assigned |
 | Telnyx **10DLC Brand** | **Approved (status OK, TCR BNHCFPV)** via API |
 | Telnyx **10DLC Campaign** | **Pending — none registered yet** ← do this next for volume SMS |
-| Live send cap | Default **2000** real Telnyx/Smartlead calls per Launch (`SMS_LIVE_CAP` / `EMAIL_LIVE_CAP`; `0` = unlimited) |
+| Live send cap | Default **2000** real provider calls per Launch (`SMS_LIVE_CAP` / `TELNYX_LIVE_CAP` / `EMAIL_LIVE_CAP`; hard max **10000**) |
 | Smartlead cold email | Live (key + campaign id set) |
-| Public webhook URL | Set when tunnel/deploy is up (`PUBLIC_APP_URL`) |
+| Public webhook URL | `https://www.igleadsuite.com` (`PUBLIC_APP_URL`) |
 | Users / ACL | Available at `/users` + `/login` |
 | CRM / n8n | Not required today |
 
@@ -38,10 +40,28 @@ The **ops app is built**. Neon + Telnyx SMS + Smartlead are keyed. What’s left
 
 1. ~~API Key → `TELNYX_API_KEY`~~  
 2. ~~Default number → `TELNYX_FROM_NUMBER`~~  
-3. Assign a Telnyx number on each entity portal  
-4. ~~Wait for **10DLC Brand**~~ — Brand is **OK**  
-5. **Register a 10DLC Campaign** in Telnyx Mission Control for Abstract (then other entities)  
-6. Messaging profile webhook → `${PUBLIC_APP_URL}/api/webhooks/telnyx`
+3. Assign a Telnyx number on each entity portal (Entities → portal → phone numbers; Autopilot uses the first)  
+4. ~~Wait for **10DLC Brand**~~ — Brand is **OK** (TCR **BNHCFPV**)  
+5. **Register a 10DLC Campaign** in Telnyx Mission Control (you must click this — API cannot finish carrier approval for you):  
+   1. Open [Mission Control](https://portal.telnyx.com) → **Messaging → 10DLC**  
+   2. Select Brand **Abstract** (status OK / TCR BNHCFPV) → **Create campaign**  
+   3. Choose use case (typically **Low Volume Mixed** or **Marketing** — match your traffic)  
+   4. Fill sample messages that match what you send (soft tone, include `Reply STOP to opt out` / HELP)  
+   5. Document opt-in / CTA, Terms + Privacy URLs, message frequency + “msg & data rates may apply”  
+   6. Submit and wait for carrier / MNO approval (often hours–days; status must become **ACTIVE** / MNO approved)  
+   7. **Assign number** `+15162661301` (and any other Abstract numbers) to the approved campaign → Phone Numbers / Assign Numbers  
+   8. Confirm the number sits on a Messaging Profile first, then on the campaign  
+6. Messaging profile webhook → `https://www.igleadsuite.com/api/webhooks/telnyx` (or `${PUBLIC_APP_URL}/api/webhooks/telnyx`)  
+7. Optional: raise `SMS_LIVE_CAP` on Vercel (default **2000**, hard max **10000**) after Campaign is ACTIVE  
+
+#### Blast checklist (SMS Own Launch)
+
+1. Telnyx → **10DLC** → Campaign under Brand Abstract → wait until **ACTIVE** → assign `+15162661301`  
+2. Confirm `/setup` or `GET /api/providers/ten-dlc` shows Brand OK + Campaign present  
+3. Confirm `GET /api/providers/status` → `telnyx: live`, `smsLiveCap`, webhooks  
+4. **Campaigns → Build** → Entity Abstract → channel SMS → mode **Own** → multi-select sources/groups as needed → volume → soft message with `{{firstName}}` + STOP → send window → **Launch** (inside window)  
+5. Use **Cancel** on the campaign list to pause — no further sends  
+6. Start small (volume 50–100), check Inbox + Telnyx delivery, then raise volume / `SMS_LIVE_CAP` (≤ 10000)
 
 ### 2. Smartlead — done when keys are in `.env`
 
@@ -96,6 +116,9 @@ SMARTLEAD_CAMPAIGN_ID=...        # done
 PUBLIC_APP_URL=https://...       # tunnel or Vercel
 AUTH_SECRET=...                  # required on Vercel
 AUTH_ADMIN_PASSWORD=...          # required on Vercel (not changeme)
+# SMS_LIVE_CAP=2000              # live Telnyx SMS per Launch (default 2000, hard max 10000)
+# TELNYX_LIVE_CAP=2000           # alias for SMS_LIVE_CAP
+# EMAIL_LIVE_CAP=2000            # live Smartlead/Instantly calls per Launch
 # SITE_ACCESS_CODE=...           # optional
 # AUTH_REQUIRED=true             # local lock / explicit
 # AUTH_REQUIRED=false            # unlock a deploy (not recommended)
@@ -112,6 +135,7 @@ AUTH_ADMIN_PASSWORD=...          # required on Vercel (not changeme)
 | Full 20k/day × 5 entities | No — needs 10DLC Campaign + warmed domains |
 | Morning vs afternoon sends | Yes — send windows enforced |
 | Per-company user access | Yes — Users page |
+| App live SMS / Launch | Up to `SMS_LIVE_CAP` (default 2000, max 10000) once Campaign + number assigned |
 
-**Still needs you:** Telnyx **10DLC Campaign** registration.  
-**On Vercel:** set `AUTH_SECRET` + `AUTH_ADMIN_PASSWORD` (login is required by default; webhooks remain public).
+**Still needs you:** Telnyx **10DLC Campaign** registration + assign `+15162661301` to that campaign.  
+**On Vercel:** set `AUTH_SECRET` + `AUTH_ADMIN_PASSWORD` (login is required by default; webhooks remain public). Optional: `SMS_LIVE_CAP`.

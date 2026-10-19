@@ -23,6 +23,15 @@ export type CampaignSendSummary = {
   provider: string;
 };
 
+/** Default live provider calls per Launch batch (was 25 for early testing). */
+export const LIVE_CAP_DEFAULT = 2000;
+
+/**
+ * Hard ceiling — `0` / `unlimited` / huge env values clamp here.
+ * Keeps a safety net even when operators try to disable the cap.
+ */
+export const LIVE_CAP_MAX = 10_000;
+
 function personalize(
   campaign: Campaign,
   brand: Brand,
@@ -38,36 +47,42 @@ function personalize(
   return { body: renderSmsTemplate(campaign.message, vars) };
 }
 
+function clampLiveCap(n: number): number {
+  if (!Number.isFinite(n) || n <= 0) return LIVE_CAP_MAX;
+  return Math.min(LIVE_CAP_MAX, Math.max(1, Math.floor(n)));
+}
+
 /**
  * Live provider call budget for one Launch / Autopilot batch.
- * - Explicit `override` wins
- * - Else SMS_LIVE_CAP / EMAIL_LIVE_CAP env (0 or "unlimited" = no cap)
- * - Else defaults: SMS 2000, email 2000 (was 25 for early testing)
+ * - Explicit `override` wins (clamped to LIVE_CAP_MAX; 0 → max)
+ * - Else SMS: `SMS_LIVE_CAP` or `TELNYX_LIVE_CAP`
+ * - Else email: `EMAIL_LIVE_CAP`
+ * - `0` / `unlimited` → LIVE_CAP_MAX (safety net, not truly unlimited)
+ * - Else default 2000 (also min'd with batch size when provided)
  */
 export function resolveLiveCap(
   channel: Campaign["channel"],
   override?: number,
   batchSize?: number,
 ): number {
-  if (typeof override === "number" && Number.isFinite(override) && override >= 0) {
-    return override === 0 ? Number.POSITIVE_INFINITY : override;
+  if (typeof override === "number" && Number.isFinite(override)) {
+    return clampLiveCap(override);
   }
   const raw =
     channel === "sms"
-      ? process.env.SMS_LIVE_CAP?.trim()
+      ? process.env.SMS_LIVE_CAP?.trim() ||
+        process.env.TELNYX_LIVE_CAP?.trim()
       : process.env.EMAIL_LIVE_CAP?.trim();
   if (raw === "0" || raw?.toLowerCase() === "unlimited") {
-    return Number.POSITIVE_INFINITY;
+    return LIVE_CAP_MAX;
   }
   if (raw) {
     const n = Number.parseInt(raw, 10);
-    if (Number.isFinite(n) && n >= 0) {
-      return n === 0 ? Number.POSITIVE_INFINITY : n;
-    }
+    if (Number.isFinite(n)) return clampLiveCap(n);
   }
-  const fallback = 2000;
+  const fallback = LIVE_CAP_DEFAULT;
   if (typeof batchSize === "number" && batchSize > 0) {
-    return Math.min(fallback, batchSize);
+    return Math.min(fallback, batchSize, LIVE_CAP_MAX);
   }
   return fallback;
 }
@@ -75,6 +90,7 @@ export function resolveLiveCap(
 /**
  * Deliver one campaign batch through Telnyx (SMS) or cold-email provider.
  * Caps live API calls per batch (see resolveLiveCap / SMS_LIVE_CAP).
+ * Contacts past the cap are skipped (not fake-delivered).
  */
 export async function deliverCampaignBatch(input: {
   campaign: Campaign;
@@ -118,7 +134,6 @@ export async function deliverCampaignBatch(input: {
     }
 
     if (providerReady && liveAttempts >= liveCap) {
-      // Past the live budget — do not fake-deliver.
       skipped += 1;
       continue;
     }
@@ -167,7 +182,7 @@ export async function deliverCampaignBatch(input: {
     delivered,
     failed,
     skipped,
-    liveCap: Number.isFinite(liveCap) ? liveCap : input.leads.length,
+    liveCap,
     mode: sawLive && sawMock ? "mixed" : sawLive ? "live" : "mock",
     channel: input.campaign.channel,
     provider:
