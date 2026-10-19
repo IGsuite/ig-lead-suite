@@ -49,6 +49,10 @@ SMARTLEAD_API_KEY=...
 SMARTLEAD_CAMPAIGN_ID=...
 ```
 
+**Copy ownership:** Create subject/body only in **IG Lead Suite**. On **Launch**, the app pauses the Smartlead campaign if needed, writes your CRM subject + message (HTML if present) onto sequence #1 (creating a one-step stub if empty), sets the campaign **Active**, then adds leads. You do **not** recreate the email sequence in Smartlead.
+
+**Still required in Smartlead:** campaign stays **Active** and a **mailbox is connected**. Smartlead handles warmup/sending; Lead Suite owns the words.
+
 Webhook: `${PUBLIC_APP_URL}/api/webhooks/email` (event **EMAIL_REPLY**).
 
 ### 3. Public URL
@@ -79,7 +83,8 @@ AUTH_ADMIN_PASSWORD=your-strong-password # required on Vercel — do not use cha
 
 1. **Campaigns → Build** → pick Morning or Afternoon (or custom hours)  
 2. Launch outside the window → stays **scheduled**  
-3. Launch inside the window → sends through IG Lead Suite → Telnyx / Smartlead  
+3. Launch inside the window → SMS via Telnyx; email → CRM copy pushed to Smartlead sequence, then leads added  
+
 4. **Reports → Send timing** to compare which windows get better replies  
 5. **Reports → Performance / Improve** for reply rates, best copy, and what to scale next  
 

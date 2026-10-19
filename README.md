@@ -149,7 +149,7 @@ Yes — **creators work here**. Open **Ads** in the sidebar (`/creatives`):
 3. **AI wording** (Create / Improve / Winners / Tips) is scoped to the selected company. After a draft: **Shorter** / **Stronger CTA** / **Softer** / **More variants**.
 4. **Use in form** or **Save as template**, then **Campaigns → Use template** for that entity.
 5. ACL: members only see entities they can access; shared library edits are admin-only.
-6. Not a Canva clone — image-heavy email layouts stay in **Smartlead**.
+6. Not a Canva clone — image-heavy layouts can still be pasted as HTML in Lead Suite; Launch pushes that HTML into Smartlead’s sequence.
 
 AI keys — Ads (any one):
 
@@ -177,7 +177,7 @@ Set on Vercel → Project → Environment Variables. Without it, **Campaigns →
 2. **Ads** — Pick a company, organize folders/templates/files, draft SMS/email copy with AI, save templates.
 3. **Social Media** — Per-entity Meta / TikTok campaign planning + connection setup (live publish later).
 4. **Reports** — Performance scorecards, best message ranking, Improve (source + timing + copy), Sources, Send timing, Social, Costs & ROI — always filterable per company.
-5. **Campaigns / Autopilot** — **Own** campaigns or **Auto** wheel daily volumes **in IG Lead Suite** with send windows. SMS → Telnyx; email → Smartlead/Instantly. Use Ads templates or **Draft with AI** (OpenAI) in the builder.
+5. **Campaigns / Autopilot** — **Own** campaigns or **Auto** wheel daily volumes **in IG Lead Suite** with send windows. SMS → Telnyx; email → Launch pushes CRM subject/body into Smartlead (or Instantly lead-add), then delivers. Use Ads templates or **Draft with AI** (OpenAI) in the builder.
 6. **Leads → lead page** — Full history per contact (`/leads/[id]`).
 7. **Inbox** — Replies land in that entity’s inbox only (or filter by `leadId`). Good lead → Email team.
 8. **Users** — Give Ahava staff Ahava-only access, etc.

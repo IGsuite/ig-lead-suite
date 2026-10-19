@@ -224,7 +224,9 @@ function CampaignBuilderInner() {
           );
         } else {
           toast.success(
-            "Campaign launched through IG Lead Suite → Telnyx / Smartlead",
+            channel === "email"
+              ? "Launched — CRM subject/body pushed to Smartlead (needs Active campaign + connected mailbox)"
+              : "Campaign launched through IG Lead Suite → Telnyx SMS",
           );
         }
       } else {

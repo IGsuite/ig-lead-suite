@@ -96,7 +96,7 @@ export default function SetupPage() {
       id: "email",
       title: "3. Smartlead cold email",
       youDo:
-        "API key + campaign ID keyed. Point Smartlead EMAIL_REPLY webhook to /api/webhooks/email.",
+        "API key + campaign ID keyed. Launch pushes CRM subject/body onto the Smartlead sequence automatically — keep the campaign Active with a connected mailbox. Point EMAIL_REPLY webhook to /api/webhooks/email.",
       statusKey: "email",
       done: Boolean(status && status.email !== "mock"),
       href: "https://app.smartlead.ai",
@@ -277,7 +277,8 @@ export default function SetupPage() {
 
       <p className="mt-6 text-sm text-[color:var(--ink-muted)]">
         Full write-up: <code>SETUP.md</code>. Campaigns always launch from
-        IG Lead Suite (Telnyx / Smartlead are delivery backends only).
+        IG Lead Suite — for email, Launch writes CRM copy into the Smartlead
+        sequence, then adds leads (Telnyx / Smartlead stay delivery backends).
       </p>
     </div>
   );

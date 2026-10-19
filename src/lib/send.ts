@@ -106,6 +106,14 @@ export async function deliverCampaignBatch(input: {
         firstName: lead.firstName,
         lastName: lead.lastName,
         brandId: input.brand.id,
+        brandName: input.brand.shortName,
+        // Smartlead sequence is updated from CRM templates (merge tags),
+        // so Launch copy stays owned by IG Lead Suite — not Smartlead UI.
+        sequenceSubject: input.campaign.subject || "Hello",
+        sequenceBody: input.campaign.message,
+        htmlBody: /<[a-z][\s\S]*>/i.test(input.campaign.message)
+          ? input.campaign.message
+          : undefined,
       });
       if (result.mode === "live") sawLive = true;
       else sawMock = true;
