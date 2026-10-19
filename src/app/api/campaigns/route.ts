@@ -70,6 +70,8 @@ export async function POST(request: Request) {
       deferred: result.deferred,
       deferredReason: result.reason,
       windowLabel: result.windowLabel,
+      emptyAudience: result.emptyAudience ?? false,
+      eligibleCount: result.eligibleCount,
     });
   }
 

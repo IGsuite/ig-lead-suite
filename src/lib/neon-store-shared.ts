@@ -67,6 +67,9 @@ import { applyVerification } from "@/lib/verify";
 export type LaunchResult = {
   campaign: Campaign;
   deferred: boolean;
+  /** True when launch ran in-window but no leads matched filters. */
+  emptyAudience?: boolean;
+  eligibleCount?: number;
   reason?: string;
   windowLabel?: string;
 };

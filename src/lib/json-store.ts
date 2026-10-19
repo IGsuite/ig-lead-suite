@@ -48,6 +48,9 @@ import { applyVerification } from "@/lib/verify";
 export type LaunchResult = {
   campaign: Campaign;
   deferred: boolean;
+  /** True when launch ran in-window but no leads matched filters. */
+  emptyAudience?: boolean;
+  eligibleCount?: number;
   reason?: string;
   windowLabel?: string;
 };
@@ -299,8 +302,21 @@ export async function launchCampaign(id: string): Promise<LaunchResult | null> {
     poolCursor: data.rotation?.poolCursor ?? 0,
   });
   const toSend = pick.selected;
+  if (toSend.length === 0) {
+    campaign.status = "draft";
+    campaign.sentCount = 0;
+    await writeStore(data);
+    return {
+      campaign,
+      deferred: false,
+      emptyAudience: true,
+      eligibleCount: 0,
+      reason: "empty_audience",
+    };
+  }
+
   const brand = data.brands.find((b) => b.id === campaign.brandId);
-  if (brand && toSend.length) {
+  if (brand) {
     await deliverCampaignBatch({ campaign, brand, leads: toSend });
   }
 
@@ -333,7 +349,12 @@ export async function launchCampaign(id: string): Promise<LaunchResult | null> {
   campaign.sentCount = toSend.length;
   campaign.startedAt = new Date().toISOString();
   await writeStore(data);
-  return { campaign, deferred: false };
+  return {
+    campaign,
+    deferred: false,
+    emptyAudience: false,
+    eligibleCount: toSend.length,
+  };
 }
 
 export async function applyOptOut(input: {

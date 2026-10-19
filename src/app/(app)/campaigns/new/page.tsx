@@ -171,14 +171,22 @@ function CampaignBuilderInner() {
         const launched = (await launchRes.json()) as {
           deferred?: boolean;
           windowLabel?: string;
+          emptyAudience?: boolean;
+          eligibleCount?: number;
         };
         if (launched.deferred) {
           toast.message(
             `Scheduled — outside send window (${launched.windowLabel || "window"}). Launch again during the window.`,
           );
+        } else if (launched.emptyAudience) {
+          toast.error(
+            "No eligible leads matched (source/group, verified-only, or “not yet offered this entity”). Widen filters or uncheck Prefer unoffered, then launch again.",
+          );
         } else {
+          const n = launched.eligibleCount;
+          const countLabel = typeof n === "number" ? `${n} contact(s) ` : "";
           toast.success(
-            "Campaign launched through IG Lead Suite → Telnyx / Smartlead",
+            `Launched ${countLabel}through IG Lead Suite → Telnyx / Smartlead`,
           );
         }
       } else {
@@ -563,12 +571,24 @@ function CampaignBuilderInner() {
             </Button>
             <Button
               type="button"
-              disabled={saving}
+              disabled={saving || audienceCount === 0}
               onClick={() => void create("scheduled")}
+              title={
+                audienceCount === 0
+                  ? "No eligible leads — widen source/group filters or uncheck Prefer unoffered"
+                  : undefined
+              }
             >
               Launch now
             </Button>
           </div>
+          {audienceCount === 0 ? (
+            <p className="text-sm text-[color:var(--danger,#b91c1c)]">
+              Audience is empty with current filters. Common cause for a retest:
+              the lead was already offered this entity — uncheck “Prefer leads not
+              yet offered this entity”.
+            </p>
+          ) : null}
         </form>
 
         <aside className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise-delay-1">
