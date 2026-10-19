@@ -64,7 +64,7 @@ AUTH_ADMIN_PASSWORD=your-strong-password  # required on Vercel (no changeme)
 # SITE_ACCESS_CODE=optional-passcode    # optional alternate admin password
 ```
 
-Open **Users** in the sidebar to invite teammates. Sign in at `/login`.
+Open **Users** in the sidebar to add teammates. The app does **not** send invite emails — after create (or **Reset password**), copy the temporary password + login URL (`https://www.igleadsuite.com/login`) and share them yourself. Sign in at `/login`.
 
 **Still public without browser login** (providers need this):
 
