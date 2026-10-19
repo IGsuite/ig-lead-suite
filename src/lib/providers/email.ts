@@ -6,7 +6,17 @@
  * Both add the lead into a campaign (sends on that tool’s schedule/warmup).
  * Smartlead docs: https://api.smartlead.ai/
  * Instantly docs: https://developer.instantly.ai/
+ *
+ * HTML foundation: we pass personalized `htmlBody` + plain `body` (and optional
+ * image URL) as lead custom fields so Smartlead/Instantly sequences can use
+ * HTML. Configure the provider campaign sequence as HTML email (not plain-only).
  */
+
+import {
+  applyEmailTokens,
+  buildEmailBodies,
+  type EmailTemplateVars,
+} from "@/lib/email-html";
 
 export type EmailSendResult = {
   ok: boolean;
@@ -14,6 +24,21 @@ export type EmailSendResult = {
   provider: "instantly" | "smartlead" | "mock";
   providerId?: string;
   error?: string;
+};
+
+export type ColdEmailInput = {
+  to: string;
+  subject: string;
+  /** Plain-text body (fallback). */
+  body: string;
+  /** HTML body; when omitted, built from `body` + optional image. */
+  htmlBody?: string;
+  imageUrl?: string;
+  imageAlt?: string;
+  fromName?: string;
+  firstName?: string;
+  lastName?: string;
+  brandId?: string;
 };
 
 export function emailProviderName(): "instantly" | "smartlead" | "mock" {
@@ -26,15 +51,42 @@ export function isColdEmailConfigured(): boolean {
   return emailProviderName() !== "mock";
 }
 
-export async function sendColdEmail(input: {
-  to: string;
-  subject: string;
-  body: string;
-  fromName?: string;
-  firstName?: string;
-  lastName?: string;
-  brandId?: string;
-}): Promise<EmailSendResult> {
+/** @deprecated Prefer applyEmailTokens / buildEmailBodies from email-html. */
+export function renderEmailTemplate(
+  template: string,
+  vars: EmailTemplateVars,
+): string {
+  return applyEmailTokens(template, vars);
+}
+
+export { applyEmailTokens, buildEmailBodies };
+
+export async function sendColdEmail(
+  input: ColdEmailInput,
+): Promise<EmailSendResult> {
+  const vars: EmailTemplateVars = {
+    firstName: input.firstName,
+    brand: input.fromName,
+  };
+  const bodies =
+    input.htmlBody?.trim()
+      ? {
+          text: input.body,
+          html: input.htmlBody,
+        }
+      : buildEmailBodies({
+          message: input.body,
+          imageUrl: input.imageUrl,
+          imageAlt: input.imageAlt,
+          vars,
+        });
+
+  const payload = {
+    ...input,
+    body: bodies.text,
+    htmlBody: bodies.html,
+  };
+
   const provider = emailProviderName();
   if (provider === "mock") {
     return {
@@ -46,17 +98,28 @@ export async function sendColdEmail(input: {
   }
 
   if (provider === "instantly") {
-    return sendViaInstantly(input);
+    return sendViaInstantly(payload);
   }
-  return sendViaSmartlead(input);
+  return sendViaSmartlead(payload);
 }
 
-async function sendViaInstantly(input: {
-  to: string;
-  firstName?: string;
-  lastName?: string;
-  brandId?: string;
-}): Promise<EmailSendResult> {
+function leadCustomFields(input: ColdEmailInput & { htmlBody: string }) {
+  const fields: Record<string, string> = {
+    email_text: input.body,
+    email_html: input.htmlBody,
+  };
+  if (input.imageUrl?.trim()) {
+    fields.image_url = input.imageUrl.trim();
+  }
+  if (input.imageAlt?.trim()) {
+    fields.image_alt = input.imageAlt.trim();
+  }
+  return fields;
+}
+
+async function sendViaInstantly(
+  input: ColdEmailInput & { htmlBody: string },
+): Promise<EmailSendResult> {
   const apiKey = process.env.INSTANTLY_API_KEY!.trim();
   const campaignId =
     (input.brandId &&
@@ -74,6 +137,7 @@ async function sendViaInstantly(input: {
   }
 
   try {
+    const custom = leadCustomFields(input);
     const res = await fetch("https://api.instantly.ai/api/v2/leads", {
       method: "POST",
       headers: {
@@ -86,6 +150,8 @@ async function sendViaInstantly(input: {
         first_name: input.firstName || undefined,
         last_name: input.lastName || undefined,
         skip_if_in_workspace: true,
+        // Instantly custom variables — map {{email_html}} etc. in sequence HTML.
+        custom_variables: custom,
       }),
     });
     const json = (await res.json().catch(() => ({}))) as {
@@ -117,12 +183,9 @@ async function sendViaInstantly(input: {
   }
 }
 
-async function sendViaSmartlead(input: {
-  to: string;
-  firstName?: string;
-  lastName?: string;
-  brandId?: string;
-}): Promise<EmailSendResult> {
+async function sendViaSmartlead(
+  input: ColdEmailInput & { htmlBody: string },
+): Promise<EmailSendResult> {
   const apiKey = process.env.SMARTLEAD_API_KEY!.trim();
   const campaignId =
     (input.brandId &&
@@ -141,6 +204,7 @@ async function sendViaSmartlead(input: {
 
   try {
     const url = `https://server.smartlead.ai/api/v1/campaigns/${campaignId}/leads?api_key=${encodeURIComponent(apiKey)}`;
+    const custom = leadCustomFields(input);
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -150,6 +214,8 @@ async function sendViaSmartlead(input: {
             email: input.to,
             first_name: input.firstName || "",
             last_name: input.lastName || "",
+            // Smartlead custom fields — use in HTML sequence as {{email_html}} / {{image_url}}.
+            custom_fields: custom,
           },
         ],
       }),
@@ -181,13 +247,4 @@ async function sendViaSmartlead(input: {
       error: err instanceof Error ? err.message : "Smartlead request failed",
     };
   }
-}
-
-export function renderEmailTemplate(
-  template: string,
-  vars: { firstName?: string; brand?: string },
-): string {
-  return template
-    .replaceAll("{{firstName}}", vars.firstName || "there")
-    .replaceAll("{{brand}}", vars.brand || "us");
 }

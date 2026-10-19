@@ -51,6 +51,8 @@ SMARTLEAD_CAMPAIGN_ID=...
 
 Webhook: `${PUBLIC_APP_URL}/api/webhooks/email` (event **EMAIL_REPLY**).
 
+**HTML / image emails:** Campaigns → Build email can store an optional public **image URL** (+ alt). IG Lead Suite builds a personalized HTML body (with image) and a plain-text fallback (no image), and passes `email_html` / `email_text` / `image_url` as Smartlead lead custom fields. Set the Smartlead campaign sequence to **HTML** (not plain-only) and reference those fields if you want the CRM copy/image in the send. After pulling this schema change: `npm run db:push` (Neon-safe; no migration files).
+
 ### 3. Public URL
 
 Cloudflare Tunnel for local tests, or Vercel for production. Set `PUBLIC_APP_URL`.
