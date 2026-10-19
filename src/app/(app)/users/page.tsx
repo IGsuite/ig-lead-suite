@@ -30,16 +30,22 @@ type InviteShare = {
   email: string;
   temporaryPassword: string;
   loginUrl: string;
+  inviteLink: string;
   shareText: string;
+  copyAllText: string;
   title: string;
 };
 
 type UserWithInvite = AppUserPublic & {
   temporaryPassword?: string;
   loginUrl?: string;
+  inviteLink?: string;
   shareText?: string;
+  copyAllText?: string;
   error?: string;
 };
+
+type CopyKind = "invite" | "all" | "link" | "password" | null;
 
 export default function UsersPage() {
   const { data, loading, error, refresh } = usePlatform();
@@ -54,7 +60,7 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [resettingId, setResettingId] = useState<string | null>(null);
   const [inviteShare, setInviteShare] = useState<InviteShare | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copiedKind, setCopiedKind] = useState<CopyKind>(null);
 
   const loadUsers = useCallback(async () => {
     setLoadErr(null);
@@ -90,22 +96,40 @@ export default function UsersPage() {
 
   function showInviteFromResponse(json: UserWithInvite, title: string) {
     if (!json.temporaryPassword || !json.loginUrl || !json.shareText) return;
+    const inviteLink = json.inviteLink || json.loginUrl;
+    const copyAllText =
+      json.copyAllText ||
+      [
+        `Login: ${inviteLink}`,
+        `Email: ${json.email}`,
+        `Temporary password: ${json.temporaryPassword}`,
+      ].join("\n");
     setInviteShare({
       email: json.email,
       temporaryPassword: json.temporaryPassword,
       loginUrl: json.loginUrl,
+      inviteLink,
       shareText: json.shareText,
+      copyAllText,
       title,
     });
-    setCopied(false);
+    setCopiedKind(null);
   }
 
-  async function copyShareText() {
+  async function copyInviteField(kind: Exclude<CopyKind, null>, text: string) {
     if (!inviteShare) return;
     try {
-      await navigator.clipboard.writeText(inviteShare.shareText);
-      setCopied(true);
-      toast.success("Login instructions copied");
+      await navigator.clipboard.writeText(text);
+      setCopiedKind(kind);
+      toast.success(
+        kind === "invite"
+          ? "Invite message copied"
+          : kind === "all"
+            ? "Login details copied"
+            : kind === "link"
+              ? "Login link copied"
+              : "Password copied",
+      );
     } catch {
       toast.error("Could not copy — select the text manually");
     }
@@ -229,48 +253,112 @@ export default function UsersPage() {
                 {inviteShare.title}
               </h2>
               <p className="mt-1 text-sm text-[color:var(--ink-soft)]">
-                Shown once here. Passwords are hashed in the database and cannot
-                be retrieved later — use Reset password if you lose this.
+                Shown once here — share from this UI (Slack, text, etc.). No
+                invite email is sent. Passwords are hashed and cannot be
+                retrieved later — use Reset password if you lose this.
               </p>
             </div>
-            <Button type="button" variant="outline" onClick={() => void copyShareText()}>
-              {copied ? (
-                <>
-                  <Check data-icon="inline-start" />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <Copy data-icon="inline-start" />
-                  Copy instructions
-                </>
-              )}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                onClick={() =>
+                  void copyInviteField("invite", inviteShare.shareText)
+                }
+              >
+                {copiedKind === "invite" ? (
+                  <>
+                    <Check data-icon="inline-start" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy data-icon="inline-start" />
+                    Copy invite message
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  void copyInviteField("all", inviteShare.copyAllText)
+                }
+              >
+                {copiedKind === "all" ? (
+                  <>
+                    <Check data-icon="inline-start" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy data-icon="inline-start" />
+                    Copy all
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
-          <dl className="grid gap-2 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-[color:var(--ink-muted)]">Login URL</dt>
-              <dd>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <dt className="text-[color:var(--ink-muted)]">
+                Invite / login link (email prefilled)
+              </dt>
+              <dd className="flex flex-wrap items-center gap-2">
                 <a
-                  href={inviteShare.loginUrl}
+                  href={inviteShare.inviteLink}
                   className="underline break-all"
                   target="_blank"
                   rel="noreferrer"
                 >
-                  {inviteShare.loginUrl}
+                  {inviteShare.inviteLink}
                 </a>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    void copyInviteField("link", inviteShare.inviteLink)
+                  }
+                >
+                  {copiedKind === "link" ? (
+                    <Check data-icon="inline-start" />
+                  ) : (
+                    <Copy data-icon="inline-start" />
+                  )}
+                  Copy link
+                </Button>
               </dd>
             </div>
             <div>
               <dt className="text-[color:var(--ink-muted)]">Email</dt>
               <dd className="font-medium">{inviteShare.email}</dd>
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <dt className="text-[color:var(--ink-muted)]">
                 Temporary password
               </dt>
-              <dd className="font-mono text-base tracking-wide">
-                {inviteShare.temporaryPassword}
+              <dd className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-base tracking-wide">
+                  {inviteShare.temporaryPassword}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    void copyInviteField(
+                      "password",
+                      inviteShare.temporaryPassword,
+                    )
+                  }
+                >
+                  {copiedKind === "password" ? (
+                    <Check data-icon="inline-start" />
+                  ) : (
+                    <Copy data-icon="inline-start" />
+                  )}
+                  Copy
+                </Button>
               </dd>
             </div>
           </dl>

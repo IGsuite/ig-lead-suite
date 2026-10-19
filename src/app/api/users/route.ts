@@ -71,7 +71,9 @@ export async function POST(request: Request) {
       ...user,
       temporaryPassword: invite.temporaryPassword,
       loginUrl: invite.loginUrl,
+      inviteLink: invite.inviteLink,
       shareText: invite.shareText,
+      copyAllText: invite.copyAllText,
       inviteEmailSent: false,
     });
   } catch (err) {
@@ -124,7 +126,9 @@ export async function PATCH(request: Request) {
       ...user,
       temporaryPassword: invite.temporaryPassword,
       loginUrl: invite.loginUrl,
+      inviteLink: invite.inviteLink,
       shareText: invite.shareText,
+      copyAllText: invite.copyAllText,
       inviteEmailSent: false,
     });
   }

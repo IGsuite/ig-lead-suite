@@ -19,18 +19,35 @@ export function generateTemporaryPassword(length = 14): string {
   return out;
 }
 
-export function resolveLoginUrl(): string {
+/** Base login URL (no query). Prefer PUBLIC_APP_URL when set. */
+export function resolveLoginBaseUrl(): string {
   const base = process.env.PUBLIC_APP_URL?.trim().replace(/\/$/, "");
   if (base) return `${base}/login`;
   return DEFAULT_LOGIN_URL;
 }
 
+/**
+ * Login URL that prefills the email field via `?email=`.
+ * Password is still shared separately — no magic-link token in this flow.
+ */
+export function resolveLoginUrl(email?: string): string {
+  const loginPath = resolveLoginBaseUrl();
+  const trimmed = email?.trim().toLowerCase();
+  if (!trimmed) return loginPath;
+  return `${loginPath}?email=${encodeURIComponent(trimmed)}`;
+}
+
 export type InviteSharePayload = {
   email: string;
   temporaryPassword: string;
+  /** Prefills email on the login page (`/login?email=...`). */
   loginUrl: string;
+  /** Same as loginUrl — alias for shareable invite link wording. */
+  inviteLink: string;
   /** Plain text the admin can copy/paste to the teammate. */
   shareText: string;
+  /** Compact field dump for "Copy all". */
+  copyAllText: string;
 };
 
 export function buildInviteShare(input: {
@@ -38,7 +55,8 @@ export function buildInviteShare(input: {
   temporaryPassword: string;
   name?: string;
 }): InviteSharePayload {
-  const loginUrl = resolveLoginUrl();
+  const email = input.email.trim().toLowerCase();
+  const loginUrl = resolveLoginUrl(email);
   const greeting = input.name?.trim()
     ? `Hi ${input.name.trim()},`
     : "Hi,";
@@ -48,16 +66,24 @@ export function buildInviteShare(input: {
     "You have access to IG Lead Suite. Sign in with:",
     "",
     `Login: ${loginUrl}`,
-    `Email: ${input.email.trim().toLowerCase()}`,
+    `Email: ${email}`,
     `Temporary password: ${input.temporaryPassword}`,
     "",
-    "Please change your password after first login (ask an admin to reset if needed).",
+    "Open the link (email is prefilled), enter the temporary password, then ask an admin to reset if you need a new one.",
+  ].join("\n");
+
+  const copyAllText = [
+    `Login: ${loginUrl}`,
+    `Email: ${email}`,
+    `Temporary password: ${input.temporaryPassword}`,
   ].join("\n");
 
   return {
-    email: input.email.trim().toLowerCase(),
+    email,
     temporaryPassword: input.temporaryPassword,
     loginUrl,
+    inviteLink: loginUrl,
     shareText,
+    copyAllText,
   };
 }
