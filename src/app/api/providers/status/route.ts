@@ -40,6 +40,8 @@ export async function GET() {
     hasSmartleadCampaign: hasAnyCampaign("SMARTLEAD"),
     hasInstantlyCampaign: hasAnyCampaign("INSTANTLY"),
     hasTelnyxFrom: Boolean(process.env.TELNYX_FROM_NUMBER?.trim()),
+    smsLiveCap: process.env.SMS_LIVE_CAP?.trim() || "2000",
+    emailLiveCap: process.env.EMAIL_LIVE_CAP?.trim() || "2000",
     checklist: {
       neon: isNeonConfigured(),
       telnyxKey: isTelnyxConfigured(),

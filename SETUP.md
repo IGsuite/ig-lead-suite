@@ -23,9 +23,10 @@ The **ops app is built**. Neon + Telnyx SMS + Smartlead are keyed. What’s left
 | Piece | Status |
 |---|---|
 | Neon | Live |
-| Telnyx send (API + number) | Live — low-volume / test until 10DLC **Campaign** registered |
+| Telnyx send (API + number) | Live — register 10DLC **Campaign** before heavy volume |
 | Telnyx **10DLC Brand** | **Approved (status OK, TCR BNHCFPV)** via API |
 | Telnyx **10DLC Campaign** | **Pending — none registered yet** ← do this next for volume SMS |
+| Live send cap | Default **2000** real Telnyx/Smartlead calls per Launch (`SMS_LIVE_CAP` / `EMAIL_LIVE_CAP`; `0` = unlimited) |
 | Smartlead cold email | Live (key + campaign id set) |
 | Public webhook URL | Set when tunnel/deploy is up (`PUBLIC_APP_URL`) |
 | Users / ACL | Available at `/users` + `/login` |

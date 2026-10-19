@@ -141,11 +141,11 @@ export default function SetupPage() {
     },
     {
       id: "smoke",
-      title: "8. Smoke test",
+      title: "8. Smoke test, then blast",
       youDo:
-        "Upload 2–3 leads → tiny campaign inside a send window → reply → Inbox → Email team.",
-      href: "/leads",
-      hrefLabel: "Upload leads",
+        "Upload leads → Campaigns → Build (Own, SMS) → volume you want → Launch inside the send window. Use {{firstName}}. Soft STOP language. Live cap defaults to 2000 SMS per Launch (SMS_LIVE_CAP).",
+      href: "/campaigns/new",
+      hrefLabel: "Build campaign",
     },
   ];
 
