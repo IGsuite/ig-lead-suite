@@ -98,8 +98,22 @@ AUTH_ADMIN_PASSWORD=...          # required on Vercel (not changeme)
 # SITE_ACCESS_CODE=...           # optional
 # AUTH_REQUIRED=true             # local lock / explicit
 # AUTH_REQUIRED=false            # unlock a deploy (not recommended)
+# OPENAI_API_KEY=...             # optional — Campaigns → Build → Draft with AI
+# AI_GATEWAY_API_KEY=...         # optional — Ads Gemini wording
 # N8N_WEBHOOK_URL=...            # later
 ```
+
+### Optional: OpenAI for campaign copy
+
+1. Create a key at [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+2. Vercel → Project **`ig-lead-suite`** → Settings → Environment Variables  
+   - Name: `OPENAI_API_KEY`  
+   - Value: your key  
+   - Environments: Production + Preview (and Development if you use `vercel env pull`)
+3. Redeploy so the runtime picks up the var
+4. **Campaigns → Build** → pick Soft or Growth tone → **Draft with AI** fills subject/body (`{{firstName}}` / `{{brand}}`, STOP/unsubscribe)
+
+Without the key the button still works with a financing-safe demo draft and a clear toast. Ads creatives continue to use Gemini / AI Gateway keys separately.
 
 ## Realistic outcome while 10DLC Campaign is pending
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
+import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { ErrorPanel, LoadingPanel } from "@/components/state-panels";
@@ -29,6 +30,8 @@ import type {
   SendWindowPreset,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+type DraftTone = "soft" | "growth";
 
 function CampaignBuilderInner() {
   const { data, loading, error, refresh } = usePlatform();
@@ -63,6 +66,8 @@ function CampaignBuilderInner() {
   const [sendWindowStart, setSendWindowStart] = useState("09:00");
   const [sendWindowEnd, setSendWindowEnd] = useState("12:00");
   const [saving, setSaving] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+  const [draftTone, setDraftTone] = useState<DraftTone>("soft");
   const [templateId, setTemplateId] = useState("");
 
   const sources = useMemo(() => {
@@ -127,6 +132,51 @@ function CampaignBuilderInner() {
     preferVerified,
     brandId,
   ]);
+
+  async function draftWithAi() {
+    setDrafting(true);
+    try {
+      const res = await fetch("/api/campaigns/draft-copy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel,
+          brandId,
+          tone: draftTone,
+        }),
+      });
+      const payload = (await res.json()) as {
+        error?: string;
+        subject?: string;
+        message?: string;
+        notice?: string;
+        mode?: string;
+      };
+      if (!res.ok) {
+        throw new Error(payload.error || "Draft failed");
+      }
+      if (!payload.message?.trim()) {
+        throw new Error("No message returned");
+      }
+      setMessage(payload.message);
+      if (channel === "email" && payload.subject?.trim()) {
+        setSubject(payload.subject.trim());
+      }
+      if (payload.notice) {
+        toast.message(payload.notice);
+      } else {
+        toast.success(
+          payload.mode === "live"
+            ? "Draft filled with ChatGPT"
+            : "Draft filled",
+        );
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Draft failed");
+    } finally {
+      setDrafting(false);
+    }
+  }
 
   async function create(status: "draft" | "scheduled") {
     setSaving(true);
@@ -379,6 +429,44 @@ function CampaignBuilderInner() {
               <Link href="/creatives" className="underline underline-offset-2">
                 Open Ads
               </Link>
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="space-y-2 min-w-[10rem]">
+                <Label>AI tone</Label>
+                <Select
+                  value={draftTone}
+                  onValueChange={(value) =>
+                    setDraftTone(value === "growth" ? "growth" : "soft")
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="soft">Soft (consultative)</SelectItem>
+                    <SelectItem value="growth">
+                      Growth (working capital options)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={drafting || saving}
+                onClick={() => void draftWithAi()}
+              >
+                <Sparkles className="size-3.5" />
+                {drafting ? "Drafting…" : "Draft with AI"}
+              </Button>
+            </div>
+            <p className="text-xs text-[color:var(--ink-muted)]">
+              Uses OpenAI when <code className="text-[0.7rem]">OPENAI_API_KEY</code>{" "}
+              is set; otherwise a financing-safe demo draft. Ads still use Gemini.
             </p>
           </div>
 

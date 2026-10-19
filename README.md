@@ -151,7 +151,7 @@ Yes — **creators work here**. Open **Ads** in the sidebar (`/creatives`):
 5. ACL: members only see entities they can access; shared library edits are admin-only.
 6. Not a Canva clone — image-heavy email layouts stay in **Smartlead**.
 
-AI keys (any one):
+AI keys — Ads (any one):
 
 ```bash
 AI_GATEWAY_API_KEY=...                 # Vercel AI Gateway → google/gemini-3.5-flash
@@ -161,7 +161,15 @@ GOOGLE_GENERATIVE_AI_API_KEY=...       # Google AI Studio
 GEMINI_API_KEY=...                     # same as Google key
 ```
 
-Without a key the UI still works with demo drafts.
+Without a Gemini/Gateway key, Ads still works with demo drafts.
+
+Campaign builder **Draft with AI** (optional OpenAI / ChatGPT):
+
+```bash
+OPENAI_API_KEY=...                     # gpt-4o-mini via Vercel AI SDK
+```
+
+Set on Vercel → Project → Environment Variables. Without it, **Campaigns → Build** still fills a soft financing-safe demo draft and shows a notice.
 
 ## Lead ops flow
 
@@ -169,7 +177,7 @@ Without a key the UI still works with demo drafts.
 2. **Ads** — Pick a company, organize folders/templates/files, draft SMS/email copy with AI, save templates.
 3. **Social Media** — Per-entity Meta / TikTok campaign planning + connection setup (live publish later).
 4. **Reports** — Performance scorecards, best message ranking, Improve (source + timing + copy), Sources, Send timing, Social, Costs & ROI — always filterable per company.
-5. **Campaigns / Autopilot** — **Own** campaigns or **Auto** wheel daily volumes **in IG Lead Suite** with send windows. SMS → Telnyx; email → Smartlead/Instantly. Use Ads templates in the builder.
+5. **Campaigns / Autopilot** — **Own** campaigns or **Auto** wheel daily volumes **in IG Lead Suite** with send windows. SMS → Telnyx; email → Smartlead/Instantly. Use Ads templates or **Draft with AI** (OpenAI) in the builder.
 6. **Leads → lead page** — Full history per contact (`/leads/[id]`).
 7. **Inbox** — Replies land in that entity’s inbox only (or filter by `leadId`). Good lead → Email team.
 8. **Users** — Give Ahava staff Ahava-only access, etc.
