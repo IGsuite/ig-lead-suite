@@ -22,7 +22,7 @@ async function request(path: string, method = "GET", body?: unknown): Promise<un
       ...(body === undefined ? {} : { body: JSON.stringify(body) }), signal: AbortSignal.timeout(15_000),
     });
   } catch { throw new SetupError("The email service did not confirm campaign setup. Check its status before retrying.", true); }
-  if (!response.ok) throw new SetupError(`Email campaign setup was rejected (${response.status}).`, response.status >= 500);
+  if (!response.ok) throw new SetupError(`Email campaign setup was rejected (${response.status}) at ${path}.`, response.status >= 500);
   const raw = await response.text();
   if (!raw.trim()) return {};
   let value: unknown;
@@ -84,7 +84,7 @@ export async function ensureEmailCampaign(campaign: Campaign, brand: Brand): Pro
       creating = false;
     }
     const prefix = `/campaigns/${encodeURIComponent(providerId)}`;
-    await request(`${prefix}/status`, "PATCH", { status: "PAUSED" });
+    await request(`${prefix}/status`, "POST", { status: "PAUSED" });
     await request(`${prefix}/email-accounts`, "POST", { email_account_ids: accounts.map(a => Number(a.id)) });
     const window = resolveWindowHours(campaign) || { start: "00:00", end: "23:59" };
     const accountLimit = accounts.reduce((sum, a) => sum + Math.max(1, Number(a.message_per_day || a.max_email_per_day) || 15), 0);
@@ -92,12 +92,14 @@ export async function ensureEmailCampaign(campaign: Campaign, brand: Brand): Pro
     await request(`${prefix}/schedule`, "POST", { timezone: campaign.timezone || "America/New_York",
       days_of_the_week: Array.isArray(scheduler.days) && scheduler.days.length ? scheduler.days : [0, 1, 2, 3, 4, 5, 6],
       start_hour: window.start, end_hour: window.end, min_time_btw_emails: Math.max(1, Math.ceil(60 / Math.max(1, campaign.throttlePerHour)), Number(template.min_time_btwn_emails) || 1),
-      max_leads_per_day: Math.min(accountLimit, Number(template.max_leads_per_day) || accountLimit) });
+      max_new_leads_per_day: Math.min(accountLimit, Number(template.max_new_leads_per_day || template.max_leads_per_day) || accountLimit) });
     await request(`${prefix}/settings`, "POST", { stop_lead_settings: "REPLY_TO_AN_EMAIL", track_settings: template.track_settings || [] });
     const subject = toSmartleadTemplate(campaign.subject || "", brand.shortName);
     const emailBody = toSmartleadEmailHtml(toSmartleadTemplate(campaign.htmlMessage?.trim() || campaign.message, brand.shortName));
-    await request(`${prefix}/sequences`, "POST", [{ seq_number: 1, seq_delay_details: { delay_in_days: 0 },
-      variant_distribution_type: "MANUALLY_EQUAL", variants: [{ subject, email_body: emailBody, variant_label: "A" }] }]);
+    const savedSequences = rows(await request(`${prefix}/sequences`));
+    const firstSequence = savedSequences.find(sequence => sequence.seq_number === 1) || savedSequences[0];
+    await request(`${prefix}/sequences`, "POST", { sequences: [{ id: firstSequence?.id ?? null, seq_number: 1,
+      seq_delay_details: { delay_in_days: 0 }, subject, email_body: emailBody }] });
     const hooks = rows(await request(`${prefix}/webhooks`));
     for (const event of ["EMAIL_REPLY", "UNTRACKED_REPLIES", "EMAIL_SENT", "EMAIL_BOUNCE", "LEAD_UNSUBSCRIBED"]) {
       const matches = hooks.filter(h => h.name === `IG CRM ${event}`);
