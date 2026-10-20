@@ -1,0 +1,7 @@
+.env*
+.data
+.git
+.next
+node_modules
+*.bundle
+*.b64

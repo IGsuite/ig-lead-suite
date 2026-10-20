@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { parseEmailReply } from "@/lib/inbound-events";
+import { mapEntity } from "@/lib/mappers";
 import { ingestReply } from "@/lib/neon-store-ops";
 import { validEmailWebhook, processWebhook } from "@/lib/webhook-security";
 
@@ -12,19 +14,6 @@ import { validEmailWebhook, processWebhook } from "@/lib/webhook-security";
  * Point Smartlead webhook URL to: https://YOUR_PUBLIC_HOST/api/webhooks/email
  * Event: EMAIL_REPLY (optionally LEAD_CATEGORY_UPDATED for interested).
  */
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function brandIdFromSmartleadCampaign(
   campaignId: string | number | undefined,
@@ -80,8 +69,7 @@ export async function POST(request: Request) {
     event &&
     !["EMAIL_SENT", "FIRST_EMAIL_SENT", "EMAIL_BOUNCE", "LEAD_UNSUBSCRIBED"].includes(event) &&
     event !== "EMAIL_REPLY" &&
-    event !== "UNTRACKED_REPLIES" &&
-    event !== "LEAD_CATEGORY_UPDATED"
+    event !== "UNTRACKED_REPLIES"
   ) {
     return NextResponse.json({
       ignored: true,
@@ -96,26 +84,6 @@ export async function POST(request: Request) {
     body.from ||
     body.email ||
     "";
-
-  let text =
-    body.reply_message?.text ||
-    body.preview_text ||
-    body.text ||
-    body.body ||
-    "";
-
-  if (!text && body.reply_message?.html) {
-    text = stripHtml(body.reply_message.html);
-  }
-  if (!text && body.reply_body) {
-    text = stripHtml(body.reply_body);
-  }
-  if (!text && body.lastReply?.email_body) {
-    text = stripHtml(body.lastReply.email_body);
-  }
-  if (!text && event === "LEAD_CATEGORY_UPDATED") {
-    text = `[Smartlead category update]`;
-  }
 
   const brandId = brandIdFromSmartleadCampaign(body.campaign_id);
   if (!brandId) return NextResponse.json({ error: "Unknown provider campaign mapping" }, { status: 400 });
@@ -141,22 +109,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, duplicate: outcome.duplicate });
   }
 
-  if (!from || !text) {
-    return NextResponse.json(
-      {
-        error:
-          "Missing lead email and reply text — expected Smartlead EMAIL_REPLY or { from/email, text/body }",
-      },
-      { status: 400 },
-    );
-  }
-
-  // Smartlead campaign_id is NOT our Prisma campaign id — only use it to
-  // map → entity via SMARTLEAD_CAMPAIGN_* env. Never pass it as campaignId.
   const outcome = await processWebhook("email", raw, undefined, async tx => {
     const lead = await tx.lead.findFirst({ where: { email: { equals: from, mode: "insensitive" } } });
     const job = lead ? await tx.sendJob.findFirst({ where: { leadId: lead.id, entityId: brandId, channel: "email", payload: { path: ["providerCampaignId"], equals: String(body.campaign_id) } }, orderBy: { createdAt: "desc" } }) : null;
-    return ingestReply({ channel: "email", from, body: text, brandId, campaignId: job?.campaignId }, tx);
+    const input = parseEmailReply({ ...parsed, brandId }, (await tx.entity.findMany()).map(mapEntity));
+    if (!input) return { ignored: true };
+    return ingestReply({ ...input, campaignId: job?.campaignId }, tx);
   });
   return NextResponse.json({ ok: true, duplicate: outcome.duplicate });
 }

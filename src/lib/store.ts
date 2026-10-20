@@ -246,15 +246,9 @@ export async function markReply(
   return backend().markReply(id, patch);
 }
 
-export async function ingestReply(input: {
-  channel: Reply["channel"];
-  from: string;
-  body: string;
-  brandId?: string;
-  campaignId?: string;
-  leadId?: string;
-}): Promise<Reply> {
-  return backend().ingestReply(input);
+export async function ingestReply(input: import("@/lib/reply-routing").InboundReply): Promise<Reply> {
+  const { saveInbound } = await import("@/lib/inbox-store");
+  return saveInbound(input);
 }
 
 export async function createCostEntry(

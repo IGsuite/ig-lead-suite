@@ -15,6 +15,7 @@ const REQUIRED_DELEGATES = [
   "adAsset",
   "platformSettings",
   "entity",
+  "inboxSend",
 ] as const;
 
 function clientHasRequiredDelegates(client: PrismaClient): boolean {
