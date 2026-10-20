@@ -103,7 +103,7 @@ function CampaignsInner() {
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error || "Could not cancel campaign");
-      toast.success("Campaign canceled (paused) — no further sends");
+      toast.success("Campaign cancelled — no further sends");
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Cancel failed");
@@ -275,19 +275,9 @@ function CampaignsInner() {
                         <Button size="sm" onClick={() => launch(campaign.id)}>
                           Launch
                         </Button>
-                      ) : campaign.status === "sending" ? (
-                        <Link
-                          href="/inbox"
-                          className={cn(
-                            buttonVariants({ size: "sm", variant: "ghost" }),
-                          )}
-                        >
-                          Inbox
-                        </Link>
                       ) : null}
-                      {campaign.status === "draft" ||
-                      campaign.status === "scheduled" ||
-                      campaign.status === "sending" ? (
+                      {campaign.status !== "completed" &&
+                      campaign.status !== "cancelled" ? (
                         <Button
                           size="sm"
                           variant="outline"
@@ -296,8 +286,8 @@ function CampaignsInner() {
                           Cancel
                         </Button>
                       ) : null}
-                      {campaign.status === "paused" ||
-                      campaign.status === "completed" ? (
+                      {campaign.status !== "draft" &&
+                      campaign.status !== "scheduled" ? (
                         <Link
                           href="/inbox"
                           className={cn(

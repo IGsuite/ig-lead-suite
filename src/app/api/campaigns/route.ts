@@ -10,7 +10,6 @@ import {
 import type {
   CampaignChannel,
   CampaignPoolMode,
-  CampaignStatus,
   SendWindowPreset,
 } from "@/lib/types";
 import { normalizeSendWindow } from "@/lib/send-window";
@@ -75,10 +74,7 @@ export async function POST(request: Request) {
     });
   }
 
-  if (
-    (body.action === "pause" || body.action === "cancel") &&
-    body.id
-  ) {
+  if (body.action === "cancel" && body.id) {
     const data = await getData();
     const existing = data.campaigns.find((c) => c.id === body.id);
     if (!existing) {
@@ -88,9 +84,33 @@ export async function POST(request: Request) {
     if (!gate.ok) {
       return NextResponse.json({ error: gate.error }, { status: gate.status });
     }
-    const nextStatus: CampaignStatus =
-      body.action === "cancel" ? "paused" : "paused";
-    const updated = await setCampaignStatus(body.id, nextStatus);
+    if (
+      existing.status === "completed" ||
+      existing.status === "cancelled"
+    ) {
+      return NextResponse.json(
+        { error: `Campaign already ${existing.status}` },
+        { status: 400 },
+      );
+    }
+    const updated = await setCampaignStatus(body.id, "cancelled");
+    if (!updated) {
+      return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+    }
+    return NextResponse.json(updated);
+  }
+
+  if (body.action === "pause" && body.id) {
+    const data = await getData();
+    const existing = data.campaigns.find((c) => c.id === body.id);
+    if (!existing) {
+      return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
+    }
+    const gate = assertEntityAccess(session, existing.brandId);
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.error }, { status: gate.status });
+    }
+    const updated = await setCampaignStatus(body.id, "paused");
     if (!updated) {
       return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
     }
