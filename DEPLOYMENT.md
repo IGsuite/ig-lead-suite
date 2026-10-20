@@ -54,7 +54,7 @@ Smartlead sequences are shared inside a provider campaign. To prevent changing c
 
 ## Scheduler and delivery semantics
 
-`vercel.json` schedules `/api/cron/dispatch` every minute. The Vercel plan must support that frequency and the route's 300-second maximum duration. The worker uses an atomic database lease, persists work before calling providers, respects each campaign's send window and configured throttle, and resumes queued work on later invocations. Daily Autopilot IDs use the company's timezone and are reused on repeated runs.
+`vercel.json` deliberately has no cron schedule so review deployments work on the current plan. `vercel.pro.json` contains the intended every-minute schedule. After confirming Pro/Enterprise support, deploy with that configuration (or copy its `crons` entry into `vercel.json`). Alternatively, configure an external scheduler to call `/api/cron/dispatch` with the cron bearer credential every minute. Do not enable production dispatch until one scheduler is active. The route requires a plan supporting its 300-second maximum duration. The worker uses an atomic database lease, persists work before calling providers, respects each campaign's send window and configured throttle, and resumes queued work on later invocations. Daily Autopilot IDs use the company's timezone and are reused on repeated runs.
 
 `SENDING_ENABLED=true` enables production dispatch after setup. Queued work created while sending is disabled will become eligible when sending is enabled: review/cancel old test campaigns first. Existing `autopilotEnabled` settings are respected; review quotas before enabling the worker. Outside-window scheduled campaigns resume automatically.
 
@@ -78,3 +78,9 @@ Inspect `/api/campaigns/<id>/delivery` while signed in to see counts and up to 1
 5. Review the changes and release the tested production build. Enable sending only after the checks above. No release or production migration was performed while preparing this branch.
 
 Full repository lint currently has five pre-existing `react-hooks/set-state-in-effect` errors in unchanged components/hooks. They are not hidden or disabled by this branch. Address them separately before making full lint a mandatory gate.
+
+## Review environment prepared
+
+The review branch `fix/vercel-production-readiness` uses isolated Neon branch `preview/vercel-production-readiness` (`br-flat-river-b4q283sy`), expiring 2026-10-27. Its committed additive outbox SQL was applied transactionally through Neon and the schema diff confirms only the five new tables and their indexes. Existing lead, campaign, user and reply counts are unchanged. Production schema and production DATABASE_URL remain unchanged. Prisma migration-history baselining still needs verification before production release; the preview SQL test is not a claim that production migrations ran.
+
+The private Blob store is connected. Production and preview have separate cron/email webhook credentials; SENDING_ENABLED is false. GitHub verification, including a fresh-checkout route-type generation step, passes. The minute scheduler was rejected by Vercel under the current plan, so it is an explicit release prerequisite rather than a deployment-blocking default.
