@@ -73,7 +73,7 @@ AUTH_ADMIN_PASSWORD=your-strong-password  # required on Vercel (no changeme)
 # SITE_ACCESS_CODE=optional-passcode    # optional alternate admin password
 ```
 
-Open **Users** in the sidebar to add teammates. The app does **not** send invite emails — after create (or **Reset password**), copy the invite block (login URL with email prefilled, e.g. `https://www.igleadsuite.com/login?email=…`, plus temporary password) and share it yourself. Sign in at `/login`.
+Open **Users** in the sidebar to add teammates. After create (or **Reset password**), a share panel shows the login URL (email prefilled, e.g. `https://www.igleadsuite.com/login?email=…`) and temporary password. Optional invite email: set `RESEND_API_KEY` + `INVITE_FROM_EMAIL` (or `AUTH_INVITE_FROM`) on Vercel, or SMTP (`SMTP_HOST` + credentials). Without a key, the toast says “Invite email skipped — copy and share”. Sign in at `/login`.
 
 **Still public without browser login** (providers need this):
 

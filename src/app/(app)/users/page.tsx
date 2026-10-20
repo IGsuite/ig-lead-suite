@@ -42,8 +42,38 @@ type UserWithInvite = AppUserPublic & {
   inviteLink?: string;
   shareText?: string;
   copyAllText?: string;
+  inviteEmailSent?: boolean;
+  inviteEmailProvider?: "resend" | "smtp";
+  inviteEmailSkipReason?: "not_configured" | "missing_from" | "send_failed";
+  inviteEmailError?: string;
   error?: string;
 };
+
+function toastInviteEmailStatus(json: UserWithInvite) {
+  if (json.inviteEmailSent) {
+    toast.success(
+      json.inviteEmailProvider === "smtp"
+        ? "Invite email sent (SMTP)"
+        : "Invite email sent",
+    );
+    return;
+  }
+  if (json.inviteEmailSkipReason === "send_failed") {
+    toast.error(
+      json.inviteEmailError
+        ? `Invite email failed — ${json.inviteEmailError}`
+        : "Invite email failed — copy and share",
+    );
+    return;
+  }
+  if (json.inviteEmailSkipReason === "missing_from") {
+    toast.message(
+      "Invite email skipped — set INVITE_FROM_EMAIL (copy and share)",
+    );
+    return;
+  }
+  toast.message("Invite email skipped — copy and share");
+}
 
 type CopyKind = "invite" | "all" | "link" | "password" | null;
 
@@ -153,7 +183,8 @@ export default function UsersPage() {
       });
       const json = (await res.json()) as UserWithInvite;
       if (!res.ok) throw new Error(json.error || "Create failed");
-      toast.success("User created — share the login details below");
+      toast.success("User created");
+      toastInviteEmailStatus(json);
       showInviteFromResponse(json, "Share these login details now");
       setEmail("");
       setName("");
@@ -177,7 +208,8 @@ export default function UsersPage() {
       });
       const json = (await res.json()) as UserWithInvite;
       if (!res.ok) throw new Error(json.error || "Reset failed");
-      toast.success("Temporary password set — share it below");
+      toast.success("Temporary password set");
+      toastInviteEmailStatus(json);
       showInviteFromResponse(
         json,
         `New temporary password for ${user.email}`,
@@ -228,7 +260,7 @@ export default function UsersPage() {
     <div>
       <PageHeader
         title="Users & access"
-        description="Give teammates access to specific company portals only. The lead pool stays shared; campaigns, inbox, and reports stay isolated. No invite email is sent — copy the login details after create or reset."
+        description="Give teammates access to specific company portals only. The lead pool stays shared; campaigns, inbox, and reports stay isolated. After create or reset, copy the login details — optional invite email sends when RESEND_API_KEY (or SMTP) is set."
       />
 
       {sessionRole === "anon" ? (
@@ -253,9 +285,9 @@ export default function UsersPage() {
                 {inviteShare.title}
               </h2>
               <p className="mt-1 text-sm text-[color:var(--ink-soft)]">
-                Shown once here — share from this UI (Slack, text, etc.). No
-                invite email is sent. Passwords are hashed and cannot be
-                retrieved later — use Reset password if you lose this.
+                Shown once here — share from this UI if email was skipped.
+                Passwords are hashed and cannot be retrieved later — use Reset
+                password if you lose this.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -384,8 +416,8 @@ export default function UsersPage() {
           Add user
         </h2>
         <p className="text-sm text-[color:var(--ink-soft)]">
-          Leave password blank to auto-generate a temporary one, then copy the
-          login instructions to send manually (Slack, text, etc.).
+          Leave password blank to auto-generate a temporary one. If invite email
+          is configured it sends automatically; otherwise copy the share panel.
         </p>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">

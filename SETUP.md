@@ -99,6 +99,11 @@ AUTH_ADMIN_PASSWORD=your-strong-password # required on Vercel — do not use cha
 2. Open `/login` with the admin email + `AUTH_ADMIN_PASSWORD`  
 3. **Users** → add members and check only the entities they may see  
 4. Members never see other companies’ campaigns / inbox / reports  
+5. **Optional invite email** (Users create / reset password):  
+   - Prefer **Resend**: `RESEND_API_KEY` + `INVITE_FROM_EMAIL` (or `AUTH_INVITE_FROM`)  
+   - Or **SMTP**: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `INVITE_FROM_EMAIL` / `SMTP_FROM`  
+   - Telnyx is SMS-only — not used for invites  
+   - Without a key, the share panel still works; toast: “Invite email skipped — copy and share”
 
 **Webhooks stay public** (no browser login): `/api/webhooks/telnyx`, `/api/webhooks/email`. Optional second layer: Vercel Deployment Protection.
 
@@ -131,8 +136,22 @@ AUTH_ADMIN_PASSWORD=...          # required on Vercel (not changeme)
 # AUTH_REQUIRED=false            # unlock a deploy (not recommended)
 # OPENAI_API_KEY=...             # optional — Campaigns → Build → Draft with AI
 # AI_GATEWAY_API_KEY=...         # optional — Ads Gemini wording
+# RESEND_API_KEY=...             # optional — Users invite email
+# INVITE_FROM_EMAIL=...          # or AUTH_INVITE_FROM — required with Resend/SMTP
+# SMTP_HOST=...                  # optional fallback if no Resend
 # N8N_WEBHOOK_URL=...            # later
 ```
+
+### Optional: invite email (Users)
+
+1. Create a Resend API key at [resend.com](https://resend.com) (verify your domain for production From addresses)  
+2. Vercel → Project **`ig-lead-suite`** → Settings → Environment Variables  
+   - `RESEND_API_KEY`  
+   - `INVITE_FROM_EMAIL` (e.g. `IG Lead Suite <invites@yourdomain.com>`) — alias: `AUTH_INVITE_FROM`  
+3. Redeploy  
+4. **Users** → Create user or **Reset password** → invite email sends when configured; share panel always shows once  
+
+SMTP alternative: set `SMTP_HOST` (+ port/user/pass) instead of Resend. Without either, copy the share panel manually.
 
 ### Optional: OpenAI for campaign copy
 

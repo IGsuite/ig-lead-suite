@@ -5,6 +5,7 @@ import {
   buildInviteShare,
   generateTemporaryPassword,
 } from "@/lib/invite-credentials";
+import { sendInviteEmail } from "@/lib/invite-email";
 import type { UserRole } from "@/lib/types";
 import {
   createUser,
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
       temporaryPassword,
       name: user.name,
     });
-    // No invite email is sent — admin must copy/share these credentials once.
+    const emailResult = await sendInviteEmail({ invite, kind: "create" });
     return NextResponse.json({
       ...user,
       temporaryPassword: invite.temporaryPassword,
@@ -74,7 +75,12 @@ export async function POST(request: Request) {
       inviteLink: invite.inviteLink,
       shareText: invite.shareText,
       copyAllText: invite.copyAllText,
-      inviteEmailSent: false,
+      inviteEmailSent: emailResult.sent,
+      inviteEmailProvider: emailResult.sent ? emailResult.provider : undefined,
+      inviteEmailSkipReason: emailResult.sent
+        ? undefined
+        : emailResult.reason,
+      inviteEmailError: emailResult.sent ? undefined : emailResult.detail,
     });
   } catch (err) {
     return NextResponse.json(
@@ -122,6 +128,7 @@ export async function PATCH(request: Request) {
       temporaryPassword,
       name: user.name,
     });
+    const emailResult = await sendInviteEmail({ invite, kind: "reset" });
     return NextResponse.json({
       ...user,
       temporaryPassword: invite.temporaryPassword,
@@ -129,7 +136,12 @@ export async function PATCH(request: Request) {
       inviteLink: invite.inviteLink,
       shareText: invite.shareText,
       copyAllText: invite.copyAllText,
-      inviteEmailSent: false,
+      inviteEmailSent: emailResult.sent,
+      inviteEmailProvider: emailResult.sent ? emailResult.provider : undefined,
+      inviteEmailSkipReason: emailResult.sent
+        ? undefined
+        : emailResult.reason,
+      inviteEmailError: emailResult.sent ? undefined : emailResult.detail,
     });
   }
 
