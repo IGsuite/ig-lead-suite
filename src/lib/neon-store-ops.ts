@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { enqueueCampaign } from "@/lib/send-queue";
 import type { AutopilotRunResult } from "@/lib/autopilot";
 import { getPrisma } from "@/lib/db";
@@ -41,7 +42,7 @@ export async function createCampaign(
   const win = normalizeSendWindow(input);
   const created = await prisma.campaign.create({
     data: {
-      id: `camp-${Date.now()}`,
+      id: `camp-${randomUUID()}`,
       brandId: input.brandId,
       name: input.name,
       channel: input.channel,

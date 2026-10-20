@@ -694,7 +694,7 @@ function CampaignBuilderInner() {
             {compactNumber(Math.min(volume, audienceCount))}
           </p>
           <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
-            contacts queued from {compactNumber(audienceCount)} eligible shared-pool
+            contacts selected from {compactNumber(audienceCount)} eligible shared-pool
             leads
             {preferUnoffered ? " · fresh for this entity" : ""}
             {preferVerified ? " · verified only" : ""}.
