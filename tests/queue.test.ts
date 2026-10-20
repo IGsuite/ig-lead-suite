@@ -100,12 +100,28 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     } }));
     let creates = 0, wrongMailbox = false, interruptedCreate = false;
     const setupCalls: Array<{ path: string; body: Record<string, unknown> }> = [];
+    const providerSequences = new Map<string, Array<{ id: number; seq_number: number; subject: string; email_body: string }>>();
     globalThis.fetch = async (input, init) => {
       const path = new URL(String(input)).pathname;
       const body = init?.body ? JSON.parse(String(init.body)) : {};
       assert.ok(!path.endsWith("/leads"));
       assert.notEqual(body.status, "START");
       if (init?.method !== "GET") setupCalls.push({ path, body });
+      if (path.endsWith("/status")) assert.equal(init?.method, "POST", "Smartlead status updates require POST; PATCH returns 404");
+      if (path.endsWith("/schedule")) {
+        assert.equal(typeof body.max_new_leads_per_day, "number", "Smartlead requires the new-lead daily limit");
+        assert.ok(!("max_leads_per_day" in body), "Smartlead rejects the old daily-limit field");
+      }
+      if (path.endsWith("/sequences")) {
+        if (init?.method === "GET") return Response.json(providerSequences.get(path) || []);
+        assert.ok(!Array.isArray(body) && Array.isArray(body.sequences), "Smartlead requires a sequences wrapper");
+        const sequence = body.sequences[0];
+        assert.equal(typeof sequence.email_body, "string");
+        const existing = providerSequences.get(path)?.[0];
+        assert.equal(sequence.id, existing?.id ?? null, "Retries update the existing sequence instead of adding another");
+        providerSequences.set(path, [{ ...sequence, id: existing?.id ?? 1000 + providerSequences.size }]);
+        return Response.json({ ok: true });
+      }
       if (path.endsWith("/email-accounts") && init?.method === "GET") return Response.json([{ id: 10,
         from_email: wrongMailbox ? "info@other-business.invalid" : "info@abstractcapitalgroup.com", is_smtp_success: true, is_imap_success: true, message_per_day: 15 }]);
       if (path.endsWith("/campaigns/provider-email-test")) return Response.json({ scheduler_cron_value: { days: [1, 2, 3, 4, 5] }, max_leads_per_day: 100, min_time_btwn_emails: 10 });
@@ -128,10 +144,14 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     assert.equal(creates, 2);
     const schedules = setupCalls.filter(c => c.path.endsWith("/schedule"));
     assert.equal(schedules.length, 2);
-    assert.equal(schedules[0].body.max_leads_per_day, 15);
+    assert.equal(schedules[0].body.max_new_leads_per_day, 15);
     assert.equal(schedules[0].body.start_hour, "09:00");
     assert.equal(schedules[0].body.end_hour, "20:00");
     assert.equal(await db.sendJob.count(), jobsBefore);
+    await db.emailCampaignSetup.update({ where: { campaignId: firstEmail.id }, data: { state: "failed", error: "Interrupted after saving sequence" } });
+    assert.equal(await ensureEmailCampaign(firstEmail, brand), "901");
+    assert.equal(creates, 2);
+    assert.equal(providerSequences.get("/api/v1/campaigns/901/sequences")?.length, 1);
     await assert.rejects(ensureEmailCampaign({ ...firstEmail, message: "Changed after setup" }, brand), /different saved/);
     wrongMailbox = true;
     await assert.rejects(ensureEmailCampaign(await makeEmail("setup-wrong-brand"), brand), /own verified/);

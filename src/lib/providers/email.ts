@@ -323,7 +323,7 @@ async function setSmartleadCampaignStatus(
   status: "START" | "PAUSED" | "STOPPED",
 ): Promise<{ ok: boolean; error?: string }> {
   const result = await smartleadJson(`/campaigns/${campaignId}/status`, {
-    method: "PATCH",
+    method: "POST",
     body: JSON.stringify({ status }),
   });
   return result.ok ? { ok: true } : { ok: false, error: result.error };
