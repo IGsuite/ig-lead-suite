@@ -1,3 +1,4 @@
+import { sendingEnabled, sendingEntityEnabled, activeSendingEntities } from "@/lib/dispatch-scheduler";
 import { emailProviderName, resolveCompanyCampaign } from "@/lib/providers/email";
 import { randomUUID } from "crypto";
 import { getPrisma } from "@/lib/db";
@@ -22,6 +23,7 @@ export async function enqueueCampaign(id: string): Promise<LaunchResult | null> 
     const row = await tx.campaign.findUnique({ where: { id } });
     if (!row) return null;
     const campaign = mapCampaign(row);
+    if (!sendingEntityEnabled(campaign.brandId)) throw new Error("Sending is not enabled for this company yet");
     if (!locks[0]?.acquired) return { campaign, deferred: true, reason: "already_launching" };
     if (["cancelled", "completed"].includes(campaign.status)) return { campaign, deferred: true, reason: campaign.status };
     if (!isWithinSendWindow(campaign)) {
@@ -91,7 +93,7 @@ export async function scheduleAutopilot(force = false): Promise<AutopilotRunResu
   for (const entityId of rotation.entityOrder) {
     const brand = brands.find(b => b.id === entityId);
     const quota = rotation.quotas.find(q => q.entityId === entityId);
-    if (!brand?.rotationEnabled || !quota?.enabled) continue;
+    if (!brand?.rotationEnabled || !quota?.enabled || !sendingEntityEnabled(entityId)) continue;
     const window = normalizeSendWindow(quota);
     const day = new Intl.DateTimeFormat("en-CA", { timeZone: window.timezone }).format(new Date());
     const copy = entityOfferCopy(brand);
@@ -114,7 +116,7 @@ export async function scheduleAutopilot(force = false): Promise<AutopilotRunResu
 
 /** Atomic cross-instance lease. Expiry recovers a crashed cron, never a provider send. */
 export async function dispatchQueuedSends() {
-  if (process.env.SENDING_ENABLED !== "true" || (process.env.VERCEL === "1" && process.env.VERCEL_ENV !== "production")) return { busy: false, processed: 0, paused: true };
+  if (!sendingEnabled()) return { busy: false, processed: 0, paused: true };
   const db = getPrisma();
   const owner = randomUUID();
   const acquired = await db.$queryRaw<Array<{ owner: string }>>`INSERT INTO "WorkerLease" (id, owner, "expiresAt") VALUES ('dispatch', ${owner}, NOW() + interval '5 minutes') ON CONFLICT (id) DO UPDATE SET owner = EXCLUDED.owner, "expiresAt" = EXCLUDED."expiresAt" WHERE "WorkerLease"."expiresAt" < NOW() RETURNING owner`;
@@ -125,9 +127,9 @@ export async function dispatchQueuedSends() {
     // An interrupted provider request may have succeeded. Require reconciliation rather than duplicate it.
     await db.sendJob.updateMany({ where: { status: "processing", claimedAt: { lt: new Date(Date.now() - 600000) } }, data: { status: "uncertain", error: "Worker interrupted; reconcile provider before retrying" } });
     await scheduleAutopilot();
-    for (const c of await db.campaign.findMany({ where: { status: "scheduled" }, take: 25 })) await enqueueCampaign(c.id);
+    for (const c of await db.campaign.findMany({ where: { status: "scheduled" }, take: 25 })) if (sendingEntityEnabled(c.brandId)) await enqueueCampaign(c.id);
     while (processed < 200 && Date.now() < stopAt) {
-      const jobs = await db.sendJob.findMany({ where: { status: "queued", scheduledAt: { lte: new Date() } }, orderBy: { scheduledAt: "asc" }, take: 100 });
+      const jobs = await db.sendJob.findMany({ where: { status: "queued", scheduledAt: { lte: new Date() }, ...(activeSendingEntities()?.length ? { entityId: { in: activeSendingEntities() } } : {}) }, orderBy: { scheduledAt: "asc" }, take: 100 });
       let eligibleJob: typeof jobs[number] | undefined;
       for (const job of jobs) {
         const campaign = await db.campaign.findUnique({ where: { id: job.campaignId } });
@@ -135,6 +137,7 @@ export async function dispatchQueuedSends() {
           await db.sendJob.update({ where: { id: job.id }, data: { status: "skipped", error: "Campaign cancelled", finishedAt: new Date() } });
           continue;
         }
+        if (!sendingEntityEnabled(job.entityId)) continue;
         if (campaign.status === "sending" && isWithinSendWindow(mapCampaign(campaign))) {
           const prior = await db.sendJob.findFirst({ where: { campaignId: campaign.id, claimedAt: { not: null } }, orderBy: { claimedAt: "desc" }, select: { claimedAt: true } });
           const nextAllowed = prior?.claimedAt ? prior.claimedAt.getTime() + 3600000 / Math.max(1, campaign.throttlePerHour) : 0;
@@ -154,7 +157,7 @@ export async function dispatchQueuedSends() {
       const payload = job.payload as unknown as JobPayload;
       const current = await db.lead.findUnique({ where: { id: job.leadId } });
       const brandRow = await db.entity.findUnique({ where: { id: job.entityId } });
-      if (!current || current.optedOut || ["converted", "opted_out"].includes(current.status) || current.convertedEntityId || !brandRow) {
+      if (!current || current.optedOut || ["converted", "opted_out"].includes(current.status) || current.convertedEntityId || (job.channel === "email" && current.emailStatus === "invalid") || !brandRow) {
         await db.sendJob.update({ where: { id: job.id }, data: { status: "skipped", error: "Contact unavailable, converted, or opted out", finishedAt: new Date() } });
       } else {
         try {

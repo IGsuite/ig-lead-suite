@@ -8,6 +8,7 @@ import { getPrisma } from "../src/lib/db";
 import { ensureSeeded } from "../src/lib/neon-store-seed";
 import { enqueueCampaign, dispatchQueuedSends } from "../src/lib/send-queue";
 import { setCampaignStatus } from "../src/lib/neon-store-ops";
+import { POST as emailWebhook } from "../src/app/api/webhooks/email/route";
 import { processWebhook } from "../src/lib/webhook-security";
 
 test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and never retries uncertain sends", { timeout: 90000 }, async () => {
@@ -61,6 +62,16 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     await db.sendJob.create({ data: { id: "cancel-job", campaignId: "cancel-test", entityId: "abstract", leadId: "test-1", channel: "sms", payload: {} } });
     await setCampaignStatus("cancel-test", "cancelled");
     assert.equal((await db.sendJob.findUniqueOrThrow({ where: { id: "cancel-job" } })).status, "skipped");
+    process.env.EMAIL_WEBHOOK_SECRET = "w".repeat(40);
+    process.env.SMARTLEAD_CAMPAIGN_ABSTRACT = "provider-email-test";
+    await db.lead.update({ where: { id: "test-1" }, data: { email: "fixture@example.invalid", emailStatus: "valid" } });
+    const hook = (event_type: string) => emailWebhook(new Request("https://example.com/api/webhooks/email", { method: "POST", headers: { "x-webhook-secret": process.env.EMAIL_WEBHOOK_SECRET! }, body: JSON.stringify({ event_type, campaign_id: "provider-email-test", lead_email: "fixture@example.invalid" }) }));
+    assert.equal((await hook("EMAIL_BOUNCE")).status, 200);
+    assert.equal((await db.lead.findUniqueOrThrow({ where: { id: "test-1" } })).emailStatus, "invalid");
+    assert.equal((await hook("LEAD_UNSUBSCRIBED")).status, 200);
+    assert.equal((await db.lead.findUniqueOrThrow({ where: { id: "test-1" } })).optedOut, true);
+    await hook("LEAD_UNSUBSCRIBED");
+    assert.equal(await db.optOut.count({ where: { contact: "fixture@example.invalid" } }), 1);
     await db.$executeRaw`INSERT INTO "WorkerLease" (id, owner, "expiresAt") VALUES ('dispatch', 'other-worker', NOW() + interval '1 minute')`;
     assert.equal((await dispatchQueuedSends()).busy, true);
   } finally {

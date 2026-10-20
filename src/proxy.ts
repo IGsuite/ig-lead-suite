@@ -16,6 +16,7 @@ const PUBLIC_PATHS = [
   "/api/auth/session",
   "/api/webhooks/",
   "/api/cron/dispatch",
+  "/api/queues/dispatch",
   // No secrets echoed — used by Go live checklist / ops probes
 
 ];

@@ -78,6 +78,7 @@ export async function POST(request: Request) {
   // Ignore non-reply Smartlead events (opens, sent, etc.) so one webhook URL works
   if (
     event &&
+    !["EMAIL_SENT", "FIRST_EMAIL_SENT", "EMAIL_BOUNCE", "LEAD_UNSUBSCRIBED"].includes(event) &&
     event !== "EMAIL_REPLY" &&
     event !== "UNTRACKED_REPLIES" &&
     event !== "LEAD_CATEGORY_UPDATED"
@@ -116,6 +117,30 @@ export async function POST(request: Request) {
     text = `[Smartlead category update]`;
   }
 
+  const brandId = brandIdFromSmartleadCampaign(body.campaign_id);
+  if (!brandId) return NextResponse.json({ error: "Unknown provider campaign mapping" }, { status: 400 });
+  if (["EMAIL_SENT", "FIRST_EMAIL_SENT", "EMAIL_BOUNCE", "LEAD_UNSUBSCRIBED"].includes(event)) {
+    if (!from) return NextResponse.json({ error: "Missing lead email" }, { status: 400 });
+    const outcome = await processWebhook("email", raw, undefined, async tx => {
+      const lead = await tx.lead.findFirst({ where: { email: { equals: from, mode: "insensitive" } } });
+      if (!lead) return { ignored: true };
+      const job = await tx.sendJob.findFirst({ where: { leadId: lead.id, entityId: brandId, channel: "email", payload: { path: ["providerCampaignId"], equals: String(body.campaign_id) } }, orderBy: { createdAt: "desc" } });
+      if (event === "LEAD_UNSUBSCRIBED") {
+        await tx.lead.update({ where: { id: lead.id }, data: { optedOut: true, status: "opted_out" } });
+        await tx.optOut.create({ data: { id: `opt-${crypto.randomUUID()}`, contact: from, channel: "email", reason: "Smartlead unsubscribe", brandId } });
+        await tx.sendJob.updateMany({ where: { leadId: lead.id, status: "queued" }, data: { status: "skipped", error: "Contact unsubscribed", finishedAt: new Date() } });
+      } else if (event === "EMAIL_BOUNCE") {
+        await tx.lead.update({ where: { id: lead.id }, data: { emailStatus: "invalid" } });
+        if (job) await tx.sendJob.update({ where: { id: job.id }, data: { status: "bounced", error: "Provider reported email bounce", finishedAt: new Date() } });
+        await tx.sendJob.updateMany({ where: { leadId: lead.id, channel: "email", status: "queued" }, data: { status: "skipped", error: "Email bounced", finishedAt: new Date() } });
+      } else if (job) {
+        await tx.sendJob.updateMany({ where: { id: job.id, status: "accepted" }, data: { status: "sent", finishedAt: new Date() } });
+      }
+      return { applied: true };
+    });
+    return NextResponse.json({ ok: true, duplicate: outcome.duplicate });
+  }
+
   if (!from || !text) {
     return NextResponse.json(
       {
@@ -128,8 +153,6 @@ export async function POST(request: Request) {
 
   // Smartlead campaign_id is NOT our Prisma campaign id — only use it to
   // map → entity via SMARTLEAD_CAMPAIGN_* env. Never pass it as campaignId.
-  const brandId = brandIdFromSmartleadCampaign(body.campaign_id);
-  if (!brandId) return NextResponse.json({ error: "Unknown provider campaign mapping" }, { status: 400 });
   const outcome = await processWebhook("email", raw, undefined, async tx => {
     const lead = await tx.lead.findFirst({ where: { email: { equals: from, mode: "insensitive" } } });
     const job = lead ? await tx.sendJob.findFirst({ where: { leadId: lead.id, entityId: brandId, channel: "email", payload: { path: ["providerCampaignId"], equals: String(body.campaign_id) } }, orderBy: { createdAt: "desc" } }) : null;

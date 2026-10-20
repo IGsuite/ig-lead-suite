@@ -88,7 +88,10 @@ export async function setCampaignStatus(
 }
 
 export async function launchCampaign(id: string): Promise<LaunchResult | null> {
-  return enqueueCampaign(id);
+  const result = await enqueueCampaign(id);
+  const { wakeDispatcher } = await import("@/lib/dispatch-scheduler");
+  await wakeDispatcher();
+  return result;
 }
 
 export async function applyOptOut(input: {

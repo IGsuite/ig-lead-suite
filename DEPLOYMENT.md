@@ -54,7 +54,9 @@ Smartlead sequences are shared inside a provider campaign. To prevent changing c
 
 ## Scheduler and delivery semantics
 
-`vercel.json` deliberately has no cron schedule so review deployments work on the current plan. `vercel.pro.json` contains the intended every-minute schedule. After confirming Pro/Enterprise support, deploy with that configuration (or copy its `crons` entry into `vercel.json`). Alternatively, configure an external scheduler to call `/api/cron/dispatch` with the cron bearer credential every minute. Do not enable production dispatch until one scheduler is active. The route requires a plan supporting its 300-second maximum duration. The worker uses an atomic database lease, persists work before calling providers, respects each campaign's send window and configured throttle, and resumes queued work on later invocations. Daily Autopilot IDs use the company's timezone and are reused on repeated runs.
+`vercel.json` registers a Vercel Queue consumer and one daily recovery cron. Launch requests wake the consumer immediately; while enabled, each successful invocation schedules its next wake-up after 60 seconds. Queue retries recover transient failures; the daily cron restarts a stopped chain. Contacts remain in PostgreSQL; queue messages contain no contact data. Verify actual callback delivery before enabling sending.
+
+`POST /api/providers/scheduler` with `{ "action": "probe" }` (admin only) queues a harmless probe; `GET` reports its database receipt timestamp. A probe never dispatches contacts. `ACTIVE_SENDING_ENTITIES=abstract` restricts launch, Autopilot and dispatch to Abstract. Other companies retain their data and identity.
 
 `SENDING_ENABLED=true` enables production dispatch after setup. Queued work created while sending is disabled will become eligible when sending is enabled: review/cancel old test campaigns first. Existing `autopilotEnabled` settings are respected; review quotas before enabling the worker. Outside-window scheduled campaigns resume automatically.
 
@@ -67,7 +69,7 @@ The worker processes at most 200 jobs per invocation within a time budget. It pr
 - `failed` / `skipped`: rejected, invalid, or no longer eligible.
 - `uncertain`: request may have succeeded or persistence was interrupted. Reconcile with the provider before an explicit retry; the worker does not automatically resend it.
 
-Inspect `/api/campaigns/<id>/delivery` while signed in to see counts and up to 100 failures/uncertain outcomes. Email provider acceptance is not proof of a delivered email. Email delivery/bounce event reconciliation and high-volume pagination remain follow-up work; do not describe email acceptance as confirmed delivery.
+Inspect `/api/campaigns/<id>/delivery` while signed in to see counts and up to 100 failures/uncertain outcomes. Email provider acceptance is not proof of a delivered email. Smartlead sent and bounce events update jobs separately; unsubscribe events suppress queued sends. Sent is not proof of inbox delivery. High-volume pagination remains follow-up work.
 
 ## Verification and release
 
@@ -83,4 +85,4 @@ Full repository lint currently has five pre-existing `react-hooks/set-state-in-e
 
 The review branch `fix/vercel-production-readiness` uses isolated Neon branch `preview/vercel-production-readiness` (`br-flat-river-b4q283sy`), expiring 2026-10-27. Its committed additive outbox SQL was applied transactionally through Neon and the schema diff confirms only the five new tables and their indexes. Existing lead, campaign, user and reply counts are unchanged. Production schema and production DATABASE_URL remain unchanged. Prisma migration-history baselining still needs verification before production release; the preview SQL test is not a claim that production migrations ran.
 
-The private Blob store is connected. Production and preview have separate cron/email webhook credentials; SENDING_ENABLED is false. GitHub verification, including a fresh-checkout route-type generation step, passes. The minute scheduler was rejected by Vercel under the current plan, so it is an explicit release prerequisite rather than a deployment-blocking default.
+The private Blob store is connected. Production and preview have separate cron/email webhook credentials; SENDING_ENABLED is false. GitHub verification, including a fresh-checkout route-type generation step, passes. The original minute cron was rejected under the current plan. The queue consumer and daily recovery cron supersede it; queue delivery must be verified on the deployed environment.

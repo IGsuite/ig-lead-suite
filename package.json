@@ -26,6 +26,7 @@
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "@vercel/blob": "2.8.2",
+    "@vercel/queue": "0.8.0",
     "ai": "^7.0.140",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.4.0",

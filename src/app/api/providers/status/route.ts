@@ -1,3 +1,4 @@
+import { sendingEntityEnabled } from "@/lib/dispatch-scheduler";
 import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import {
@@ -38,7 +39,7 @@ export async function GET() {
     try { emailCampaignConfigured = email !== "mock" && Boolean(resolveCompanyCampaign(email === "smartlead" ? "SMARTLEAD" : "INSTANTLY", brand.id)); } catch { /* duplicate provider mappings are not ready */ }
     const number = brand.phoneNumbers[0];
     const uniqueSmsNumber = Boolean(number) && !brands.some(other => other.id !== brand.id && other.phoneNumbers.some(otherNumber => normalize(otherNumber) === normalize(number)));
-    return { entityId: brand.id, emailCampaignConfigured, uniqueSmsNumber };
+    return { entityId: brand.id, sendingEnabled: sendingEntityEnabled(brand.id), emailCampaignConfigured, uniqueSmsNumber };
   });
   const publicAppUrl = process.env.PUBLIC_APP_URL?.trim().replace(/\/$/, "") || null;
   return NextResponse.json({
@@ -69,7 +70,7 @@ export async function GET() {
       telnyxKey: isTelnyxConfigured(),
       telnyxFrom: companyReadiness.some(company => company.uniqueSmsNumber),
       coldEmailKey: isColdEmailConfigured(),
-      coldEmailCampaign: companyReadiness.length > 0 && companyReadiness.every(company => company.emailCampaignConfigured),
+      coldEmailCampaign: companyReadiness.some(company => company.sendingEnabled) && companyReadiness.filter(company => company.sendingEnabled).every(company => company.emailCampaignConfigured),
       telnyxWebhookKey: Boolean(process.env.TELNYX_PUBLIC_KEY?.trim()),
       emailWebhookCredential: Boolean(process.env.EMAIL_WEBHOOK_SECRET?.trim()),
       schedulerCredential: Boolean(process.env.CRON_SECRET?.trim()),

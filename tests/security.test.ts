@@ -58,3 +58,17 @@ test("a missing production provider never counts a mock send as delivered", asyn
   assert.equal(result.delivered, 0);
   assert.equal(result.results[0].status, "mock");
 });
+
+ test("company rollout allowlist and preview guard prevent unintended sending", async () => {
+  const { sendingEnabled, sendingEntityEnabled } = await import("../src/lib/dispatch-scheduler");
+  process.env.ACTIVE_SENDING_ENTITIES = "abstract";
+  assert.equal(sendingEntityEnabled("abstract"), true);
+  assert.equal(sendingEntityEnabled("ahava"), false);
+  Object.assign(process.env, { SENDING_ENABLED: "true", VERCEL: "1", VERCEL_ENV: "preview" });
+  assert.equal(sendingEnabled(), false);
+  process.env.VERCEL_ENV = "production";
+  assert.equal(sendingEnabled(), true);
+  delete process.env.ACTIVE_SENDING_ENTITIES;
+  delete process.env.VERCEL;
+  delete process.env.VERCEL_ENV;
+});

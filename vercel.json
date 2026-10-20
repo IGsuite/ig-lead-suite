@@ -1,4 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "crons": []
+  "crons": [{ "path": "/api/cron/dispatch", "schedule": "0 12 * * *" }],
+  "functions": {
+    "src/app/api/queues/dispatch/route.ts": {
+      "experimentalTriggers": [{ "type": "queue/v2beta", "topic": "campaign-dispatch" }]
+    }
+  }
 }
