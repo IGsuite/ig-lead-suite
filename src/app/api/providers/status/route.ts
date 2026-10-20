@@ -1,4 +1,4 @@
-import { sendingEntityEnabled } from "@/lib/dispatch-scheduler";
+import { sendingEntityEnabled, sendingChannelEnabled } from "@/lib/dispatch-scheduler";
 import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import {
@@ -49,6 +49,7 @@ export async function GET() {
     emailLive: isColdEmailConfigured(),
     companyReadiness,
     dispatchEnabled: process.env.SENDING_ENABLED === "true" && (process.env.VERCEL !== "1" || process.env.VERCEL_ENV === "production"),
+    sendingChannels: { email: sendingChannelEnabled("email"), sms: sendingChannelEnabled("sms") },
     acceptanceIsNotDelivery: true,
     publicAppUrl,
     webhooks: publicAppUrl

@@ -248,6 +248,9 @@ function CampaignsInner() {
                         ? ` ${campaign.sendWindowStart}–${campaign.sendWindowEnd}`
                         : ""}
                     </div>
+                    <div className="mt-1 select-all break-all text-[10px] text-[color:var(--ink-muted)]">
+                      Campaign ID: {campaign.id}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <span

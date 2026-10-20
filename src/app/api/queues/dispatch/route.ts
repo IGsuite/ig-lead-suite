@@ -1,6 +1,6 @@
 import { handleCallback } from "@vercel/queue";
 import { dispatchQueuedSends } from "@/lib/send-queue";
-import { sendingEnabled, wakeDispatcher } from "@/lib/dispatch-scheduler";
+import { sendingEnabled, sendingEntityEnabled, sendingChannelEnabled, wakeDispatcher } from "@/lib/dispatch-scheduler";
 import { getPrisma } from "@/lib/db";
 export const maxDuration = 300;
 
@@ -12,5 +12,10 @@ export const POST = handleCallback<{ kind: string }>(async message => {
   }
   if (message.kind !== "dispatch" || !sendingEnabled()) return;
   await dispatchQueuedSends();
-  await wakeDispatcher(60);
+  const db = getPrisma();
+  const active = (await db.campaign.findMany({ where: { status: { in: ["scheduled", "sending"] } }, select: { id: true, brandId: true, channel: true, status: true } }))
+    .filter(c => sendingEntityEnabled(c.brandId) && sendingChannelEnabled(c.channel));
+  // An idle, manual-only suite does not need an endless queue polling loop.
+  if (active.some(c => c.status === "scheduled") || (active.length && await db.sendJob.count({ where: { campaignId: { in: active.map(c => c.id) }, status: "queued" } })))
+    await wakeDispatcher(60);
 }, { retry: () => ({ afterSeconds: 60 }) });

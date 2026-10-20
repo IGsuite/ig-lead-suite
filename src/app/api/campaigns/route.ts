@@ -15,6 +15,8 @@ import type {
 } from "@/lib/types";
 import { normalizeSendWindow } from "@/lib/send-window";
 
+export const maxDuration = 300;
+
 export async function GET() {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
@@ -180,7 +182,8 @@ export async function POST(request: Request) {
     sendWindowStart: win.sendWindowStart,
     sendWindowEnd: win.sendWindowEnd,
     timezone: win.timezone,
-    status: body.status || "draft",
+    // Saving never authorizes sending. Only the separate Launch action can arm a campaign.
+    status: "draft",
   });
 
   return NextResponse.json(campaign);

@@ -3,6 +3,7 @@ import { parseEmailReply } from "@/lib/inbound-events";
 import { mapEntity } from "@/lib/mappers";
 import { ingestReply } from "@/lib/neon-store-ops";
 import { validEmailWebhook, processWebhook } from "@/lib/webhook-security";
+import { getPrisma } from "@/lib/db";
 
 /**
  * Cold-email reply webhook (Smartlead / Instantly / simple test JSON).
@@ -85,7 +86,10 @@ export async function POST(request: Request) {
     body.email ||
     "";
 
-  const brandId = brandIdFromSmartleadCampaign(body.campaign_id);
+  const configuredBrand = brandIdFromSmartleadCampaign(body.campaign_id);
+  const setup = body.campaign_id ? await getPrisma().emailCampaignSetup.findUnique({ where: { providerCampaignId: String(body.campaign_id) } }) : null;
+  if (setup && configuredBrand && configuredBrand !== setup.brandId) return NextResponse.json({ error: "Conflicting provider campaign mapping" }, { status: 400 });
+  const brandId = setup?.brandId || configuredBrand;
   if (!brandId) return NextResponse.json({ error: "Unknown provider campaign mapping" }, { status: 400 });
   if (["EMAIL_SENT", "FIRST_EMAIL_SENT", "EMAIL_BOUNCE", "LEAD_UNSUBSCRIBED"].includes(event)) {
     if (!from) return NextResponse.json({ error: "Missing lead email" }, { status: 400 });
@@ -114,7 +118,7 @@ export async function POST(request: Request) {
     const job = lead ? await tx.sendJob.findFirst({ where: { leadId: lead.id, entityId: brandId, channel: "email", payload: { path: ["providerCampaignId"], equals: String(body.campaign_id) } }, orderBy: { createdAt: "desc" } }) : null;
     const input = parseEmailReply({ ...parsed, brandId }, (await tx.entity.findMany()).map(mapEntity));
     if (!input) return { ignored: true };
-    return ingestReply({ ...input, campaignId: job?.campaignId }, tx);
+    return ingestReply({ ...input, campaignId: job?.campaignId || setup?.campaignId }, tx);
   });
   return NextResponse.json({ ok: true, duplicate: outcome.duplicate });
 }

@@ -1,4 +1,5 @@
 import { promises as fs } from "fs";
+import { randomUUID } from "node:crypto";
 import path from "path";
 import {
   entityOfferCopy,
@@ -120,7 +121,7 @@ export async function importLeads(input: {
 
   const imported: Lead[] = [];
   let duplicates = 0;
-  const batchId = `upload-${Date.now()}`;
+  const batchId = `upload-${randomUUID()}`;
   const costPerLead =
     input.rows.length > 0
       ? Math.round(input.costCents / input.rows.length)
@@ -229,7 +230,8 @@ export async function createCampaign(
     ...input,
     ...win,
     mode: input.mode || "own",
-    id: `camp-${Date.now()}`,
+    id: `camp-${randomUUID()}`,
+    status: "draft",
     sentCount: 0,
     replyCount: 0,
     optOutCount: 0,

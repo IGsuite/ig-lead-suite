@@ -1,4 +1,5 @@
-import { sendingEnabled, sendingEntityEnabled, activeSendingEntities } from "@/lib/dispatch-scheduler";
+import { sendingEnabled, sendingEntityEnabled, sendingChannelEnabled, assertCampaignSendingReady, activeSendingEntities } from "@/lib/dispatch-scheduler";
+import { ensureEmailCampaign, emailCampaignFingerprint } from "@/lib/providers/campaign-setup";
 import { emailProviderName, resolveCompanyCampaign } from "@/lib/providers/email";
 import { randomUUID } from "crypto";
 import { getPrisma } from "@/lib/db";
@@ -18,12 +19,32 @@ type JobPayload = { campaign: Campaign; brand: Brand; lead: Lead; providerCampai
 export async function enqueueCampaign(id: string): Promise<LaunchResult | null> {
   await ensureSeeded();
   const db = getPrisma();
+  const initial = await db.campaign.findUnique({ where: { id } });
+  if (!initial) return null;
+  assertCampaignSendingReady(initial.brandId, initial.channel);
+  // Configure a separate provider campaign before entering the database transaction.
+  // Draft creation never calls this function, and empty/out-of-window launches do not provision anything.
+  if (initial.channel === "email" && emailProviderName() === "smartlead"
+    && !["cancelled", "completed"].includes(initial.status) && isWithinSendWindow(mapCampaign(initial))
+    && !(await db.sendJob.count({ where: { campaignId: id } }))) {
+    const { getData } = await import("@/lib/neon-store");
+    const data = await getData();
+    const campaign = mapCampaign(initial), brand = data.brands.find(b => b.id === campaign.brandId);
+    if (!brand) throw new Error("Business not found");
+    const reservations = await db.sendJob.findMany({ where: { channel: "email", status: { in: ["queued", "processing", "uncertain"] } }, select: { leadId: true } });
+    const reserved = new Set(reservations.map(j => j.leadId));
+    const pick = selectLeadsForSend({ leads: data.leads.filter(l => !reserved.has(l.id)), sendEvents: data.sendEvents || [],
+      entityId: campaign.brandId, channel: campaign.channel, volume: campaign.volume, mode: campaign.mode,
+      messageFingerprint: messageFingerprint(campaign.channel, campaign.message, campaign.subject), sourceFilter: campaign.sourceFilter,
+      groupFilter: campaign.groupFilter, preferVerified: campaign.preferVerified, preferUnoffered: campaign.preferUnoffered, poolCursor: data.rotation.poolCursor });
+    if (pick.selected.length) await ensureEmailCampaign(campaign, brand);
+  }
   return db.$transaction(async tx => {
     const locks = await tx.$queryRaw<Array<{ acquired: boolean }>>`SELECT pg_try_advisory_xact_lock(hashtext('ig-send-enqueue')) AS acquired`;
     const row = await tx.campaign.findUnique({ where: { id } });
     if (!row) return null;
     const campaign = mapCampaign(row);
-    if (!sendingEntityEnabled(campaign.brandId)) throw new Error("Sending is not enabled for this company yet");
+    assertCampaignSendingReady(campaign.brandId, campaign.channel);
     if (!locks[0]?.acquired) return { campaign, deferred: true, reason: "already_launching" };
     if (["cancelled", "completed"].includes(campaign.status)) return { campaign, deferred: true, reason: campaign.status };
     if (!isWithinSendWindow(campaign)) {
@@ -41,14 +62,14 @@ export async function enqueueCampaign(id: string): Promise<LaunchResult | null> 
     if (campaign.channel === "email") {
       const provider = emailProviderName();
       if (provider !== "mock") {
-        const providerId = resolveCompanyCampaign(provider === "smartlead" ? "SMARTLEAD" : "INSTANTLY", campaign.brandId, campaign.id);
-        providerCampaignId = providerId;
-        if (!providerId) throw new Error("Configure a distinct provider campaign for this company before launch");
+        const setup = provider === "smartlead" ? await tx.emailCampaignSetup.findUnique({ where: { campaignId: campaign.id } }) : null;
+        const providerId = provider === "smartlead" ? setup?.providerCampaignId : resolveCompanyCampaign("INSTANTLY", campaign.brandId, campaign.id);
+        providerCampaignId = providerId || undefined;
+        // An empty audience is reported below without creating a provider campaign.
+        if (provider !== "smartlead" && !providerId) throw new Error("Configure a distinct provider campaign for this company before launch");
         if (provider === "smartlead") {
-          const fingerprint = messageFingerprint("email", JSON.stringify([campaign.message, campaign.htmlMessage, campaign.imageUrl, brand.shortName]), campaign.subject);
-          const bindingId = `smartlead:${providerId}`;
-          const binding = await tx.providerCampaignBinding.upsert({ where: { id: bindingId }, update: {}, create: { id: bindingId, fingerprint, campaignId: campaign.id } });
-          if (binding.fingerprint !== fingerprint) throw new Error("This Smartlead campaign already has different copy. Assign a new provider campaign to preserve queued recipients' messages.");
+          if (setup && (setup.brandId !== campaign.brandId || setup.state !== "ready" || setup.fingerprint !== emailCampaignFingerprint(campaign, brand)))
+            throw new Error("The saved campaign changed during setup. Review its message and schedule before retrying.");
         }
       }
     } else {
@@ -67,6 +88,7 @@ export async function enqueueCampaign(id: string): Promise<LaunchResult | null> 
       channel: campaign.channel, volume: campaign.volume, mode: campaign.mode, messageFingerprint: messageFingerprint(campaign.channel, campaign.message, campaign.subject),
       sourceFilter: campaign.sourceFilter, groupFilter: campaign.groupFilter, preferVerified: campaign.preferVerified, preferUnoffered: campaign.preferUnoffered, poolCursor: rotation.poolCursor });
     if (!pick.selected.length) return { campaign, deferred: false, emptyAudience: true, eligibleCount: 0, reason: "empty_audience" };
+    if (campaign.channel === "email" && emailProviderName() === "smartlead" && !providerCampaignId) throw new Error("Email campaign setup is required before queuing recipients.");
     const start = Date.now();
     const interval = 3600000 / Math.max(1, campaign.throttlePerHour);
     for (let offset = 0; offset < pick.selected.length; offset += 500) {
@@ -83,6 +105,7 @@ export async function enqueueCampaign(id: string): Promise<LaunchResult | null> 
 
 /** Daily IDs use the company's configured timezone. Repeated cron/manual runs reuse them. */
 export async function scheduleAutopilot(force = false): Promise<AutopilotRunResult> {
+  if (!sendingEnabled()) return { ranAt: new Date().toISOString(), nextRunAt: tomorrowIso(), legs: [] };
   await ensureSeeded();
   const db = getPrisma();
   const settings = await db.platformSettings.findUniqueOrThrow({ where: { id: "default" } });
@@ -98,6 +121,7 @@ export async function scheduleAutopilot(force = false): Promise<AutopilotRunResu
     const day = new Intl.DateTimeFormat("en-CA", { timeZone: window.timezone }).format(new Date());
     const copy = entityOfferCopy(brand);
     for (const channel of ["sms", "email"] as const) {
+      if (!sendingChannelEnabled(channel)) continue;
       const volume = channel === "sms" ? quota.dailySmsVolume : quota.dailyEmailVolume;
       if (volume <= 0) continue;
       const id = `camp-auto-${entityId}-${channel}-${day}`;
@@ -127,7 +151,7 @@ export async function dispatchQueuedSends() {
     // An interrupted provider request may have succeeded. Require reconciliation rather than duplicate it.
     await db.sendJob.updateMany({ where: { status: "processing", claimedAt: { lt: new Date(Date.now() - 600000) } }, data: { status: "uncertain", error: "Worker interrupted; reconcile provider before retrying" } });
     await scheduleAutopilot();
-    for (const c of await db.campaign.findMany({ where: { status: "scheduled" }, take: 25 })) if (sendingEntityEnabled(c.brandId)) await enqueueCampaign(c.id);
+    for (const c of await db.campaign.findMany({ where: { status: "scheduled" }, take: 25 })) if (sendingEntityEnabled(c.brandId) && sendingChannelEnabled(c.channel)) await enqueueCampaign(c.id);
     while (processed < 200 && Date.now() < stopAt) {
       const jobs = await db.sendJob.findMany({ where: { status: "queued", scheduledAt: { lte: new Date() }, ...(activeSendingEntities()?.length ? { entityId: { in: activeSendingEntities() } } : {}) }, orderBy: { scheduledAt: "asc" }, take: 100 });
       let eligibleJob: typeof jobs[number] | undefined;
@@ -137,7 +161,7 @@ export async function dispatchQueuedSends() {
           await db.sendJob.update({ where: { id: job.id }, data: { status: "skipped", error: "Campaign cancelled", finishedAt: new Date() } });
           continue;
         }
-        if (!sendingEntityEnabled(job.entityId)) continue;
+        if (!sendingEntityEnabled(job.entityId) || !sendingChannelEnabled(job.channel)) continue;
         if (campaign.status === "sending" && isWithinSendWindow(mapCampaign(campaign))) {
           const prior = await db.sendJob.findFirst({ where: { campaignId: campaign.id, claimedAt: { not: null } }, orderBy: { claimedAt: "desc" }, select: { claimedAt: true } });
           const nextAllowed = prior?.claimedAt ? prior.claimedAt.getTime() + 3600000 / Math.max(1, campaign.throttlePerHour) : 0;

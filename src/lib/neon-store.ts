@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { getPrisma } from "@/lib/db";
 import { normalizeContact } from "@/lib/eligibility";
 import {
@@ -224,7 +225,7 @@ export async function importLeads(input: {
 
   const imported: Lead[] = [];
   let duplicates = 0;
-  const batchId = `upload-${Date.now()}`;
+  const batchId = `upload-${randomUUID()}`;
   const costPerLead =
     input.rows.length > 0
       ? Math.round(input.costCents / input.rows.length)

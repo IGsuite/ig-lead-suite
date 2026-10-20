@@ -1,4 +1,4 @@
-import type { Prisma } from "@/generated/prisma/client";
+import { randomUUID } from "node:crypto";
 import { enqueueCampaign } from "@/lib/send-queue";
 import type { AutopilotRunResult } from "@/lib/autopilot";
 import { getPrisma } from "@/lib/db";
@@ -42,7 +42,7 @@ export async function createCampaign(
   const win = normalizeSendWindow(input);
   const created = await prisma.campaign.create({
     data: {
-      id: `camp-${Date.now()}`,
+      id: `camp-${randomUUID()}`,
       brandId: input.brandId,
       name: input.name,
       channel: input.channel,
@@ -62,7 +62,7 @@ export async function createCampaign(
       sendWindowStart: win.sendWindowStart,
       sendWindowEnd: win.sendWindowEnd,
       timezone: win.timezone,
-      status: input.status,
+      status: "draft",
     },
   });
   return mapCampaign(created);
