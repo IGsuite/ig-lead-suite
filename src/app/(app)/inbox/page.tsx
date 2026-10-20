@@ -34,9 +34,13 @@ function InboxInner() {
     const timer = setInterval(() => { void refresh(); }, 15_000);
     return () => clearInterval(timer);
   }, [refresh]);
-  const [channelFilter, setChannelFilter] = useState<"all" | "sms" | "email">(
-    "all",
-  );
+  const channelFilter = searchParams.get("channel") === "sms" ? "sms" : "email";
+  function channelHref(channel: "email" | "sms") {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("entity", entityId);
+    params.set("channel", channel);
+    return `/inbox?${params.toString()}`;
+  }
   const [statusFilter, setStatusFilter] = useState<
     "all" | "unread" | "interested" | "forwarded"
   >("all");
@@ -46,8 +50,7 @@ function InboxInner() {
     return data.replies.filter((reply) => {
       if (reply.brandId !== entityId) return false;
       if (leadIdFilter && reply.leadId !== leadIdFilter) return false;
-      if (channelFilter !== "all" && reply.channel !== channelFilter)
-        return false;
+      if (reply.channel !== channelFilter) return false;
       if (statusFilter === "unread" && reply.read) return false;
       if (statusFilter === "interested" && reply.sentiment !== "interested")
         return false;
@@ -128,14 +131,16 @@ function InboxInner() {
 
   const brand = data.brands.find((b) => b.id === entityId);
   const unread = data.replies.filter(
-    (r) => r.brandId === entityId && !r.read,
+    (r) => r.brandId === entityId && r.channel === channelFilter && !r.read,
   ).length;
 
   return (
     <div>
       <PageHeader
-        title="Entity inbox"
-        description="Read and respond to email and text conversations for each business."
+        title={channelFilter === "email" ? "Email inbox" : "Text inbox"}
+        description={channelFilter === "email"
+          ? "Read and reply to email conversations for this business."
+          : "Read and reply to text conversations for this business."}
         actions={
           <Link
             href={`/campaigns?brandId=${entityId}`}
@@ -165,7 +170,17 @@ function InboxInner() {
         ) : null}
       </div>
 
-      <div className="mb-6 grid gap-3 sm:grid-cols-3 animate-rise">
+      <nav aria-label="Inbox channel" className="mb-4 flex gap-2">
+        {(["email", "sms"] as const).map((channel) => (
+          <Link key={channel} href={channelHref(channel)}
+            aria-current={channelFilter === channel ? "page" : undefined}
+            className={cn(buttonVariants({ variant: channelFilter === channel ? "default" : "outline" }))}>
+            {channel === "email" ? "Email inbox" : "Text inbox"}
+          </Link>
+        ))}
+      </nav>
+
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 animate-rise">
         <div className="space-y-2">
           <label className="text-sm font-medium">Entity portal</label>
           <Select
@@ -183,24 +198,6 @@ function InboxInner() {
                   {b.name}
                 </SelectItem>
               ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Channel</label>
-          <Select
-            value={channelFilter}
-            onValueChange={(value) => {
-              if (value) setChannelFilter(value as typeof channelFilter);
-            }}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">SMS + email</SelectItem>
-              <SelectItem value="sms">SMS only</SelectItem>
-              <SelectItem value="email">Email only</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -227,8 +224,10 @@ function InboxInner() {
 
       {replies.length === 0 ? (
         <EmptyPanel
-          title={`No ${brand?.shortName || "entity"} replies`}
-          description="When someone texts or emails back to this portal’s send identity, it shows up here for manual triage."
+          title={`No ${brand?.shortName || "entity"} ${channelFilter === "email" ? "email" : "text"} replies`}
+          description={channelFilter === "email"
+            ? "Replies to this business’s email address appear here. Open a conversation to respond."
+            : "Replies to this business’s text number appear here once text receiving is connected. Open a conversation to respond."}
         />
       ) : (
         <div className="space-y-3 animate-rise-delay-1">
