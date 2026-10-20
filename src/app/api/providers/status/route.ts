@@ -3,15 +3,17 @@ import { NextResponse } from "next/server";
 import {
   emailProviderName,
   isColdEmailConfigured,
+  resolveCompanyCampaign,
 } from "@/lib/providers/email";
 import { isTelnyxConfigured } from "@/lib/providers/telnyx";
 import { LIVE_CAP_DEFAULT, LIVE_CAP_MAX, resolveLiveCap } from "@/lib/send";
-import { isNeonConfigured } from "@/lib/store";
+import { isNeonConfigured, getData } from "@/lib/store";
+import { getSession } from "@/lib/auth";
+import { canAccessEntity } from "@/lib/acl";
 
 function hasAnyCampaign(
   prefix: "INSTANTLY" | "SMARTLEAD",
 ): boolean {
-  if (process.env[`${prefix}_CAMPAIGN_ID`]?.trim()) return true;
   for (const entity of [
     "ABSTRACT",
     "AHAVA",
@@ -28,12 +30,25 @@ export async function GET() {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
   const email = emailProviderName();
+  const session = await getSession();
+  const brands = (await getData()).brands;
+  const normalize = (number: string) => number.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  const companyReadiness = brands.filter(brand => canAccessEntity(session, brand.id)).map(brand => {
+    let emailCampaignConfigured = false;
+    try { emailCampaignConfigured = email !== "mock" && Boolean(resolveCompanyCampaign(email === "smartlead" ? "SMARTLEAD" : "INSTANTLY", brand.id)); } catch { /* duplicate provider mappings are not ready */ }
+    const number = brand.phoneNumbers[0];
+    const uniqueSmsNumber = Boolean(number) && !brands.some(other => other.id !== brand.id && other.phoneNumbers.some(otherNumber => normalize(otherNumber) === normalize(number)));
+    return { entityId: brand.id, emailCampaignConfigured, uniqueSmsNumber };
+  });
   const publicAppUrl = process.env.PUBLIC_APP_URL?.trim().replace(/\/$/, "") || null;
   return NextResponse.json({
     neon: isNeonConfigured() ? "live" : "local",
     telnyx: isTelnyxConfigured() ? "live" : "mock",
     email,
     emailLive: isColdEmailConfigured(),
+    companyReadiness,
+    dispatchEnabled: process.env.SENDING_ENABLED === "true" && (process.env.VERCEL !== "1" || process.env.VERCEL_ENV === "production"),
+    acceptanceIsNotDelivery: true,
     publicAppUrl,
     webhooks: publicAppUrl
       ? {
@@ -43,7 +58,7 @@ export async function GET() {
       : null,
     hasSmartleadCampaign: hasAnyCampaign("SMARTLEAD"),
     hasInstantlyCampaign: hasAnyCampaign("INSTANTLY"),
-    hasTelnyxFrom: Boolean(process.env.TELNYX_FROM_NUMBER?.trim()),
+    hasTelnyxFrom: companyReadiness.some(company => company.uniqueSmsNumber),
     /** Max live Telnyx SMS API calls per Launch batch (safety net). */
     smsLiveCap: resolveLiveCap("sms"),
     emailLiveCap: resolveLiveCap("email"),
@@ -52,9 +67,12 @@ export async function GET() {
     checklist: {
       neon: isNeonConfigured(),
       telnyxKey: isTelnyxConfigured(),
-      telnyxFrom: Boolean(process.env.TELNYX_FROM_NUMBER?.trim()),
+      telnyxFrom: companyReadiness.some(company => company.uniqueSmsNumber),
       coldEmailKey: isColdEmailConfigured(),
-      coldEmailCampaign: hasAnyCampaign("SMARTLEAD") || hasAnyCampaign("INSTANTLY"),
+      coldEmailCampaign: companyReadiness.length > 0 && companyReadiness.every(company => company.emailCampaignConfigured),
+      telnyxWebhookKey: Boolean(process.env.TELNYX_PUBLIC_KEY?.trim()),
+      emailWebhookCredential: Boolean(process.env.EMAIL_WEBHOOK_SECRET?.trim()),
+      schedulerCredential: Boolean(process.env.CRON_SECRET?.trim()),
       publicUrl: Boolean(publicAppUrl),
     },
   });
