@@ -271,6 +271,7 @@ export function mapReply(row: {
   crmSynced: boolean;
   createdAt: Date;
   read: boolean;
+  providerContext?: unknown;
 }): Reply {
   return {
     id: row.id,
@@ -285,6 +286,7 @@ export function mapReply(row: {
     crmSynced: row.crmSynced,
     createdAt: row.createdAt.toISOString(),
     read: row.read,
+    providerContext: (row.providerContext || {}) as Reply["providerContext"],
   };
 }
 

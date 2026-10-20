@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { InboxConversation } from "@/components/inbox-conversation";
+import { conversationKey } from "@/lib/conversation-key";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
@@ -27,6 +29,11 @@ function InboxInner() {
     searchParams.get("entity") || searchParams.get("brandId") || "abstract",
   );
   const leadIdFilter = searchParams.get("leadId") || "";
+  const [openReply, setOpenReply] = useState<string | null>(null);
+  useEffect(() => {
+    const timer = setInterval(() => { void refresh(); }, 15_000);
+    return () => clearInterval(timer);
+  }, [refresh]);
   const [channelFilter, setChannelFilter] = useState<"all" | "sms" | "email">(
     "all",
   );
@@ -115,8 +122,8 @@ function InboxInner() {
     });
   }
 
-  if (loading) return <LoadingPanel label="Loading inbox…" />;
-  if (error || !data)
+  if (loading && !data) return <LoadingPanel label="Loading inbox…" />;
+  if (!data)
     return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
 
   const brand = data.brands.find((b) => b.id === entityId);
@@ -128,7 +135,7 @@ function InboxInner() {
     <div>
       <PageHeader
         title="Entity inbox"
-        description="Replies land here per business — SMS via Telnyx, email via Instantly/Smartlead. Triage manually now; CRM API later. Not a public landing page."
+        description="Read and respond to email and text conversations for each business."
         actions={
           <Link
             href={`/campaigns?brandId=${entityId}`}
@@ -142,9 +149,7 @@ function InboxInner() {
       <div className="mb-4 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4 text-sm text-[color:var(--ink-soft)] animate-rise">
         <strong>How replies work:</strong> people text/email back to the number
         or mailbox that sent them. That inbound message hits this entity’s inbox
-        (not another brand). You review → mark interested →{" "}
-        <em>Email team</em> to forward manually. Later, the same “interested”
-        flag drives n8n → CRM automatically.
+        for that brand. Open the conversation to respond here, or use <em>Email team</em> to forward it.
         {leadIdFilter ? (
           <>
             {" "}
@@ -227,14 +232,14 @@ function InboxInner() {
         />
       ) : (
         <div className="space-y-3 animate-rise-delay-1">
-          {replies.map((reply) => {
+          {replies.filter((reply, index, all) => all.findIndex((r) => conversationKey(r) === conversationKey(reply)) === index).map((reply) => {
             const lead = data.leads.find((l) => l.id === reply.leadId);
             const campaign = data.campaigns.find(
               (c) => c.id === reply.campaignId,
             );
             return (
               <article
-                key={reply.id}
+                key={conversationKey(reply)}
                 className={`rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4 ${
                   reply.read ? "opacity-85" : "shadow-sm"
                 }`}
@@ -280,6 +285,9 @@ function InboxInner() {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2 lg:max-w-xs lg:justify-end">
+                    <Button size="sm" variant="outline" onClick={() => setOpenReply(openReply === conversationKey(reply) ? null : conversationKey(reply))}>
+                      {openReply === conversationKey(reply) ? "Close conversation" : "Open conversation / reply"}
+                    </Button>
                     {reply.sentiment !== "interested" ? (
                       <Button
                         size="sm"
@@ -354,6 +362,7 @@ function InboxInner() {
                     ) : null}
                   </div>
                 </div>
+                {openReply === conversationKey(reply) ? <InboxConversation reply={reply} /> : null}
               </article>
             );
           })}

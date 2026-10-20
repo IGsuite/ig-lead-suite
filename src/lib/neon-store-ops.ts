@@ -19,7 +19,6 @@ import {
   normalizeSendWindow,
 } from "@/lib/send-window";
 import {
-  guessSentiment,
   type LaunchResult,
 } from "@/lib/neon-store-shared";
 import { ensureSeeded } from "@/lib/neon-store-seed";
@@ -169,124 +168,7 @@ export async function markReply(
   return mapReply(updated);
 }
 
-export async function ingestReply(input: {
-  channel: Reply["channel"];
-  from: string;
-  body: string;
-  brandId?: string;
-  campaignId?: string;
-  leadId?: string;
-}, client?: Prisma.TransactionClient): Promise<Reply> {
-  if (!client) await ensureSeeded();
-  const prisma = client || getPrisma();
-  const fromNorm = normalizeContact(input.from);
-
-  const leads = await prisma.lead.findMany();
-  let leadRow =
-    (input.leadId && leads.find((l) => l.id === input.leadId)) ||
-    leads.find(
-      (l) =>
-        (l.email && normalizeContact(l.email) === fromNorm) ||
-        (l.phone && normalizeContact(l.phone) === fromNorm),
-    );
-
-  let brandId = input.brandId;
-  let campaignId = input.campaignId;
-  if (!brandId && leadRow?.lastEntityId) brandId = leadRow.lastEntityId;
-  if (!brandId && leadRow?.offeredEntityIds.length) {
-    brandId = leadRow.offeredEntityIds[leadRow.offeredEntityIds.length - 1];
-  }
-
-  const campaigns = await prisma.campaign.findMany();
-  // Ignore external ids (e.g. Smartlead campaign_id) that are not ours
-  if (campaignId && !campaigns.some((c) => c.id === campaignId)) {
-    campaignId = undefined;
-  }
-  if (!campaignId && brandId) {
-    campaignId = campaigns.find(
-      (c) =>
-        c.brandId === brandId &&
-        c.channel === input.channel &&
-        (c.status === "sending" || c.status === "completed"),
-    )?.id;
-  }
-  if (!brandId) {
-    const first = await prisma.entity.findFirst();
-    brandId = first?.id || "abstract";
-  }
-  if (!campaignId) {
-    campaignId =
-      campaigns.find((c) => c.brandId === brandId)?.id ||
-      `camp-unknown-${brandId}`;
-    if (!campaigns.some((c) => c.id === campaignId)) {
-      await prisma.campaign.create({
-        data: {
-          id: campaignId,
-          brandId,
-          name: "Inbound catch-all",
-          channel: input.channel,
-          message: "(inbound)",
-          status: "completed",
-          volume: 0,
-          throttlePerHour: 1,
-        },
-      });
-    }
-  }
-
-  if (!leadRow) {
-    const id = `lead-inbound-${crypto.randomUUID()}`;
-    leadRow = await prisma.lead.create({
-      data: {
-        id,
-        email: input.channel === "email" ? input.from : null,
-        phone: input.channel === "sms" ? input.from : null,
-        source: "Inbound reply",
-        groupName: "Inbound",
-        purchaseDate: new Date(),
-        costCents: 0,
-        offeredEntityIds: [brandId],
-        lastEntityId: brandId,
-        status: "replied",
-        optedOut: false,
-        emailStatus: input.channel === "email" ? "valid" : "unverified",
-        phoneStatus: input.channel === "sms" ? "valid" : "unverified",
-      },
-    });
-  }
-
-  const sentiment = guessSentiment(input.body);
-  const reply = await prisma.reply.create({
-    data: {
-      id: `reply-${crypto.randomUUID()}`,
-      campaignId,
-      brandId,
-      leadId: leadRow.id,
-      channel: input.channel,
-      from: input.from,
-      body: input.body,
-      sentiment,
-      manualForwarded: false,
-      crmSynced: false,
-      read: false,
-    },
-  });
-
-  await prisma.lead.update({
-    where: { id: leadRow.id },
-    data: {
-      lastEntityId: brandId,
-      status: sentiment === "opt_out" || leadRow.optedOut ? "opted_out" : "replied",
-      optedOut: sentiment === "opt_out" || leadRow.optedOut,
-    },
-  });
-  await prisma.campaign.update({
-    where: { id: campaignId },
-    data: { replyCount: { increment: 1 } },
-  });
-
-  return mapReply(reply);
-}
+export { saveInbound as ingestReply } from "@/lib/inbox-store";
 
 export async function verifyLeads(input?: {
   leadIds?: string[];

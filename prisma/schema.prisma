@@ -251,6 +251,8 @@ model Reply {
   crmSynced       Boolean  @default(false)
   createdAt       DateTime @default(now())
   read            Boolean  @default(false)
+  /// Original delivery identity and thread identifiers; never infer a brand from lastEntityId.
+  providerContext Json     @default("{}")
 
   campaign Campaign @relation(fields: [campaignId], references: [id])
   entity   Entity   @relation(fields: [brandId], references: [id])
@@ -258,6 +260,26 @@ model Reply {
 
   @@index([brandId])
   @@index([read])
+}
+
+/// Replies sent by an operator from the Inbox. Separate from inbound reply analytics.
+model InboxSend {
+  id          String   @id
+  replyId     String
+  brandId     String
+  leadId      String
+  channel     String
+  body        String
+  from        String
+  to          String
+  /// sending | accepted | failed | unknown (never automatically retry unknown results)
+  status      String
+  providerId  String?
+  error       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([brandId, leadId, channel])
 }
 
 model OptOut {

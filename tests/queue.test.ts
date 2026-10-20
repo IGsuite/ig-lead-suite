@@ -10,6 +10,7 @@ import { enqueueCampaign, dispatchQueuedSends } from "../src/lib/send-queue";
 import { setCampaignStatus } from "../src/lib/neon-store-ops";
 import { POST as emailWebhook } from "../src/app/api/webhooks/email/route";
 import { processWebhook } from "../src/lib/webhook-security";
+import { reserveInboxSend, finishInboxSend } from "../src/lib/inbox-store";
 
 test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and never retries uncertain sends", { timeout: 90000 }, async () => {
   Object.assign(process.env, { NODE_ENV: "production", DATABASE_URL: "postgresql://postgres@127.0.0.1:55439/postgres", SENDING_ENABLED: "true", TELNYX_API_KEY: "test-only" });
@@ -17,6 +18,7 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
   const pg = await PGlite.create();
   await pg.exec(await readFile("prisma/migrations/202610200001_baseline/migration.sql", "utf8"));
   await pg.exec(await readFile("prisma/migrations/202610200002_delivery_outbox/migration.sql", "utf8"));
+  await pg.exec(await readFile("prisma/migrations/202610200003_inbox_conversations/migration.sql", "utf8"));
   const server = new PGLiteSocketServer({ db: pg, host: "127.0.0.1", port: 55439 });
   await server.start();
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: false, max: 1 });
@@ -72,6 +74,19 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     assert.equal((await db.lead.findUniqueOrThrow({ where: { id: "test-1" } })).optedOut, true);
     await hook("LEAD_UNSUBSCRIBED");
     assert.equal(await db.optOut.count({ where: { contact: "fixture@example.invalid" } }), 1);
+    const replyPayload = JSON.stringify({ event_type: "EMAIL_REPLY", campaign_id: "provider-email-test", to_email: "fixture@example.invalid", from_email: "info@abstractcapitalgroup.com", reply_body: "<p>Test reply</p>", time_replied: "2026-10-20T08:00:00Z" });
+    const replyHook = () => emailWebhook(new Request("https://example.com/api/webhooks/email", { method: "POST", headers: { "x-webhook-secret": process.env.EMAIL_WEBHOOK_SECRET! }, body: replyPayload }));
+    assert.equal((await replyHook()).status, 200);
+    assert.equal((await replyHook()).status, 200);
+    const storedReplies = await db.reply.findMany({ where: { from: "fixture@example.invalid" } });
+    assert.equal(storedReplies.length, 1);
+    assert.equal((storedReplies[0].providerContext as { mailbox: string }).mailbox, "info@abstractcapitalgroup.com");
+    assert.equal((await db.lead.findUniqueOrThrow({ where: { id: "test-1" } })).optedOut, true);
+    const reservation = { id: "inbox-send-test", replyId: storedReplies[0].id, brandId: "abstract", leadId: "test-1", channel: "sms" as const, body: "Fixture", from: "+12125550000", to: "+12125551001", status: "sending" as const, createdAt: new Date().toISOString() };
+    const reserved = await Promise.all([reserveInboxSend(reservation), reserveInboxSend(reservation)]);
+    assert.equal(reserved.filter((r) => r.created).length, 1);
+    await db.deliveryReceipt.create({ data: { providerId: "early-inbox-receipt", status: "delivered" } });
+    assert.equal((await finishInboxSend(reservation.id, { status: "accepted", providerId: "early-inbox-receipt" })).status, "delivered");
     await db.$executeRaw`INSERT INTO "WorkerLease" (id, owner, "expiresAt") VALUES ('dispatch', 'other-worker', NOW() + interval '1 minute')`;
     assert.equal((await dispatchQueuedSends()).busy, true);
   } finally {

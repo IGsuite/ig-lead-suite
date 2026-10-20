@@ -295,6 +295,33 @@ export interface Reply {
   crmSynced: boolean;
   createdAt: string;
   read: boolean;
+  providerContext?: ReplyContext;
+}
+
+export interface ReplyContext {
+  provider?: "smartlead" | "telnyx";
+  campaignId?: string;
+  leadId?: string;
+  messageId?: string;
+  emailStatsId?: string;
+  mailbox?: string;
+  subject?: string;
+  receivedAt?: string;
+}
+
+export interface InboxSend {
+  id: string;
+  replyId: string;
+  brandId: string;
+  leadId: string;
+  channel: CampaignChannel;
+  body: string;
+  from: string;
+  to: string;
+  status: "sending" | "accepted" | "delivered" | "failed" | "unknown";
+  providerId?: string;
+  error?: string;
+  createdAt: string;
 }
 
 export interface OptOut {

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { parseSmsReply } from "@/lib/inbound-events";
+import { mapEntity } from "@/lib/mappers";
 import { validTelnyxWebhook, processWebhook } from "@/lib/webhook-security";
 import { ingestReply } from "@/lib/neon-store-ops";
 
@@ -18,17 +20,14 @@ export async function POST(request: Request) {
         const prior = await tx.deliveryReceipt.findUnique({ where: { providerId: payload.id } });
         const finalStatus = prior && ["delivered", "failed"].includes(prior.status) ? prior.status : status;
         await tx.deliveryReceipt.upsert({ where: { providerId: payload.id }, create: { providerId: payload.id, status: finalStatus }, update: { status: finalStatus } });
+        if (["delivered", "failed"].includes(finalStatus)) await tx.inboxSend.updateMany({ where: { providerId: payload.id, channel: "sms", status: { in: ["accepted", "sending", "unknown"] } }, data: { status: finalStatus } });
         await tx.sendJob.updateMany({ where: { providerId: payload.id, channel: "sms", status: { in: ["accepted", "processing", "uncertain"] } }, data: { status: finalStatus, finishedAt: new Date() } });
       }
       return { receipt: true };
     }
     if (event.event_type !== "message.received" || payload.direction === "outbound") return { ignored: true };
-    const from = payload.from?.phone_number, text = payload.text;
-    const recipients: string[] = (Array.isArray(payload.to) ? payload.to : [payload.to]).map((to: { phone_number?: string }) => to?.phone_number).filter(Boolean);
-    const normalize = (value: string) => value.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
-    const companies = (await tx.entity.findMany()).filter(company => company.phoneNumbers.some(number => recipients.some(to => normalize(number) === normalize(to))));
-    if (!from || !text || companies.length !== 1) throw new Error("Inbound number must map to exactly one company");
-    return ingestReply({ channel: "sms", from, body: text, brandId: companies[0].id }, tx);
+    const input = parseSmsReply(body, (await tx.entity.findMany()).map(mapEntity));
+    return input ? ingestReply(input, tx) : { ignored: true };
   });
   return NextResponse.json({ ok: true, duplicate: outcome.duplicate });
 }
