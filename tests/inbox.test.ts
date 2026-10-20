@@ -150,3 +150,22 @@ test("operator replies stay off in previews and respect the production test roll
     assert.match(inboxSendingDisabledReason({ ...reply, from: "another@example.com" })!, /test contact/);
   } finally { for (const key of keys) { if (saved[key] === undefined) delete process.env[key]; else process.env[key] = saved[key]; } }
 });
+
+test("Smartlead empty success acknowledges acceptance while malformed confirmations remain uncertain", async () => {
+  const { submitInboxReply } = await import("../src/lib/providers/inbox");
+  const originalFetch = global.fetch, originalKey = process.env.SMARTLEAD_API_KEY;
+  process.env.SMARTLEAD_API_KEY = "test-key";
+  const reply = { channel: "email", from: "client@example.com" } as import("../src/lib/types").Reply;
+  const thread = { campaignId: "123", statsId: "765", mailbox: "info@brand-a.example" };
+  try {
+    global.fetch = async () => new Response(null, { status: 200 });
+    assert.equal(await submitInboxReply(reply, brands[0], "Test", thread), undefined);
+    global.fetch = async () => new Response("<html>Unexpected proxy response</html>", { status: 200 });
+    await assert.rejects(submitInboxReply(reply, brands[0], "Test", thread), /no confirmation/);
+    global.fetch = async () => new Response(null, { status: 503 });
+    await assert.rejects(submitInboxReply(reply, brands[0], "Test", thread), /rejected/);
+  } finally {
+    global.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.SMARTLEAD_API_KEY; else process.env.SMARTLEAD_API_KEY = originalKey;
+  }
+});

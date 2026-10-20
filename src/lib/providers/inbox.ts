@@ -78,7 +78,13 @@ export async function submitInboxReply(reply: Reply, brand: Brand, body: string,
   catch { throw new InboxProviderError("Delivery status is unknown. Check the conversation before sending again.", true); }
   if (!response.ok) throw new InboxProviderError(`The message provider rejected this reply (${response.status}). Check the mailbox or number connection.`, response.status >= 500);
   let result: Fields;
-  try { result = obj(await response.json()); }
+  try {
+    const raw = await response.text();
+    // Smartlead can acknowledge a successful reply with an empty 2xx body.
+    // This means accepted for sending, never proof of recipient delivery.
+    if (reply.channel === "email" && !raw.trim()) return undefined;
+    result = obj(JSON.parse(raw));
+  }
   catch { throw new InboxProviderError("The provider accepted the request but returned no confirmation. Check before resending.", true); }
   if (result.ok === false || result.success === false || result.error || result.errors)
     throw new InboxProviderError("The message provider could not accept this reply");
