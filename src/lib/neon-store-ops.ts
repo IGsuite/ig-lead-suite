@@ -77,9 +77,12 @@ export async function setCampaignStatus(
   const prisma = getPrisma();
   const existing = await prisma.campaign.findUnique({ where: { id } });
   if (!existing) return null;
-  const updated = await prisma.campaign.update({
-    where: { id },
-    data: { status },
+  const updated = await prisma.$transaction(async tx => {
+    const row = await tx.campaign.update({ where: { id }, data: { status } });
+    if (status === "cancelled") {
+      await tx.sendJob.updateMany({ where: { campaignId: id, status: "queued" }, data: { status: "skipped", error: "Campaign cancelled", finishedAt: new Date() } });
+    }
+    return row;
   });
   return mapCampaign(updated);
 }

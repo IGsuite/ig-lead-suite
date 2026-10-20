@@ -135,7 +135,15 @@ export async function dispatchQueuedSends() {
           await db.sendJob.update({ where: { id: job.id }, data: { status: "skipped", error: "Campaign cancelled", finishedAt: new Date() } });
           continue;
         }
-        if (campaign.status === "sending" && isWithinSendWindow(mapCampaign(campaign))) { eligibleJob = job; break; }
+        if (campaign.status === "sending" && isWithinSendWindow(mapCampaign(campaign))) {
+          const prior = await db.sendJob.findFirst({ where: { campaignId: campaign.id, claimedAt: { not: null } }, orderBy: { claimedAt: "desc" }, select: { claimedAt: true } });
+          const nextAllowed = prior?.claimedAt ? prior.claimedAt.getTime() + 3600000 / Math.max(1, campaign.throttlePerHour) : 0;
+          if (nextAllowed > Date.now()) {
+            await db.sendJob.updateMany({ where: { id: job.id, status: "queued" }, data: { scheduledAt: new Date(nextAllowed) } });
+            continue;
+          }
+          eligibleJob = job; break;
+        }
         await db.sendJob.updateMany({ where: { id: job.id, status: "queued" }, data: { scheduledAt: new Date(Date.now() + 60000) } });
       }
       if (!eligibleJob) break;

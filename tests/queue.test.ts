@@ -7,6 +7,7 @@ import { Pool } from "pg";
 import { getPrisma } from "../src/lib/db";
 import { ensureSeeded } from "../src/lib/neon-store-seed";
 import { enqueueCampaign, dispatchQueuedSends } from "../src/lib/send-queue";
+import { setCampaignStatus } from "../src/lib/neon-store-ops";
 import { processWebhook } from "../src/lib/webhook-security";
 
 test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and never retries uncertain sends", { timeout: 90000 }, async () => {
@@ -56,6 +57,10 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     assert.equal(applied, 1);
     await assert.rejects(processWebhook("test", "rollback", "rollback", async () => { throw new Error("rollback"); }));
     assert.equal(await db.webhookReceipt.count({ where: { id: "test:rollback" } }), 0);
+    await db.campaign.create({ data: { id: "cancel-test", brandId: "abstract", name: "Cancel test", channel: "sms", message: "Test", volume: 1, throttlePerHour: 60, status: "sending" } });
+    await db.sendJob.create({ data: { id: "cancel-job", campaignId: "cancel-test", entityId: "abstract", leadId: "test-1", channel: "sms", payload: {} } });
+    await setCampaignStatus("cancel-test", "cancelled");
+    assert.equal((await db.sendJob.findUniqueOrThrow({ where: { id: "cancel-job" } })).status, "skipped");
     await db.$executeRaw`INSERT INTO "WorkerLease" (id, owner, "expiresAt") VALUES ('dispatch', 'other-worker', NOW() + interval '1 minute')`;
     assert.equal((await dispatchQueuedSends()).busy, true);
   } finally {
