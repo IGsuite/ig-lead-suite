@@ -64,9 +64,9 @@ function CampaignBuilderInner() {
   const [volume, setVolume] = useState(1500);
   const [throttlePerHour, setThrottlePerHour] = useState(120);
   const [sendWindowPreset, setSendWindowPreset] =
-    useState<SendWindowPreset>("morning");
+    useState<SendWindowPreset>("custom");
   const [sendWindowStart, setSendWindowStart] = useState("09:00");
-  const [sendWindowEnd, setSendWindowEnd] = useState("12:00");
+  const [sendWindowEnd, setSendWindowEnd] = useState("20:00");
   const [saving, setSaving] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [draftTone, setDraftTone] = useState<DraftTone>("soft");
@@ -207,7 +207,7 @@ function CampaignBuilderInner() {
           sendWindowEnd:
             sendWindowPreset === "custom" ? sendWindowEnd : undefined,
           timezone: "America/New_York",
-          status,
+          status: "draft",
         }),
       });
       if (!res.ok) throw new Error("Could not create campaign");
@@ -219,14 +219,19 @@ function CampaignBuilderInner() {
           body: JSON.stringify({ action: "launch", id: campaign.id }),
         });
         const launched = (await launchRes.json()) as {
+          error?: string;
           deferred?: boolean;
+          deferredReason?: string;
           windowLabel?: string;
           emptyAudience?: boolean;
           eligibleCount?: number;
         };
-        if (launched.deferred) {
+        if (!launchRes.ok) throw new Error(launched.error || "Your draft was saved, but the campaign could not be launched.");
+        if (launched.deferred && launched.deferredReason !== "outside_send_window") {
+          toast.message(`Campaign is ${launched.deferredReason || "already being processed"}.`);
+        } else if (launched.deferred) {
           toast.message(
-            `Scheduled — outside send window (${launched.windowLabel || "window"}). Launch again during the window.`,
+            `Scheduled for automatic processing during the send window (${launched.windowLabel || "window"}).`,
           );
         } else if (launched.emptyAudience) {
           toast.error(
@@ -237,8 +242,8 @@ function CampaignBuilderInner() {
           const countLabel = typeof n === "number" ? `${n} contact(s) ` : "";
           toast.success(
             channel === "email"
-              ? `Launched ${countLabel}— CRM subject/body pushed to Smartlead (needs Active campaign + connected mailbox)`
-              : `Launched ${countLabel}through IG Lead Suite → Telnyx SMS`,
+              ? `Queued ${countLabel}for email processing within your sending window and mailbox limits`
+              : `Queued ${countLabel}for text processing within your sending window`,
           );
         }
       } else {
@@ -649,8 +654,8 @@ function CampaignBuilderInner() {
               </div>
             ) : (
               <div className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2 text-sm text-[color:var(--ink-soft)] self-end">
-                Outside the window, launch stays <strong>scheduled</strong> until
-                you run it again in-hours.
+                Outside the window, a launched campaign stays <strong>scheduled</strong> and
+                starts automatically during its sending window. Saved drafts do not send.
               </div>
             )}
           </div>

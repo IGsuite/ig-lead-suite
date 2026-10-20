@@ -428,6 +428,19 @@ model ProviderCampaignBinding {
   createdAt DateTime @default(now())
 }
 
+/// One independently configured email campaign per CRM campaign. Never reuse another campaign's copy.
+model EmailCampaignSetup {
+  campaignId String @id
+  brandId String
+  fingerprint String
+  providerCampaignId String? @unique
+  /// preparing | ready | failed | uncertain
+  state String
+  error String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 /// Preserve receipts that arrive before the provider request has returned its ID.
 model DeliveryReceipt {
   providerId String @id

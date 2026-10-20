@@ -7,7 +7,9 @@ import { Pool } from "pg";
 import { getPrisma } from "../src/lib/db";
 import { ensureSeeded } from "../src/lib/neon-store-seed";
 import { enqueueCampaign, dispatchQueuedSends } from "../src/lib/send-queue";
-import { setCampaignStatus } from "../src/lib/neon-store-ops";
+import { createCampaign, setCampaignStatus } from "../src/lib/neon-store-ops";
+import { ensureEmailCampaign } from "../src/lib/providers/campaign-setup";
+import { mapCampaign, mapEntity } from "../src/lib/mappers";
 import { POST as emailWebhook } from "../src/app/api/webhooks/email/route";
 import { processWebhook } from "../src/lib/webhook-security";
 import { reserveInboxSend, finishInboxSend } from "../src/lib/inbox-store";
@@ -19,6 +21,7 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
   await pg.exec(await readFile("prisma/migrations/202610200001_baseline/migration.sql", "utf8"));
   await pg.exec(await readFile("prisma/migrations/202610200002_delivery_outbox/migration.sql", "utf8"));
   await pg.exec(await readFile("prisma/migrations/202610200003_inbox_conversations/migration.sql", "utf8"));
+  await pg.exec(await readFile("prisma/migrations/202610200004_manual_campaign_setup/migration.sql", "utf8"));
   const server = new PGLiteSocketServer({ db: pg, host: "127.0.0.1", port: 55439 });
   await server.start();
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: false, max: 1 });
@@ -87,6 +90,87 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     assert.equal(reserved.filter((r) => r.created).length, 1);
     await db.deliveryReceipt.create({ data: { providerId: "early-inbox-receipt", status: "delivered" } });
     assert.equal((await finishInboxSend(reservation.id, { status: "accepted", providerId: "early-inbox-receipt" })).status, "delivered");
+
+    // Campaign setup is independent per draft. It never imports contacts or starts sending.
+    Object.assign(process.env, { SMARTLEAD_API_KEY: "setup-test-only", PUBLIC_APP_URL: "https://suite.example.invalid" });
+    const brand = mapEntity(await db.entity.findUniqueOrThrow({ where: { id: "abstract" } }));
+    const makeEmail = async (id: string) => mapCampaign(await db.campaign.create({ data: {
+      id, brandId: "abstract", name: id, channel: "email", subject: "Fixture", message: `Different copy ${id}`,
+      volume: 1, throttlePerHour: 15, status: "draft", sendWindowPreset: "custom", sendWindowStart: "09:00", sendWindowEnd: "20:00", timezone: "America/New_York",
+    } }));
+    let creates = 0, wrongMailbox = false, interruptedCreate = false;
+    const setupCalls: Array<{ path: string; body: Record<string, unknown> }> = [];
+    globalThis.fetch = async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      const body = init?.body ? JSON.parse(String(init.body)) : {};
+      assert.ok(!path.endsWith("/leads"));
+      assert.notEqual(body.status, "START");
+      if (init?.method !== "GET") setupCalls.push({ path, body });
+      if (path.endsWith("/email-accounts") && init?.method === "GET") return Response.json([{ id: 10,
+        from_email: wrongMailbox ? "info@other-business.invalid" : "info@abstractcapitalgroup.com", is_smtp_success: true, is_imap_success: true, message_per_day: 15 }]);
+      if (path.endsWith("/campaigns/provider-email-test")) return Response.json({ scheduler_cron_value: { days: [1, 2, 3, 4, 5] }, max_leads_per_day: 100, min_time_btwn_emails: 10 });
+      if (path.endsWith("/campaigns/create")) {
+        creates++;
+        if (interruptedCreate) throw new Error("Response lost after empty draft creation");
+        return Response.json({ id: 900 + creates });
+      }
+      if (path.endsWith("/webhooks") && init?.method === "GET") return Response.json([]);
+      return Response.json({ ok: true });
+    };
+    const firstEmail = await makeEmail("setup-one");
+    const jobsBefore = await db.sendJob.count();
+    const simultaneous = await Promise.allSettled([ensureEmailCampaign(firstEmail, brand), ensureEmailCampaign(firstEmail, brand)]);
+    assert.ok(simultaneous.some(r => r.status === "fulfilled" && r.value === "901"));
+    assert.equal(creates, 1);
+    assert.equal(await ensureEmailCampaign(firstEmail, brand), "901");
+    const secondEmail = await makeEmail("setup-two");
+    assert.equal(await ensureEmailCampaign(secondEmail, brand), "902");
+    assert.equal(creates, 2);
+    const schedules = setupCalls.filter(c => c.path.endsWith("/schedule"));
+    assert.equal(schedules.length, 2);
+    assert.equal(schedules[0].body.max_leads_per_day, 15);
+    assert.equal(schedules[0].body.start_hour, "09:00");
+    assert.equal(schedules[0].body.end_hour, "20:00");
+    assert.equal(await db.sendJob.count(), jobsBefore);
+    await assert.rejects(ensureEmailCampaign({ ...firstEmail, message: "Changed after setup" }, brand), /different saved/);
+    wrongMailbox = true;
+    await assert.rejects(ensureEmailCampaign(await makeEmail("setup-wrong-brand"), brand), /own verified/);
+    assert.equal(creates, 2); wrongMailbox = false;
+    interruptedCreate = true;
+    const uncertainEmail = await makeEmail("setup-uncertain");
+    await assert.rejects(ensureEmailCampaign(uncertainEmail, brand), /reconciliation/);
+    await assert.rejects(ensureEmailCampaign(uncertainEmail, brand), /reconciliation/);
+    assert.equal(creates, 3);
+    assert.equal((await db.emailCampaignSetup.findUniqueOrThrow({ where: { campaignId: uncertainEmail.id } })).state, "uncertain");
+    const mappedReply = await emailWebhook(new Request("https://example.com/api/webhooks/email", { method: "POST", headers: { "x-webhook-secret": process.env.EMAIL_WEBHOOK_SECRET! },
+      body: JSON.stringify({ event_type: "EMAIL_REPLY", campaign_id: "902", to_email: "fixture@example.invalid", from_email: "info@abstractcapitalgroup.com", reply_body: "A new campaign reply", message_id: "new-campaign-reply" }) }));
+    assert.equal(mappedReply.status, 200);
+    assert.equal((await db.reply.findFirstOrThrow({ where: { body: "A new campaign reply" } })).campaignId, secondEmail.id);
+    const draft = await createCampaign({ ...firstEmail, name: "Save only", status: "scheduled" });
+    assert.equal(draft.status, "draft");
+    assert.equal(await db.sendJob.count(), jobsBefore);
+    process.env.SENDING_ENABLED = "false";
+    await assert.rejects(enqueueCampaign(firstEmail.id), /sending is paused/);
+    assert.equal(await db.sendJob.count(), jobsBefore);
+    assert.equal(creates, 3);
+    process.env.SENDING_ENABLED = "true";
+    process.env.SENDING_CHANNELS = "email";
+    await assert.rejects(enqueueCampaign("queue-test"), /channel/);
+    delete process.env.SENDING_CHANNELS;
+    interruptedCreate = false;
+    const queuedDraft = await makeEmail("setup-queue-ready");
+    await db.campaign.update({ where: { id: queuedDraft.id }, data: { sourceFilter: "email-queue-fixture", sendWindowPreset: "any" } });
+    await db.lead.create({ data: { id: "email-queue-fixture", email: "buyer@customer.invalid", source: "email-queue-fixture", groupName: "test",
+      purchaseDate: new Date(), costCents: 0, offeredEntityIds: [], status: "available", emailStatus: "valid" } });
+    const launchedEmail = await enqueueCampaign(queuedDraft.id);
+    assert.equal(launchedEmail?.eligibleCount, 1);
+    const emailJob = await db.sendJob.findFirstOrThrow({ where: { campaignId: queuedDraft.id } });
+    assert.equal((emailJob.payload as { providerCampaignId: string }).providerCampaignId, "904");
+    assert.equal(emailJob.status, "queued");
+    await enqueueCampaign(queuedDraft.id);
+    assert.equal(await db.sendJob.count({ where: { campaignId: queuedDraft.id } }), 1);
+    assert.equal(creates, 4);
+    assert.ok(setupCalls.every(c => c.body.status !== "START" && !c.path.endsWith("/leads")));
     await db.$executeRaw`INSERT INTO "WorkerLease" (id, owner, "expiresAt") VALUES ('dispatch', 'other-worker', NOW() + interval '1 minute')`;
     assert.equal((await dispatchQueuedSends()).busy, true);
   } finally {

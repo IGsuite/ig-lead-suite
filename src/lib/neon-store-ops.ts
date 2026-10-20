@@ -1,4 +1,3 @@
-import type { Prisma } from "@/generated/prisma/client";
 import { enqueueCampaign } from "@/lib/send-queue";
 import type { AutopilotRunResult } from "@/lib/autopilot";
 import { getPrisma } from "@/lib/db";
@@ -62,7 +61,7 @@ export async function createCampaign(
       sendWindowStart: win.sendWindowStart,
       sendWindowEnd: win.sendWindowEnd,
       timezone: win.timezone,
-      status: input.status,
+      status: "draft",
     },
   });
   return mapCampaign(created);
