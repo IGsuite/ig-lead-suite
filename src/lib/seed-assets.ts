@@ -1,9 +1,11 @@
+import { isProductionDeploy } from "@/lib/auth";
 import { writeSeedAdAssetFile } from "@/lib/ad-assets-fs";
 import type { PlatformData } from "@/lib/types";
 
 export async function materializeSeedAdAssets(
   data: PlatformData,
 ): Promise<PlatformData> {
+  if (isProductionDeploy()) return { ...data, adAssets: [] };
   const samples: Record<string, string> = {
     "shared/shared-compliance-notes.txt":
       "Shared Ads notes\n\n- No guaranteed funding language\n- SMS samples keep STOP\n- Keep entity libraries separate\n",

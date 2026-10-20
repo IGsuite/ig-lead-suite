@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { canAccessEntity } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
@@ -8,6 +9,8 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const { id } = await context.params;
   const session = await getSession();
   const data = await getData();

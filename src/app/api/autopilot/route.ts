@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { isAdminSession } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
@@ -5,6 +6,8 @@ import { getData, runAutopilotDay, updateRotation } from "@/lib/store";
 import type { RotationConfig } from "@/lib/types";
 
 export async function GET() {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   const data = await getData();
   if (!isAdminSession(session) && session) {
@@ -19,6 +22,8 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   if (!isAdminSession(session)) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });
@@ -29,6 +34,8 @@ export async function PATCH(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   if (!isAdminSession(session)) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });

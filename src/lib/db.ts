@@ -50,7 +50,7 @@ export function getPrisma(): PrismaClient {
     globalForPrisma.pgPool ??
     new Pool({
       connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
+      ssl: { rejectUnauthorized: true },
       max: 10,
     });
   globalForPrisma.pgPool = pool;

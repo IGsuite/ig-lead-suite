@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { assertEntityAccess, canAccessEntity, isAdminSession } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
@@ -21,6 +22,8 @@ type CreativeBody = {
 };
 
 export async function GET() {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   const data = await getData();
   const templates = (data.messageTemplates || []).filter(
@@ -30,6 +33,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   const payload = (await request.json()) as CreativeBody;
 

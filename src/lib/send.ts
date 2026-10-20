@@ -13,7 +13,10 @@ import {
 import type { Brand, Campaign, Lead } from "@/lib/types";
 import { contactOkForChannel } from "@/lib/verify";
 
+export type ContactSendResult = { leadId: string; status: "accepted" | "failed" | "skipped" | "mock" | "uncertain"; providerId?: string; error?: string };
+
 export type CampaignSendSummary = {
+  results: ContactSendResult[];
   attempted: number;
   delivered: number;
   failed: number;
@@ -106,12 +109,14 @@ export async function deliverCampaignBatch(input: {
   brand: Brand;
   leads: Lead[];
   liveCap?: number;
+  providerCampaignId?: string;
 }): Promise<CampaignSendSummary> {
   const liveCap = resolveLiveCap(
     input.campaign.channel,
     input.liveCap,
     input.leads.length,
   );
+  const results: ContactSendResult[] = [];
   let delivered = 0;
   let failed = 0;
   let skipped = 0;
@@ -121,7 +126,7 @@ export async function deliverCampaignBatch(input: {
 
   const fromNumber =
     input.brand.phoneNumbers[0] ||
-    process.env.TELNYX_FROM_NUMBER?.trim() ||
+
     "";
 
   const providerReady =
@@ -139,11 +144,13 @@ export async function deliverCampaignBatch(input: {
       )
     ) {
       failed += 1;
+      results.push({ leadId: lead.id, status: "failed", error: "Invalid contact" });
       continue;
     }
 
     if (providerReady && liveAttempts >= liveCap) {
       skipped += 1;
+      results.push({ leadId: lead.id, status: "skipped", error: "Batch limit reached" });
       continue;
     }
 
@@ -152,6 +159,7 @@ export async function deliverCampaignBatch(input: {
     if (input.campaign.channel === "sms") {
       if (!lead.phone || !fromNumber) {
         failed += 1;
+        results.push({ leadId: lead.id, status: "failed", error: "Company sender or recipient missing" });
         continue;
       }
       liveAttempts += 1;
@@ -162,11 +170,13 @@ export async function deliverCampaignBatch(input: {
       });
       if (result.mode === "live") sawLive = true;
       else sawMock = true;
-      if (result.ok) delivered += 1;
+      results.push({ leadId: lead.id, status: result.mode === "mock" ? "mock" : result.uncertain ? "uncertain" : result.ok ? "accepted" : "failed", providerId: result.providerId, error: result.error });
+      if (result.ok && result.mode === "live") delivered += 1;
       else failed += 1;
     } else {
       if (!lead.email) {
         failed += 1;
+        results.push({ leadId: lead.id, status: "failed", error: "Company sender or recipient missing" });
         continue;
       }
       liveAttempts += 1;
@@ -189,6 +199,8 @@ export async function deliverCampaignBatch(input: {
         firstName: lead.firstName,
         lastName: lead.lastName,
         brandId: input.brand.id,
+        campaignId: input.campaign.id,
+        providerCampaignId: input.providerCampaignId,
         brandName: input.brand.shortName,
         // Smartlead sequence is updated from CRM templates (merge tags),
         // so Launch copy stays owned by IG Lead Suite — not Smartlead UI.
@@ -198,12 +210,14 @@ export async function deliverCampaignBatch(input: {
       });
       if (result.mode === "live") sawLive = true;
       else sawMock = true;
-      if (result.ok) delivered += 1;
+      results.push({ leadId: lead.id, status: result.mode === "mock" ? "mock" : result.uncertain ? "uncertain" : result.ok ? "accepted" : "failed", providerId: result.providerId, error: result.error });
+      if (result.ok && result.mode === "live") delivered += 1;
       else failed += 1;
     }
   }
 
   return {
+    results,
     attempted: input.leads.length,
     delivered,
     failed,

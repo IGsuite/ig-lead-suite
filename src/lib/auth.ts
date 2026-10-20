@@ -14,11 +14,13 @@ export type SessionPayload = {
 };
 
 function authSecret(): string {
-  return (
-    process.env.AUTH_SECRET?.trim() ||
-    process.env.DATABASE_URL?.slice(0, 48) ||
-    "signaldesk-local-dev-secret"
-  );
+  const secret = process.env.AUTH_SECRET?.trim();
+  if (secret) {
+    if (isProductionDeploy() && secret.length < 32) throw new Error("AUTH_SECRET must contain at least 32 characters");
+    return secret;
+  }
+  if (isProductionDeploy()) throw new Error("AUTH_SECRET is required in production");
+  return "signaldesk-local-dev-secret";
 }
 
 /** True on Vercel or NODE_ENV=production (Edge-safe env checks only). */
@@ -33,10 +35,11 @@ export function isProductionDeploy(): boolean {
  * (middleware). Webhooks and a few health routes stay public.
  *
  * Defaults:
- * - Vercel / production → required (unless AUTH_REQUIRED=false)
+ * - Vercel / production → always required
  * - Local → open for demos (unless AUTH_REQUIRED=true)
  */
 export function isAuthRequired(): boolean {
+  if (isProductionDeploy()) return true;
   const v = process.env.AUTH_REQUIRED?.trim().toLowerCase();
   if (v === "0" || v === "false" || v === "no") return false;
   if (v === "1" || v === "true" || v === "yes") return true;
@@ -71,10 +74,12 @@ export function encodeSession(payload: SessionPayload): string {
 
 export function decodeSession(token: string | undefined | null): SessionPayload | null {
   if (!token) return null;
-  const [payloadB64, sig] = token.split(".");
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [payloadB64, sig] = parts;
   if (!payloadB64 || !sig) return null;
-  const expected = sign(payloadB64);
   try {
+    const expected = sign(payloadB64);
     const a = Buffer.from(sig, "hex");
     const b = Buffer.from(expected, "hex");
     if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
@@ -85,8 +90,8 @@ export function decodeSession(token: string | undefined | null): SessionPayload 
     const json = JSON.parse(
       Buffer.from(payloadB64, "base64url").toString("utf8"),
     ) as SessionPayload;
-    if (!json.exp || json.exp < Date.now()) return null;
-    if (!json.userId || !json.email || !json.role) return null;
+    if (typeof json.exp !== "number" || !Number.isFinite(json.exp) || json.exp < Date.now()) return null;
+    if (!json.userId || !json.email || !["admin", "member"].includes(json.role)) return null;
     return {
       ...json,
       allowedEntityIds: Array.isArray(json.allowedEntityIds)
@@ -121,7 +126,12 @@ export function toPublicUser(user: AppUser): AppUserPublic {
 
 export async function getSession(): Promise<SessionPayload | null> {
   const jar = await cookies();
-  return decodeSession(jar.get(SESSION_COOKIE)?.value);
+  const session = decodeSession(jar.get(SESSION_COOKIE)?.value);
+  if (!session) return null;
+  // Revoked users and changed permissions take effect immediately.
+  const { getUserById } = await import("@/lib/users-store");
+  const user = await getUserById(session.userId);
+  return user ? { ...sessionFromUser(user), exp: session.exp } : null;
 }
 
 export function sessionCookieOptions(maxAgeSeconds = SESSION_TTL_MS / 1000) {

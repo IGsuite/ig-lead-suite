@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { ingestReply } from "@/lib/store";
+import { ingestReply } from "@/lib/neon-store-ops";
+import { validEmailWebhook, processWebhook } from "@/lib/webhook-security";
 
 /**
  * Cold-email reply webhook (Smartlead / Instantly / simple test JSON).
@@ -32,11 +33,6 @@ function brandIdFromSmartleadCampaign(
     return undefined;
   }
   const id = String(campaignId).trim();
-  const defaultId = process.env.SMARTLEAD_CAMPAIGN_ID?.trim();
-  if (defaultId && defaultId === id) {
-    // Default campaign — leave brand resolution to ingestReply (last entity / offered)
-    return undefined;
-  }
   const entities = [
     "abstract",
     "ahava",
@@ -44,16 +40,20 @@ function brandIdFromSmartleadCampaign(
     "venture",
     "tyh",
   ] as const;
+  const matches: string[] = [];
   for (const entity of entities) {
-    const envVal =
-      process.env[`SMARTLEAD_CAMPAIGN_${entity.toUpperCase()}`]?.trim();
-    if (envVal && envVal === id) return entity;
+    const prefix = `SMARTLEAD_CAMPAIGN_${entity.toUpperCase()}`;
+    if (Object.entries(process.env).some(([key, value]) => (key === prefix || key.startsWith(`${prefix}__`)) && value?.trim() === id)) matches.push(entity);
   }
-  return undefined;
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as {
+  if (!validEmailWebhook(request)) return NextResponse.json({ error: "Invalid webhook credential" }, { status: 401 });
+  const raw = await request.text();
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
+  const body = parsed as {
     // Simple / Instantly-style
     from?: string;
     email?: string;
@@ -128,17 +128,12 @@ export async function POST(request: Request) {
 
   // Smartlead campaign_id is NOT our Prisma campaign id — only use it to
   // map → entity via SMARTLEAD_CAMPAIGN_* env. Never pass it as campaignId.
-  const brandId =
-    body.brandId || brandIdFromSmartleadCampaign(body.campaign_id);
-
-  const reply = await ingestReply({
-    channel: "email",
-    from,
-    body: text,
-    brandId,
-    // Only accept our own campaign ids from simple/test payloads
-    campaignId: body.campaignId,
+  const brandId = brandIdFromSmartleadCampaign(body.campaign_id);
+  if (!brandId) return NextResponse.json({ error: "Unknown provider campaign mapping" }, { status: 400 });
+  const outcome = await processWebhook("email", raw, undefined, async tx => {
+    const lead = await tx.lead.findFirst({ where: { email: { equals: from, mode: "insensitive" } } });
+    const job = lead ? await tx.sendJob.findFirst({ where: { leadId: lead.id, entityId: brandId, channel: "email", payload: { path: ["providerCampaignId"], equals: String(body.campaign_id) } }, orderBy: { createdAt: "desc" } }) : null;
+    return ingestReply({ channel: "email", from, body: text, brandId, campaignId: job?.campaignId }, tx);
   });
-
-  return NextResponse.json({ ok: true, reply });
+  return NextResponse.json({ ok: true, duplicate: outcome.duplicate });
 }

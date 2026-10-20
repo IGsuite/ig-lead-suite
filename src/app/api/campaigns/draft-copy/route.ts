@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { assertEntityAccess } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
@@ -10,6 +11,8 @@ import { getData } from "@/lib/store";
 import type { CampaignChannel } from "@/lib/types";
 
 export async function GET() {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const resolved = resolveDraftCopyAiMode();
   return NextResponse.json({
     mode: resolved.mode,
@@ -19,6 +22,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   const body = (await request.json()) as {
     channel?: CampaignChannel;

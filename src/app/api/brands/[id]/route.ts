@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { assertEntityAccess, isAdminSession } from "@/lib/acl";
 import { entitySourceResults } from "@/lib/analytics";
@@ -9,6 +10,8 @@ export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const { id } = await context.params;
   const session = await getSession();
   const gate = assertEntityAccess(session, id);
@@ -33,6 +36,8 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const { id } = await context.params;
   const session = await getSession();
   const gate = assertEntityAccess(session, id);

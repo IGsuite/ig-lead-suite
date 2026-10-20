@@ -65,15 +65,18 @@ function CampaignsInner() {
       const json = (await res.json()) as {
         error?: string;
         deferred?: boolean;
+        deferredReason?: string;
         windowLabel?: string;
         channel?: string;
         emptyAudience?: boolean;
         eligibleCount?: number;
       };
       if (!res.ok) throw new Error(json.error || "Could not launch campaign");
-      if (json.deferred) {
+      if (json.deferred && json.deferredReason !== "outside_send_window") {
+        toast.message(`Campaign is ${json.deferredReason || "already being processed"}.`);
+      } else if (json.deferred) {
         toast.message(
-          `Outside send window (${json.windowLabel || "window"}). Campaign scheduled — launch again during the window.`,
+          `Outside send window (${json.windowLabel || "window"}). Campaign scheduled for automatic processing during the window.`,
         );
       } else if (json.emptyAudience) {
         toast.error(
@@ -84,8 +87,8 @@ function CampaignsInner() {
         const countLabel = typeof n === "number" ? `${n} lead(s) ` : "";
         toast.success(
           json.channel === "email"
-            ? `Launched ${countLabel}— CRM subject/body pushed to Smartlead (needs Active campaign + connected mailbox)`
-            : `Launched ${countLabel}through IG Lead Suite → Telnyx SMS`,
+            ? `Queued ${countLabel}for email processing`
+            : `Queued ${countLabel}for SMS processing`,
         );
       }
       await refresh();

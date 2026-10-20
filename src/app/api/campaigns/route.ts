@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { assertEntityAccess, canAccessEntity } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
@@ -15,6 +16,8 @@ import type {
 import { normalizeSendWindow } from "@/lib/send-window";
 
 export async function GET() {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   const data = await getData();
   const campaigns = data.campaigns.filter((c) =>
@@ -24,6 +27,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   const body = (await request.json()) as {
     action?: "launch" | "pause" | "cancel" | string;
@@ -60,7 +65,9 @@ export async function POST(request: Request) {
     if (!gate.ok) {
       return NextResponse.json({ error: gate.error }, { status: gate.status });
     }
-    const result = await launchCampaign(body.id);
+    let result;
+    try { result = await launchCampaign(body.id); }
+    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to queue campaign" }, { status: 409 }); }
     if (!result) {
       return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
     }

@@ -1,10 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  typescript: {
-    // File-upload deploys can briefly mix digests; do not block prod on TS.
-    ignoreBuildErrors: true,
-  },
   // Cloudflare quick tunnels (and other public HTTPS frontends) must be
   // allowlisted or Next 16 blocks /_next/* with 403 and the UI never hydrates.
   allowedDevOrigins: [

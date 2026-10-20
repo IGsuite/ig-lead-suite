@@ -1,4 +1,5 @@
 "use client";
+import { uploadFileToApi } from "@/lib/upload-client";
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -149,7 +150,7 @@ export default function LeadsPage() {
       form.set("groupName", groupName);
       form.set("purchaseDate", purchaseDate);
       form.set("costDollars", costDollars);
-      const res = await fetch("/api/leads/upload", { method: "POST", body: form });
+      const res = await uploadFileToApi("/api/leads/upload", form);
       const json = (await res.json().catch(() => ({}))) as {
         error?: string;
         importedCount?: number;

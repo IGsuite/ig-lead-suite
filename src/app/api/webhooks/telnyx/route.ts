@@ -1,53 +1,34 @@
 import { NextResponse } from "next/server";
-import { ingestReply } from "@/lib/store";
+import { validTelnyxWebhook, processWebhook } from "@/lib/webhook-security";
+import { ingestReply } from "@/lib/neon-store-ops";
 
-/**
- * Telnyx inbound SMS webhook.
- * Point Mission Control → Messaging → webhook URL to /api/webhooks/telnyx
- * Payload shape varies; we accept common fields + a simple demo body.
- */
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as {
-    data?: {
-      event_type?: string;
-      payload?: {
-        from?: { phone_number?: string };
-        to?: Array<{ phone_number?: string }> | { phone_number?: string };
-        text?: string;
-        direction?: string;
-      };
-    };
-    from?: string;
-    text?: string;
-    brandId?: string;
-  };
-
-  const payload = body.data?.payload;
-  const from =
-    payload?.from?.phone_number ||
-    body.from ||
-    "";
-  const text = payload?.text || body.text || "";
-
-  if (!from || !text) {
-    return NextResponse.json(
-      { error: "Missing from/text — expected Telnyx inbound SMS payload" },
-      { status: 400 },
-    );
-  }
-
-  // Only ingest inbound (ignore delivery receipts)
-  const event = body.data?.event_type || "";
-  if (event && !event.includes("received") && payload?.direction === "outbound") {
-    return NextResponse.json({ ignored: true, reason: "not inbound" });
-  }
-
-  const reply = await ingestReply({
-    channel: "sms",
-    from,
-    body: text,
-    brandId: body.brandId,
+  const raw = await request.text();
+  if (!validTelnyxWebhook(raw, request.headers)) return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 });
+  let body;
+  try { body = JSON.parse(raw); } catch { return NextResponse.json({ error: "Invalid JSON" }, { status: 400 }); }
+  const event = body.data;
+  const payload = event?.payload;
+  if (!event?.id || !payload) return NextResponse.json({ error: "Missing event" }, { status: 400 });
+  const outcome = await processWebhook("telnyx", raw, event.id, async tx => {
+    if (["message.finalized", "message.sent"].includes(event.event_type)) {
+      const statuses = (Array.isArray(payload.to) ? payload.to : []).map((to: { status?: string }) => to.status);
+      const status = statuses.includes("delivered") ? "delivered" : statuses.some((s: string) => ["delivery_failed", "sending_failed", "failed"].includes(s)) ? "failed" : "accepted";
+      if (payload.id) {
+        const prior = await tx.deliveryReceipt.findUnique({ where: { providerId: payload.id } });
+        const finalStatus = prior && ["delivered", "failed"].includes(prior.status) ? prior.status : status;
+        await tx.deliveryReceipt.upsert({ where: { providerId: payload.id }, create: { providerId: payload.id, status: finalStatus }, update: { status: finalStatus } });
+        await tx.sendJob.updateMany({ where: { providerId: payload.id, channel: "sms", status: { in: ["accepted", "processing", "uncertain"] } }, data: { status: finalStatus, finishedAt: new Date() } });
+      }
+      return { receipt: true };
+    }
+    if (event.event_type !== "message.received" || payload.direction === "outbound") return { ignored: true };
+    const from = payload.from?.phone_number, text = payload.text;
+    const recipients: string[] = (Array.isArray(payload.to) ? payload.to : [payload.to]).map((to: { phone_number?: string }) => to?.phone_number).filter(Boolean);
+    const normalize = (value: string) => value.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+    const companies = (await tx.entity.findMany()).filter(company => company.phoneNumbers.some(number => recipients.some(to => normalize(number) === normalize(to))));
+    if (!from || !text || companies.length !== 1) throw new Error("Inbound number must map to exactly one company");
+    return ingestReply({ channel: "sms", from, body: text, brandId: companies[0].id }, tx);
   });
-
-  return NextResponse.json({ ok: true, reply });
+  return NextResponse.json({ ok: true, duplicate: outcome.duplicate });
 }

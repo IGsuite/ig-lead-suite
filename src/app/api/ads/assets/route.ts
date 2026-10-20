@@ -1,3 +1,6 @@
+import { del } from "@vercel/blob";
+import { formWithUploadedFile } from "@/lib/uploads";
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { writeAdAssetFile } from "@/lib/ad-assets-fs";
 import { assertEntityAccess, isAdminSession } from "@/lib/acl";
@@ -27,11 +30,15 @@ function assertScope(
 }
 
 export async function POST(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   const contentType = request.headers.get("content-type") || "";
 
-  if (contentType.includes("multipart/form-data")) {
-    const form = await request.formData();
+  const blobUpload = contentType.includes("application/json") && Boolean((await request.clone().json().catch(() => ({}))).blobPath);
+  if (contentType.includes("multipart/form-data") || blobUpload) {
+    const reference = blobUpload ? (await request.clone().json()).blobPath : undefined;
+    const form = await formWithUploadedFile(request, MAX_BYTES);
     const action = String(form.get("action") || "create");
     if (action === "delete") {
       const id = String(form.get("id") || "");
@@ -115,6 +122,7 @@ export async function POST(request: Request) {
       sizeBytes: written.sizeBytes,
       storagePath: written.storagePath,
     });
+    if (reference) await del(reference).catch(() => undefined);
     return NextResponse.json(asset);
   }
 

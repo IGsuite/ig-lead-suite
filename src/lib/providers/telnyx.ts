@@ -1,3 +1,4 @@
+import { isProductionDeploy } from "@/lib/auth";
 /**
  * Telnyx Messaging API — SMS backend for SignalDesk campaigns.
  * Without TELNYX_API_KEY, sends are mocked so Autopilot still demos locally.
@@ -8,6 +9,7 @@ export type TelnyxSendResult = {
   mode: "live" | "mock";
   providerId?: string;
   error?: string;
+  uncertain?: boolean;
 };
 
 export function isTelnyxConfigured(): boolean {
@@ -29,12 +31,13 @@ export async function sendTelnyxSms(input: {
 }): Promise<TelnyxSendResult> {
   const apiKey = process.env.TELNYX_API_KEY?.trim();
   if (!apiKey) {
-    return { ok: true, mode: "mock", providerId: `mock-sms-${Date.now()}` };
+    return { ok: !isProductionDeploy(), mode: "mock", error: isProductionDeploy() ? "Telnyx is not configured" : undefined };
   }
 
   try {
     const res = await fetch("https://api.telnyx.com/v2/messages", {
       method: "POST",
+      signal: AbortSignal.timeout(15000),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
@@ -60,7 +63,8 @@ export async function sendTelnyxSms(input: {
     }
 
     return {
-      ok: true,
+      ok: Boolean(json.data?.id),
+      uncertain: !json.data?.id,
       mode: "live",
       providerId: json.data?.id,
     };
@@ -68,7 +72,8 @@ export async function sendTelnyxSms(input: {
     return {
       ok: false,
       mode: "live",
-      error: err instanceof Error ? err.message : "Telnyx request failed",
+      error: "Telnyx request outcome unknown",
+      uncertain: true,
     };
   }
 }

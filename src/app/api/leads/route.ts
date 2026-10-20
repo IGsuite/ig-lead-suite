@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { getSession, isAuthRequired } from "@/lib/auth";
 import { createLead } from "@/lib/store";
@@ -8,6 +9,8 @@ import { createLead } from "@/lib/store";
  * matching how the pool is visible on the Leads page.
  */
 export async function POST(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   if (isAuthRequired() && !session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -1,3 +1,4 @@
+import { isProductionDeploy } from "@/lib/auth";
 import { isNeonConfigured } from "@/lib/db";
 import {
   isLeadEligibleForEntity,
@@ -36,6 +37,7 @@ export type CreateLeadResult =
     };
 
 function backend() {
+  if (isProductionDeploy() && !isNeonConfigured()) throw new Error("DATABASE_URL is required in production");
   return isNeonConfigured() ? neonStore : jsonStore;
 }
 

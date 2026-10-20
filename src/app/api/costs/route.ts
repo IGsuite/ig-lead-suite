@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { assertEntityAccess, canAccessEntity, isAdminSession } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
@@ -5,6 +6,8 @@ import { createCostEntry, deleteCostEntry, getData } from "@/lib/store";
 import type { CostCategory } from "@/lib/types";
 
 export async function GET() {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   const data = await getData();
   const entries = (data.costEntries || []).filter(
@@ -14,6 +17,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   const body = (await request.json()) as {
     brandId?: string | null;
@@ -68,6 +73,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   if (!isAdminSession(session)) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });

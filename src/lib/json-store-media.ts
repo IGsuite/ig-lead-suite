@@ -369,15 +369,11 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
       poolCursor = pick.nextCursor;
       const eligible = pick.selected;
 
-      if (eligible.length) {
-        await deliverCampaignBatch({
-          campaign,
-          brand,
-          leads: eligible,
-        });
-      }
+      const summary = eligible.length ? await deliverCampaignBatch({ campaign, brand, leads: eligible }) : null;
+      const acceptedIds = new Set(summary?.results.filter(r => r.status === "accepted").map(r => r.leadId));
+      const accepted = eligible.filter(lead => acceptedIds.has(lead.id));
 
-      for (const lead of eligible) {
+      for (const lead of accepted) {
         if (!lead.offeredEntityIds.includes(entityId)) {
           lead.offeredEntityIds.push(entityId);
         }
@@ -386,7 +382,7 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
       }
 
       const events = buildSendEvents({
-        leads: eligible,
+        leads: accepted,
         entityId,
         campaignId: campaign.id,
         channel: leg.channel,
@@ -396,14 +392,14 @@ export async function runAutopilotDay(): Promise<AutopilotRunResult> {
       data.sendEvents = [...events, ...data.sendEvents].slice(0, 50_000);
 
       campaign.status = "sending";
-      campaign.sentCount = eligible.length;
+      campaign.sentCount = accepted.length;
       campaign.startedAt = new Date().toISOString();
 
       legs.push({
         entityId,
         channel: leg.channel,
         campaignId: campaign.id,
-        sent: eligible.length,
+        sent: accepted.length,
         volume: leg.volume,
       });
     }

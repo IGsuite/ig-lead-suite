@@ -1,3 +1,5 @@
+import { get } from "@vercel/blob";
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { readAdAssetFile } from "@/lib/ad-assets-fs";
 import { assertEntityAccess, isAdminSession } from "@/lib/acl";
@@ -7,6 +9,8 @@ import { getData } from "@/lib/store";
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, { params }: Params) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const { id } = await params;
   const session = await getSession();
   const data = await getData();
@@ -24,6 +28,11 @@ export async function GET(_request: Request, { params }: Params) {
   }
 
   try {
+    if (asset.storagePath.startsWith("blob:")) {
+      const file = await get(asset.storagePath.slice(5), { access: "private" });
+      if (!file || file.statusCode !== 200) return NextResponse.json({ error: "File missing" }, { status: 404 });
+      return new NextResponse(file.stream, { headers: { "Content-Type": asset.mimeType, "Content-Disposition": `attachment; filename="${asset.originalName.replace(/[^a-zA-Z0-9._-]/g, "_")}"`, "Cache-Control": "private, no-store" } });
+    }
     const buffer = await readAdAssetFile(asset.storagePath);
     return new NextResponse(new Uint8Array(buffer), {
       headers: {

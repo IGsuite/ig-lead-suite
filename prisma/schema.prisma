@@ -366,3 +366,49 @@ model PlatformSettings {
   autopilotJson    Json      @default("{}")
   updatedAt        DateTime  @updatedAt
 }
+
+/// Durable outbox. A processing job is never blindly retried after an uncertain provider response.
+model SendJob {
+  id String @id
+  campaignId String
+  leadId String
+  entityId String
+  channel String
+  payload Json
+  status String @default("queued")
+  providerId String?
+  error String?
+  scheduledAt DateTime @default(now())
+  claimedAt DateTime?
+  finishedAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([campaignId, leadId])
+  @@index([status, scheduledAt])
+  @@index([providerId])
+}
+
+model WebhookReceipt {
+  id String @id
+  createdAt DateTime @default(now())
+}
+
+model WorkerLease {
+  id String @id
+  owner String
+  expiresAt DateTime
+}
+
+/// Prevent changing the sequence behind contacts already queued in a provider campaign.
+model ProviderCampaignBinding {
+  id String @id
+  fingerprint String
+  campaignId String
+  createdAt DateTime @default(now())
+}
+
+/// Preserve receipts that arrive before the provider request has returned its ID.
+model DeliveryReceipt {
+  providerId String @id
+  status String
+  updatedAt DateTime @updatedAt
+}

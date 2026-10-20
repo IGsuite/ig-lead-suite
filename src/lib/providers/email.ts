@@ -14,6 +14,8 @@
  * Configure the provider campaign sequence as HTML email (not plain-only).
  */
 
+import { isProductionDeploy } from "@/lib/auth";
+
 import {
   applyEmailTokens,
   buildEmailBodies,
@@ -26,6 +28,7 @@ export type EmailSendResult = {
   provider: "instantly" | "smartlead" | "mock";
   providerId?: string;
   error?: string;
+  uncertain?: boolean;
 };
 
 export type ColdEmailInput = {
@@ -41,6 +44,8 @@ export type ColdEmailInput = {
   firstName?: string;
   lastName?: string;
   brandId?: string;
+  campaignId?: string;
+  providerCampaignId?: string;
   /** CRM brand short name — substituted for {{brand}} in Smartlead templates. */
   brandName?: string;
   /**
@@ -105,7 +110,8 @@ export async function sendColdEmail(
   const provider = emailProviderName();
   if (provider === "mock") {
     return {
-      ok: true,
+      ok: !isProductionDeploy(),
+      error: isProductionDeploy() ? "Email provider is not configured" : undefined,
       mode: "mock",
       provider: "mock",
       providerId: `mock-email-${Date.now()}`,
@@ -138,10 +144,7 @@ async function sendViaInstantly(
   input: ColdEmailInput & { htmlBody: string },
 ): Promise<EmailSendResult> {
   const apiKey = process.env.INSTANTLY_API_KEY!.trim();
-  const campaignId =
-    (input.brandId &&
-      process.env[`INSTANTLY_CAMPAIGN_${input.brandId.toUpperCase()}`]?.trim()) ||
-    process.env.INSTANTLY_CAMPAIGN_ID?.trim();
+  const campaignId = input.providerCampaignId || resolveCompanyCampaign("INSTANTLY", input.brandId, input.campaignId);
 
   if (!campaignId) {
     return {
@@ -157,6 +160,7 @@ async function sendViaInstantly(
     const custom = leadCustomFields(input);
     const res = await fetch("https://api.instantly.ai/api/v2/leads", {
       method: "POST",
+      signal: AbortSignal.timeout(15000),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
@@ -176,7 +180,7 @@ async function sendViaInstantly(
       error?: string;
       message?: string;
     };
-    if (!res.ok) {
+    if (!res.ok || !json.id) {
       return {
         ok: false,
         mode: "live",
@@ -195,7 +199,8 @@ async function sendViaInstantly(
       ok: false,
       mode: "live",
       provider: "instantly",
-      error: err instanceof Error ? err.message : "Instantly request failed",
+      error: "Instantly request outcome unknown",
+      uncertain: true,
     };
   }
 }
@@ -204,12 +209,19 @@ function smartleadApiKey(): string {
   return process.env.SMARTLEAD_API_KEY!.trim();
 }
 
-function resolveSmartleadCampaignId(brandId?: string): string | undefined {
-  return (
-    (brandId &&
-      process.env[`SMARTLEAD_CAMPAIGN_${brandId.toUpperCase()}`]?.trim()) ||
-    process.env.SMARTLEAD_CAMPAIGN_ID?.trim()
-  );
+export function resolveCompanyCampaign(provider: "SMARTLEAD" | "INSTANTLY", brandId?: string, crmCampaignId?: string): string | undefined {
+  const prefix = brandId && `${provider}_CAMPAIGN_${brandId.toUpperCase()}`;
+  const scopedKey = prefix && crmCampaignId && `${prefix}__${crmCampaignId.replace(/[^a-zA-Z0-9]/g, "_").toUpperCase()}`;
+  const id = (scopedKey && process.env[scopedKey]?.trim()) || (prefix && process.env[prefix]?.trim());
+  if (!id) return undefined;
+  const mappings = Object.entries(process.env).filter(([key, value]) =>
+    key.startsWith(`${provider}_CAMPAIGN_`) && key !== `${provider}_CAMPAIGN_ID` && value?.trim() === id);
+  if (mappings.length !== 1) throw new Error(`${provider}: each company must have a distinct campaign ID`);
+  return id;
+}
+
+function resolveSmartleadCampaignId(brandId?: string, campaignId?: string) {
+  return resolveCompanyCampaign("SMARTLEAD", brandId, campaignId);
 }
 
 function smartleadUrl(path: string): string {
@@ -263,6 +275,7 @@ async function smartleadJson<T>(
   try {
     const res = await fetch(smartleadUrl(path), {
       ...init,
+    signal: AbortSignal.timeout(15000),
       headers: {
         "Content-Type": "application/json",
         ...(init?.headers || {}),
@@ -289,7 +302,7 @@ async function smartleadJson<T>(
       ok: false,
       status: 0,
       json: {} as T,
-      error: err instanceof Error ? err.message : "Smartlead request failed",
+      error: "Smartlead request outcome unknown",
     };
   }
 }
@@ -388,6 +401,7 @@ export async function syncSmartleadSequenceCopy(input: {
 
   const save = await smartleadJson(`/campaigns/${input.campaignId}/sequences`, {
     method: "POST",
+      signal: AbortSignal.timeout(15000),
     body: JSON.stringify(sequencePayload),
   });
 
@@ -414,6 +428,7 @@ export async function syncSmartleadSequenceCopy(input: {
       `/campaigns/${input.campaignId}/sequences`,
       {
         method: "POST",
+      signal: AbortSignal.timeout(15000),
         body: JSON.stringify(variantPayload),
       },
     );
@@ -453,7 +468,7 @@ export function clearSmartleadSequenceSyncCache(): void {
 async function sendViaSmartlead(
   input: ColdEmailInput & { htmlBody: string },
 ): Promise<EmailSendResult> {
-  const campaignId = resolveSmartleadCampaignId(input.brandId);
+  const campaignId = input.providerCampaignId || resolveSmartleadCampaignId(input.brandId, input.campaignId);
 
   if (!campaignId) {
     return {
@@ -490,6 +505,7 @@ async function sendViaSmartlead(
     const custom = leadCustomFields(input);
     const res = await fetch(url, {
       method: "POST",
+      signal: AbortSignal.timeout(15000),
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         lead_list: [
@@ -507,27 +523,29 @@ async function sendViaSmartlead(
       ok?: boolean;
       message?: string;
       upload_count?: number;
+      added_count?: number;
     };
-    if (!res.ok) {
+    if (!res.ok || json.ok === false || Number(json.added_count ?? json.upload_count ?? 0) < 1) {
       return {
         ok: false,
         mode: "live",
         provider: "smartlead",
-        error: json.message || `Smartlead HTTP ${res.status}`,
+        error: json.message || "Smartlead did not accept this contact",
       };
     }
     return {
       ok: true,
       mode: "live",
       provider: "smartlead",
-      providerId: `smartlead-${campaignId}-${Date.now()}`,
+      providerId: `smartlead:${campaignId}:${input.to.toLowerCase()}`,
     };
   } catch (err) {
     return {
       ok: false,
       mode: "live",
       provider: "smartlead",
-      error: err instanceof Error ? err.message : "Smartlead request failed",
+      error: "Smartlead request outcome unknown",
+      uncertain: true,
     };
   }
 }

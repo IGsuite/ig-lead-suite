@@ -47,6 +47,7 @@ function isMissingUserTable(err: unknown): boolean {
 }
 
 async function readJsonUsers(): Promise<AppUser[]> {
+  if (isProductionDeploy()) throw new Error("Production auth requires a migrated PostgreSQL database; local user fallback is disabled");
   await fs.mkdir(DATA_DIR, { recursive: true });
   try {
     const raw = await fs.readFile(USERS_FILE, "utf8");
@@ -57,6 +58,7 @@ async function readJsonUsers(): Promise<AppUser[]> {
 }
 
 async function writeJsonUsers(users: AppUser[]): Promise<void> {
+  if (isProductionDeploy()) throw new Error("Production auth requires a migrated PostgreSQL database; local user fallback is disabled");
   await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2), "utf8");
 }

@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { assertEntityAccess, isAdminSession } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
@@ -16,6 +17,8 @@ import {
 } from "@/lib/users-store";
 
 export async function GET() {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   await ensureDefaultAdmin();
   const session = await getSession();
   if (!isAdminSession(session)) {
@@ -25,6 +28,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   await ensureDefaultAdmin();
   const session = await getSession();
   if (!isAdminSession(session)) {
@@ -91,6 +96,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   if (!isAdminSession(session)) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });
@@ -149,6 +156,8 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   if (!isAdminSession(session)) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });

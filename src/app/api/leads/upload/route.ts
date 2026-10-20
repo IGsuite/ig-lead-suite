@@ -1,3 +1,6 @@
+import { del } from "@vercel/blob";
+import { formWithUploadedFile } from "@/lib/uploads";
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import Papa from "papaparse";
 import {
@@ -46,8 +49,11 @@ function parseCsvText(text: string): ParsedLeadTable {
 }
 
 export async function POST(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   try {
-    const form = await request.formData();
+    const reference = request.headers.get("content-type")?.includes("application/json") ? (await request.clone().json()).blobPath : undefined;
+    const form = await formWithUploadedFile(request, MAX_FILE_BYTES);
     const file = form.get("file");
     const formSource = String(form.get("source") || "").trim();
     const formGroup = String(form.get("groupName") || "General").trim();
@@ -219,6 +225,7 @@ export async function POST(request: Request) {
       }
     }
 
+    if (reference) await del(reference).catch(() => undefined);
     return NextResponse.json({
       batch: result.batch,
       importedCount: result.imported.length,

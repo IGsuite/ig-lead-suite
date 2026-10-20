@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { assertEntityAccess, isAdminSession } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
@@ -32,6 +33,8 @@ function assertScope(
 }
 
 export async function POST(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   const payload = (await request.json()) as FolderBody;
 

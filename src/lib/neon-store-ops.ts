@@ -1,45 +1,25 @@
-import {
-  entityOfferCopy,
-  normalizeRotation,
-  tomorrowIso,
-  type AutopilotRunResult,
-} from "@/lib/autopilot";
+import type { Prisma } from "@/generated/prisma/client";
+import { enqueueCampaign } from "@/lib/send-queue";
+import type { AutopilotRunResult } from "@/lib/autopilot";
 import { getPrisma } from "@/lib/db";
 import { normalizeContact } from "@/lib/eligibility";
 import {
   mapCampaign,
   mapCostEntry,
-  mapEntity,
-  mapLead,
-  mapLeadSendEvent,
   mapOptOut,
   mapReply,
-  mapRotation,
 } from "@/lib/mappers";
-import {
-  buildSendEvents,
-  messageFingerprint,
-  selectLeadsForSend,
-} from "@/lib/rotation-select";
 import type {
-  Brand,
   Campaign,
   CostEntry,
-  Lead,
   OptOut,
   Reply,
 } from "@/lib/types";
-import { deliverCampaignBatch } from "@/lib/send";
 import {
-  isWithinSendWindow,
   normalizeSendWindow,
-  sendWindowLabel,
 } from "@/lib/send-window";
-import { applyVerification } from "@/lib/verify";
 import {
-  asJson,
   guessSentiment,
-  safeFindMany,
   type LaunchResult,
 } from "@/lib/neon-store-shared";
 import { ensureSeeded } from "@/lib/neon-store-seed";
@@ -105,161 +85,7 @@ export async function setCampaignStatus(
 }
 
 export async function launchCampaign(id: string): Promise<LaunchResult | null> {
-  await ensureSeeded();
-  const prisma = getPrisma();
-  const campaignRow = await prisma.campaign.findUnique({ where: { id } });
-  if (!campaignRow) return null;
-  const campaign = mapCampaign(campaignRow);
-
-  if (!isWithinSendWindow(campaign)) {
-    const updated = await prisma.campaign.update({
-      where: { id },
-      data: { status: "scheduled" },
-    });
-    return {
-      campaign: mapCampaign(updated),
-      deferred: true,
-      reason: "outside_send_window",
-      windowLabel: sendWindowLabel(campaign),
-    };
-  }
-
-  const [leadRows, brandRow, sendEventRows, settings] = await Promise.all([
-    prisma.lead.findMany(),
-    prisma.entity.findUnique({ where: { id: campaign.brandId } }),
-    safeFindMany(
-      () =>
-        prisma.leadSendEvent.findMany({
-          orderBy: { sentAt: "desc" },
-          take: 20_000,
-        }),
-      "LeadSendEvent",
-    ),
-    prisma.platformSettings.findUnique({ where: { id: "default" } }),
-  ]);
-  const brands = brandRow ? [mapEntity(brandRow)] : [];
-  const rotation = settings
-    ? mapRotation(settings, brands)
-    : normalizeRotation({ entityOrder: [] }, brands);
-  const fingerprint = messageFingerprint(
-    campaign.channel,
-    campaign.message,
-    campaign.subject,
-  );
-  const pick = selectLeadsForSend({
-    leads: leadRows.map(mapLead),
-    sendEvents: sendEventRows.map(mapLeadSendEvent),
-    entityId: campaign.brandId,
-    channel: campaign.channel,
-    volume: campaign.volume,
-    mode: campaign.mode || "own",
-    messageFingerprint: fingerprint,
-    sourceFilter: campaign.sourceFilter,
-    groupFilter: campaign.groupFilter,
-    preferVerified: campaign.preferVerified,
-    preferUnoffered: campaign.preferUnoffered,
-    poolCursor: rotation.poolCursor ?? 0,
-  });
-  const eligible = pick.selected;
-
-  if (eligible.length === 0) {
-    const updated = await prisma.campaign.update({
-      where: { id },
-      data: {
-        // Stay draft so the user can widen filters and launch again.
-        status: "draft",
-        sentCount: 0,
-        mode: campaign.mode || "own",
-      },
-    });
-    return {
-      campaign: mapCampaign(updated),
-      deferred: false,
-      emptyAudience: true,
-      eligibleCount: 0,
-      reason: "empty_audience",
-    };
-  }
-
-  if (brandRow) {
-    await deliverCampaignBatch({
-      campaign,
-      brand: mapEntity(brandRow),
-      leads: eligible,
-    });
-  }
-
-  const events = buildSendEvents({
-    leads: eligible,
-    entityId: campaign.brandId,
-    campaignId: campaign.id,
-    channel: campaign.channel,
-    messageFingerprint: fingerprint,
-    mode: campaign.mode || "own",
-  });
-
-  await prisma.$transaction(async (tx) => {
-    for (const lead of eligible) {
-      const offered = lead.offeredEntityIds.includes(campaign.brandId)
-        ? lead.offeredEntityIds
-        : [...lead.offeredEntityIds, campaign.brandId];
-      await tx.lead.update({
-        where: { id: lead.id },
-        data: {
-          offeredEntityIds: offered,
-          lastEntityId: campaign.brandId,
-          status: "contacted",
-        },
-      });
-    }
-
-    if (events.length) {
-      await tx.leadSendEvent.createMany({
-        data: events.map((e) => ({
-          id: e.id,
-          leadId: e.leadId,
-          entityId: e.entityId,
-          campaignId: e.campaignId,
-          channel: e.channel,
-          messageFingerprint: e.messageFingerprint,
-          mode: e.mode,
-          sentAt: new Date(e.sentAt),
-        })),
-      });
-    }
-
-    if (campaign.mode === "auto" && settings) {
-      await tx.platformSettings.update({
-        where: { id: "default" },
-        data: {
-          autopilotJson: asJson({
-            quotas: rotation.quotas,
-            lastRunAt: rotation.lastRunAt ?? null,
-            nextRunAt: rotation.nextRunAt ?? null,
-            poolCursor: pick.nextCursor,
-          }),
-        },
-      });
-    }
-
-    await tx.campaign.update({
-      where: { id },
-      data: {
-        status: "sending",
-        sentCount: eligible.length,
-        startedAt: new Date(),
-        mode: campaign.mode || "own",
-      },
-    });
-  });
-
-  const updated = await prisma.campaign.findUniqueOrThrow({ where: { id } });
-  return {
-    campaign: mapCampaign(updated),
-    deferred: false,
-    emptyAudience: false,
-    eligibleCount: eligible.length,
-  };
+  return enqueueCampaign(id);
 }
 
 export async function applyOptOut(input: {
@@ -344,9 +170,9 @@ export async function ingestReply(input: {
   brandId?: string;
   campaignId?: string;
   leadId?: string;
-}): Promise<Reply> {
-  await ensureSeeded();
-  const prisma = getPrisma();
+}, client?: Prisma.TransactionClient): Promise<Reply> {
+  if (!client) await ensureSeeded();
+  const prisma = client || getPrisma();
   const fromNorm = normalizeContact(input.from);
 
   const leads = await prisma.lead.findMany();
@@ -403,7 +229,7 @@ export async function ingestReply(input: {
   }
 
   if (!leadRow) {
-    const id = `lead-inbound-${Date.now()}`;
+    const id = `lead-inbound-${crypto.randomUUID()}`;
     leadRow = await prisma.lead.create({
       data: {
         id,
@@ -426,7 +252,7 @@ export async function ingestReply(input: {
   const sentiment = guessSentiment(input.body);
   const reply = await prisma.reply.create({
     data: {
-      id: `reply-${Date.now()}`,
+      id: `reply-${crypto.randomUUID()}`,
       campaignId,
       brandId,
       leadId: leadRow.id,
@@ -444,8 +270,8 @@ export async function ingestReply(input: {
     where: { id: leadRow.id },
     data: {
       lastEntityId: brandId,
-      status: sentiment === "opt_out" ? "opted_out" : "replied",
-      optedOut: sentiment === "opt_out",
+      status: sentiment === "opt_out" || leadRow.optedOut ? "opted_out" : "replied",
+      optedOut: sentiment === "opt_out" || leadRow.optedOut,
     },
   });
   await prisma.campaign.update({
@@ -532,225 +358,6 @@ export async function deleteCostEntry(id: string): Promise<boolean> {
 }
 
 export async function runAutopilotDay(): Promise<AutopilotRunResult> {
-  await ensureSeeded();
-  const prisma = getPrisma();
-  const brands = (await prisma.entity.findMany()).map(mapEntity);
-  const settings = await prisma.platformSettings.findUniqueOrThrow({
-    where: { id: "default" },
-  });
-  const rotation = mapRotation(settings, brands);
-  const day = new Date().toISOString().slice(0, 10);
-  const legs: AutopilotRunResult["legs"] = [];
-  let poolCursor = rotation.poolCursor ?? 0;
-
-  const leadRows = await prisma.lead.findMany();
-  let mappedLeads = leadRows.map(mapLead);
-  let sendEvents = (
-    await safeFindMany(
-      () =>
-        prisma.leadSendEvent.findMany({
-          orderBy: { sentAt: "desc" },
-          take: 20_000,
-        }),
-      "LeadSendEvent",
-    )
-  ).map(mapLeadSendEvent);
-
-  for (const entityId of rotation.entityOrder) {
-    const brand = brands.find((b) => b.id === entityId);
-    const quota = rotation.quotas.find((q) => q.entityId === entityId);
-    if (!brand || !quota?.enabled || !brand.rotationEnabled) continue;
-
-    const win = normalizeSendWindow({
-      sendWindowPreset: quota.sendWindowPreset || "morning",
-      sendWindowStart: quota.sendWindowStart,
-      sendWindowEnd: quota.sendWindowEnd,
-      timezone: quota.timezone,
-    });
-    const inWindow = isWithinSendWindow(win);
-
-    const copy = entityOfferCopy(brand);
-    const channelLegs: Array<{
-      channel: "sms" | "email";
-      volume: number;
-      subject?: string;
-      message: string;
-    }> = [
-      { channel: "sms", volume: quota.dailySmsVolume, message: copy.sms },
-      {
-        channel: "email",
-        volume: quota.dailyEmailVolume,
-        subject: copy.emailSubject,
-        message: copy.emailBody,
-      },
-    ];
-
-    for (const leg of channelLegs) {
-      if (leg.volume <= 0) continue;
-      const campaignId = `camp-auto-${entityId}-${leg.channel}-${Date.now()}-${legs.length}`;
-      await prisma.campaign.create({
-        data: {
-          id: campaignId,
-          brandId: entityId,
-          name: `Autopilot · ${brand.shortName} · ${leg.channel.toUpperCase()} · ${day}`,
-          channel: leg.channel,
-          subject: leg.subject ?? null,
-          message: leg.message,
-          sourceFilter: "all",
-          groupFilter: "all",
-          preferUnoffered: false,
-          preferVerified: true,
-          mode: "auto",
-          volume: leg.volume,
-          throttlePerHour: Math.max(60, Math.round(leg.volume / 12)),
-          sendWindowPreset: win.sendWindowPreset,
-          sendWindowStart: win.sendWindowStart,
-          sendWindowEnd: win.sendWindowEnd,
-          timezone: win.timezone,
-          status: inWindow ? "draft" : "scheduled",
-        },
-      });
-
-      if (!inWindow) {
-        legs.push({
-          entityId,
-          channel: leg.channel,
-          campaignId,
-          sent: 0,
-          volume: leg.volume,
-        });
-        continue;
-      }
-
-      const fingerprint = messageFingerprint(
-        leg.channel,
-        leg.message,
-        leg.subject,
-      );
-      const pick = selectLeadsForSend({
-        leads: mappedLeads,
-        sendEvents,
-        entityId,
-        channel: leg.channel,
-        volume: leg.volume,
-        mode: "auto",
-        messageFingerprint: fingerprint,
-        sourceFilter: "all",
-        groupFilter: "all",
-        preferVerified: true,
-        preferUnoffered: false,
-        poolCursor,
-      });
-      poolCursor = pick.nextCursor;
-      const eligible = pick.selected;
-
-      const campaign: Campaign = {
-        id: campaignId,
-        brandId: entityId,
-        name: `Autopilot · ${brand.shortName} · ${leg.channel.toUpperCase()} · ${day}`,
-        channel: leg.channel,
-        subject: leg.subject,
-        message: leg.message,
-        sourceFilter: "all",
-        groupFilter: "all",
-        preferUnoffered: false,
-        preferVerified: true,
-        mode: "auto",
-        volume: leg.volume,
-        throttlePerHour: Math.max(60, Math.round(leg.volume / 12)),
-        sendWindowPreset: win.sendWindowPreset,
-        sendWindowStart: win.sendWindowStart,
-        sendWindowEnd: win.sendWindowEnd,
-        timezone: win.timezone,
-        status: "draft",
-        sentCount: 0,
-        replyCount: 0,
-        optOutCount: 0,
-        bounceCount: 0,
-        createdAt: new Date().toISOString(),
-      };
-
-      if (eligible.length) {
-        await deliverCampaignBatch({ campaign, brand, leads: eligible });
-      }
-
-      const events = buildSendEvents({
-        leads: eligible,
-        entityId,
-        campaignId,
-        channel: leg.channel,
-        messageFingerprint: fingerprint,
-        mode: "auto",
-      });
-
-      await prisma.$transaction(async (tx) => {
-        for (const lead of eligible) {
-          const offered = lead.offeredEntityIds.includes(entityId)
-            ? lead.offeredEntityIds
-            : [...lead.offeredEntityIds, entityId];
-          lead.offeredEntityIds = offered;
-          lead.lastEntityId = entityId;
-          lead.status = "contacted";
-          await tx.lead.update({
-            where: { id: lead.id },
-            data: {
-              offeredEntityIds: offered,
-              lastEntityId: entityId,
-              status: "contacted",
-            },
-          });
-        }
-        if (events.length) {
-          await tx.leadSendEvent.createMany({
-            data: events.map((e) => ({
-              id: e.id,
-              leadId: e.leadId,
-              entityId: e.entityId,
-              campaignId: e.campaignId,
-              channel: e.channel,
-              messageFingerprint: e.messageFingerprint,
-              mode: e.mode,
-              sentAt: new Date(e.sentAt),
-            })),
-          });
-        }
-        await tx.campaign.update({
-          where: { id: campaignId },
-          data: {
-            status: "sending",
-            sentCount: eligible.length,
-            startedAt: new Date(),
-          },
-        });
-      });
-
-      sendEvents = [...events, ...sendEvents];
-
-      legs.push({
-        entityId,
-        channel: leg.channel,
-        campaignId,
-        sent: eligible.length,
-        volume: leg.volume,
-      });
-    }
-  }
-
-  const ranAt = new Date().toISOString();
-  const nextRunAt = tomorrowIso();
-  await prisma.platformSettings.update({
-    where: { id: "default" },
-    data: {
-      autopilotEnabled: true,
-      autopilotJson: asJson({
-        quotas: rotation.quotas,
-        lastRunAt: ranAt,
-        nextRunAt,
-        poolCursor,
-      }),
-    },
-  });
-
-  return { ranAt, nextRunAt, legs };
+  const { scheduleAutopilot } = await import("@/lib/send-queue");
+  return scheduleAutopilot(true);
 }
-

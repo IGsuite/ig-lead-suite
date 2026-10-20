@@ -1,0 +1,68 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { PGlite } from "@electric-sql/pglite";
+import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
+import { Pool } from "pg";
+import { getPrisma } from "../src/lib/db";
+import { ensureSeeded } from "../src/lib/neon-store-seed";
+import { enqueueCampaign, dispatchQueuedSends } from "../src/lib/send-queue";
+import { processWebhook } from "../src/lib/webhook-security";
+
+test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and never retries uncertain sends", { timeout: 90000 }, async () => {
+  Object.assign(process.env, { NODE_ENV: "production", DATABASE_URL: "postgresql://postgres@127.0.0.1:55439/postgres", SENDING_ENABLED: "true", TELNYX_API_KEY: "test-only" });
+  delete process.env.VERCEL;
+  const pg = await PGlite.create();
+  await pg.exec(await readFile("prisma/migrations/202610200001_baseline/migration.sql", "utf8"));
+  await pg.exec(await readFile("prisma/migrations/202610200002_delivery_outbox/migration.sql", "utf8"));
+  const server = new PGLiteSocketServer({ db: pg, host: "127.0.0.1", port: 55439 });
+  await server.start();
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: false, max: 1 });
+  (globalThis as unknown as { pgPool: Pool }).pgPool = pool;
+  const db = getPrisma();
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  try {
+    await ensureSeeded();
+    await db.platformSettings.update({ where: { id: "default" }, data: { autopilotEnabled: false } });
+    await db.entity.update({ where: { id: "abstract" }, data: { phoneNumbers: ["+12125550000"] } });
+    await db.campaign.create({ data: { id: "queue-test", brandId: "abstract", name: "Queue test", channel: "sms", message: "Hello", volume: 4, throttlePerHour: 3600000, status: "draft", sendWindowPreset: "any", preferUnoffered: false } });
+    for (let i = 0; i < 4; i++) await db.lead.create({ data: { id: `test-${i}`, phone: `+1212555100${i}`, source: "integration-test", groupName: "test", purchaseDate: new Date(), costCents: 0, offeredEntityIds: [], status: "available", phoneStatus: "valid", emailStatus: "unverified" } });
+    await db.campaign.update({ where: { id: "queue-test" }, data: { sourceFilter: "integration-test" } });
+    await enqueueCampaign("queue-test");
+    await enqueueCampaign("queue-test");
+    assert.equal(await db.sendJob.count(), 4);
+    assert.equal((await db.campaign.findUniqueOrThrow({ where: { id: "queue-test" } })).sentCount, 0);
+    await db.lead.update({ where: { id: "test-2" }, data: { optedOut: true } });
+    globalThis.fetch = async (_input, init) => {
+      calls++;
+      const body = JSON.parse(String(init?.body));
+      if (body.to.endsWith("3")) throw new Error("connection interrupted after provider may have accepted");
+      if (body.to.endsWith("0")) await db.deliveryReceipt.create({ data: { providerId: "provider-test-0", status: "delivered" } });
+      return new Response(JSON.stringify(body.to.endsWith("1") ? { errors: [{ detail: "Rejected" }] } : { data: { id: "provider-test-0" } }), { status: body.to.endsWith("1") ? 400 : 200 });
+    };
+    await dispatchQueuedSends();
+    const jobs = await db.sendJob.findMany({ orderBy: { leadId: "asc" } });
+    assert.deepEqual(jobs.map(j => j.status), ["delivered", "failed", "skipped", "uncertain"]);
+    assert.equal(await db.leadSendEvent.count({ where: { campaignId: "queue-test" } }), 1);
+    assert.equal((await db.campaign.findUniqueOrThrow({ where: { id: "queue-test" } })).sentCount, 1);
+    assert.equal((await db.lead.findUniqueOrThrow({ where: { id: "test-1" } })).status, "available");
+    await dispatchQueuedSends();
+    assert.equal(calls, 3);
+    let applied = 0;
+    await processWebhook("test", "raw", "event", async () => { applied++; return true; });
+    const duplicate = await processWebhook("test", "raw", "event", async () => { applied++; return true; });
+    assert.equal(duplicate.duplicate, true);
+    assert.equal(applied, 1);
+    await assert.rejects(processWebhook("test", "rollback", "rollback", async () => { throw new Error("rollback"); }));
+    assert.equal(await db.webhookReceipt.count({ where: { id: "test:rollback" } }), 0);
+    await db.$executeRaw`INSERT INTO "WorkerLease" (id, owner, "expiresAt") VALUES ('dispatch', 'other-worker', NOW() + interval '1 minute')`;
+    assert.equal((await dispatchQueuedSends()).busy, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await db.$disconnect();
+    await pool.end();
+    await server.stop();
+    await pg.close();
+  }
+});

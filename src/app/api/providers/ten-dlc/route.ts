@@ -1,9 +1,12 @@
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 
 /**
  * Live Telnyx 10DLC brand/campaign status (no secrets echoed).
  */
 export async function GET() {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const apiKey = process.env.TELNYX_API_KEY?.trim();
   if (!apiKey) {
     return NextResponse.json({

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { decodeSession, isAuthRequired } from "@/lib/auth";
 
-/** Keep Edge-safe: only presence-check the cookie. Full HMAC verify happens in Node route handlers. */
+/** Verify signatures before routing; handlers also verify account status. */
 const SESSION_COOKIE = "sd_session";
 
 /**
@@ -14,9 +15,9 @@ const PUBLIC_PATHS = [
   "/api/auth/logout",
   "/api/auth/session",
   "/api/webhooks/",
-  "/api/providers/status",
+  "/api/cron/dispatch",
   // No secrets echoed — used by Go live checklist / ops probes
-  "/api/providers/ten-dlc",
+
 ];
 
 function isPublic(pathname: string): boolean {
@@ -27,23 +28,11 @@ function isPublic(pathname: string): boolean {
   );
 }
 
-/**
- * Mirror of src/lib/auth isAuthRequired (Edge cannot import Node crypto module).
- * Vercel / production → auth on unless AUTH_REQUIRED=false.
- * Local → open unless AUTH_REQUIRED=true.
- */
-function isAuthRequired(): boolean {
-  const v = process.env.AUTH_REQUIRED?.trim().toLowerCase();
-  if (v === "0" || v === "false" || v === "no") return false;
-  if (v === "1" || v === "true" || v === "yes") return true;
-  return process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
-}
-
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (isPublic(pathname)) return NextResponse.next();
 
-  if (isAuthRequired() && !request.cookies.get(SESSION_COOKIE)?.value) {
+  if (isAuthRequired() && !decodeSession(request.cookies.get(SESSION_COOKIE)?.value)) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -58,6 +47,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico).*)",
   ],
 };

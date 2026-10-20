@@ -316,11 +316,11 @@ export async function launchCampaign(id: string): Promise<LaunchResult | null> {
   }
 
   const brand = data.brands.find((b) => b.id === campaign.brandId);
-  if (brand) {
-    await deliverCampaignBatch({ campaign, brand, leads: toSend });
-  }
+  const summary = brand ? await deliverCampaignBatch({ campaign, brand, leads: toSend }) : null;
+  const acceptedIds = new Set(summary?.results.filter(r => r.status === "accepted").map(r => r.leadId));
+  const accepted = toSend.filter(lead => acceptedIds.has(lead.id));
 
-  for (const lead of toSend) {
+  for (const lead of accepted) {
     if (!lead.offeredEntityIds.includes(campaign.brandId)) {
       lead.offeredEntityIds.push(campaign.brandId);
     }
@@ -329,7 +329,7 @@ export async function launchCampaign(id: string): Promise<LaunchResult | null> {
   }
 
   const events = buildSendEvents({
-    leads: toSend,
+    leads: accepted,
     entityId: campaign.brandId,
     campaignId: campaign.id,
     channel: campaign.channel,
@@ -346,7 +346,7 @@ export async function launchCampaign(id: string): Promise<LaunchResult | null> {
   }
 
   campaign.status = "sending";
-  campaign.sentCount = toSend.length;
+  campaign.sentCount = accepted.length;
   campaign.startedAt = new Date().toISOString();
   await writeStore(data);
   return {

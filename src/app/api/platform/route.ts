@@ -1,3 +1,4 @@
+import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { scopePlatformData } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
@@ -6,6 +7,8 @@ import { ensureDefaultAdmin } from "@/lib/users-store";
 import { isAdminSession } from "@/lib/acl";
 
 export async function GET() {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   try {
     await ensureDefaultAdmin();
     const session = await getSession();
@@ -28,6 +31,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const unauthorized = await requireApiSession();
+  if (unauthorized) return unauthorized;
   const session = await getSession();
   if (!isAdminSession(session)) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });
