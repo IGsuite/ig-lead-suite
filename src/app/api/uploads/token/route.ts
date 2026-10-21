@@ -12,7 +12,8 @@ export async function POST(request: Request) {
     return NextResponse.json(await handleUpload({ request, body,
       onBeforeGenerateToken: async pathname => {
         if (!pathname.startsWith(prefix) || pathname.includes("..")) throw new Error("Invalid upload path");
-        return { maximumSizeInBytes: 20 * 1024 * 1024, addRandomSuffix: true, validUntil: Date.now() + 15 * 60000 };
+        const bulkCsv = pathname.startsWith(`${prefix}lead-imports/`) && /\.csv$/i.test(pathname);
+        return { maximumSizeInBytes: (bulkCsv ? 200 : 20) * 1024 * 1024, addRandomSuffix: true, validUntil: Date.now() + 60 * 60000 };
       },
     }));
   } catch { return NextResponse.json({ error: "Unable to authorize upload" }, { status: 400 }); }

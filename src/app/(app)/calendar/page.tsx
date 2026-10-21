@@ -1,4 +1,6 @@
 "use client";
+import { platformAudienceCatalog } from "@/lib/manual-packages";
+
 
 import Link from "next/link";
 import { Suspense, useCallback, useEffect, useState } from "react";
@@ -42,7 +44,7 @@ function CalendarOverviewInner(){
   if(error||!data)return <ErrorPanel message={error||"Workspace unavailable"} onRetry={refresh}/>;
   const visibleBrands=brandId==="all"?data.brands:data.brands.filter(b=>b.id===brandId);
   const programs=[...new Set(visibleBrands.flatMap(b=>b.programs))];
-  const allItems=marketingPlanItems(data.brands,plan?.month===month?plan.entries:[],data.socialCampaigns||[],data.messageTemplates||[],data.leads);
+  const allItems=marketingPlanItems(data.brands,plan?.month===month?plan.entries:[],data.socialCampaigns||[],data.messageTemplates||[],platformAudienceCatalog(data));
   const items=filterMarketingPlan(allItems,{month,brandId,kind,program});
   const first=new Date(month+"-01T12:00:00Z"),offset=first.getUTCDay();
   const days=new Date(Date.UTC(first.getUTCFullYear(),first.getUTCMonth()+1,0)).getUTCDate();

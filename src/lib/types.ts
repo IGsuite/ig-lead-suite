@@ -512,7 +512,14 @@ export interface EntityImprovementInsight {
   scores: EntityPerformanceScores;
 }
 
+export interface LeadPoolSummary {
+  total: number; fresh: number; suppressed: number;
+  sources: string[]; groups: string[]; packages: {id:string;name:string;count:number}[];
+  byBrand: Record<string,{offered:number;open:number;conversions:number}>;
+  rollups: {brandId:string;source:string;channel:ChannelFilter;offered:number;phoneCapable:number;emailCapable:number;conversions:number;costCents:number}[];
+}
 export interface PlatformData {
+  leadSummary?: LeadPoolSummary;
   version: number;
   brands: Brand[];
   leads: Lead[];

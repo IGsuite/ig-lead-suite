@@ -34,7 +34,7 @@ import { applyVerification } from "@/lib/verify";
 export type { LaunchResult } from "@/lib/neon-store-shared";
 export type { AutopilotRunResult } from "@/lib/autopilot";
 
-export async function getData(): Promise<PlatformData> {
+export async function getData(options?: { leadLimit?: number }): Promise<PlatformData> {
   await ensureSeeded();
   const prisma = getPrisma();
   const [
@@ -55,7 +55,7 @@ export async function getData(): Promise<PlatformData> {
     settings,
   ] = await Promise.all([
     prisma.entity.findMany({ orderBy: { name: "asc" } }),
-    prisma.lead.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.lead.findMany({ orderBy: { createdAt: "desc" }, ...(options?.leadLimit !== undefined ? { take: options.leadLimit } : {}) }),
     prisma.uploadBatch.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.campaign.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.reply.findMany({ orderBy: { createdAt: "desc" } }),

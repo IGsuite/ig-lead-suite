@@ -1,6 +1,14 @@
 import { z } from "zod";
 import { parseAudienceFilter, matchesAudienceFilter } from "@/lib/audience-filters";
-import type { Lead } from "@/lib/types";
+import type { Lead, PlatformData } from "@/lib/types";
+
+/** Catalog rows carry labels only; they are never candidates for sending. */
+export function platformAudienceCatalog(data:PlatformData):Lead[]{
+ if(!data.leadSummary)return data.leads;
+ const now="2000-01-01T00:00:00.000Z";
+ return data.leadSummary.packages.map(p=>({id:`catalog:${p.id}`,source:"",groupName:"",manualPackages:[p],purchaseDate:now,costCents:0,offeredEntityIds:[],lastEntityId:null,convertedEntityId:null,status:"available",optedOut:false,emailStatus:"unverified",phoneStatus:"unverified",createdAt:now}));
+}
+export function platformSourceOptions(data:PlatformData){return data.leadSummary?data.leadSummary.sources.concat(data.leadSummary.packages.map(p=>manualPackageSource(p.id))):leadSourceOptions(data.leads);}
 
 export type ManualPackage={id:string;name:string};
 export const manualPackageInput=z.object({id:z.uuid(),name:z.string().trim().min(1).max(80),rows:z.array(z.object({

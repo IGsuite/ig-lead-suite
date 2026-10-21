@@ -10,11 +10,11 @@ import {listManualPackages} from "@/lib/manual-packages";
 import type {Lead} from "@/lib/types";
 
 const empty={firstName:"",lastName:"",businessName:"",email:"",phone:""};
-export function ManualLeadPackages({open,onOpenChange,leads,onSaved}:{open:boolean;onOpenChange:(open:boolean)=>void;leads:Lead[];onSaved:()=>Promise<void>}){
+export function ManualLeadPackages({open,onOpenChange,leads,onSaved,packageCatalog}:{open:boolean;onOpenChange:(open:boolean)=>void;leads:Lead[];onSaved:()=>Promise<void>;packageCatalog?:{id:string;name:string;count:number}[]}){
   const [mode,setMode]=useState("single"),[target,setTarget]=useState("new"),[name,setName]=useState("");
   const [packageId,setPackageId]=useState<string|null>(null),[contact,setContact]=useState(empty),[bulk,setBulk]=useState("");
   const [saving,setSaving]=useState(false),[error,setError]=useState("");
-  const packages=listManualPackages(leads);
+  const packages=packageCatalog||listManualPackages(leads);
   function close(next:boolean){if(saving)return;onOpenChange(next);if(!next){setMode("single");setTarget("new");setName("");setPackageId(null);setContact(empty);setBulk("");setError("");}}
   async function save(e:React.FormEvent){
     e.preventDefault();setError("");

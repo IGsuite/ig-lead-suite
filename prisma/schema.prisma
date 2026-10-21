@@ -81,6 +81,9 @@ model Lead {
   @@index([emailStatus])
   @@index([phoneStatus])
   @@index([businessName])
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  @@index([uploadBatchId])
+  @@index([manualPackages], type: Gin)
 }
 
 /// Anonymous public-form abuse counters, never a contact or consent record.
@@ -130,6 +133,44 @@ model UploadBatch {
   createdAt      DateTime @default(now())
 
   leads Lead[]
+}
+
+/// Import checkpoints and counters commit with each chunk. No sending side effects.
+model LeadImportJob {
+  id String @id
+  requestId String @unique
+  ownerId String
+  environment String
+  filename String
+  blobPath String
+  csvPath String?
+  sizeBytes Int
+  csvBytes Int?
+  source String
+  groupName String
+  purchaseDate DateTime @db.Date
+  costCents Int
+  status String @default("queued")
+  offset Int @default(0)
+  headers Json @default("[]")
+  rowCount Int @default(0)
+  importedCount Int @default(0)
+  duplicateCount Int @default(0)
+  skippedCount Int @default(0)
+  suppressedCount Int @default(0)
+  error String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, updatedAt])
+  @@index([ownerId, createdAt])
+}
+
+/// Keep source-file membership when the same contact appears in several imports.
+model LeadImportMembership {
+  jobId String
+  leadId String
+  @@id([jobId, leadId])
+  @@index([leadId])
 }
 
 model Campaign {
@@ -301,6 +342,7 @@ model Reply {
 
   @@index([brandId])
   @@index([read])
+  @@index([leadId, channel])
 }
 
 /// Replies sent by an operator from the Inbox. Separate from inbound reply analytics.

@@ -213,7 +213,7 @@ export default function SettingsPage() {
           {storageMode === "neon"
             ? "Seeded into Neon Postgres."
             : "Local JSON under .data/platform.json until DATABASE_URL points at Neon."}{" "}
-          {data.leads.length} shared leads · {data.brands.length} entity portals.
+          {data.leadSummary?.total ?? data.leads.length} shared leads · {data.brands.length} entity portals.
         </p>
         <Button className="mt-4" variant="outline" onClick={reset}>
           Reset demo data

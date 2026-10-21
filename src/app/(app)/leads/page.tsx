@@ -1,10 +1,12 @@
 "use client";
 import {ManualLeadPackages} from "@/components/manual-lead-packages";
-import {listManualPackages,matchesLeadSource,manualPackageSource} from "@/lib/manual-packages";
+import {listManualPackages,manualPackageSource} from "@/lib/manual-packages";
 import { uploadFileToApi } from "@/lib/upload-client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useLeadDirectory } from "@/hooks/use-lead-directory";
+import { LeadImportProgress } from "@/components/lead-import-progress";
+import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
@@ -31,7 +33,7 @@ import { usePlatform } from "@/hooks/use-platform";
 import { compactNumber, money, relativeDay } from "@/lib/client-format";
 
 export default function LeadsPage() {
-  const { data, loading, error, refresh } = usePlatform();
+  const { data, loading, error, refresh: refreshPlatform } = usePlatform({ omitLeads: true });
   const [source, setSource] = useState("LeadForge");
   const [groupName, setGroupName] = useState("Week 13 file");
   const [purchaseDate, setPurchaseDate] = useState(
@@ -46,79 +48,15 @@ export default function LeadsPage() {
   const [verifyFilter, setVerifyFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
   const [packageFilter,setPackageFilter] = useState("all");
+  const directory = useLeadDirectory(query,groupFilter,packageFilter,verifyFilter);
+  const [importRevision,setImportRevision] = useState(0);
+  async function refresh(){await Promise.all([refreshPlatform(),directory.refresh()]);}
 
-  const groups = useMemo(() => {
-    if (!data) return [];
-    return Array.from(new Set(data.leads.map((l) => l.groupName))).sort();
-  }, [data]);
-
-  const verifyStats = useMemo(() => {
-    if (!data) return { unverified: 0, valid: 0, invalid: 0, risky: 0 };
-    return data.leads.reduce(
-      (acc, lead) => {
-        const worst =
-          lead.emailStatus === "invalid" || lead.phoneStatus === "invalid"
-            ? "invalid"
-            : lead.emailStatus === "risky" || lead.phoneStatus === "risky"
-              ? "risky"
-              : lead.emailStatus === "unverified" &&
-                  lead.phoneStatus === "unverified"
-                ? "unverified"
-                : lead.emailStatus === "valid" || lead.phoneStatus === "valid"
-                  ? "valid"
-                  : "unverified";
-        acc[worst] += 1;
-        return acc;
-      },
-      { unverified: 0, valid: 0, invalid: 0, risky: 0 },
-    );
-  }, [data]);
-
-  const filtered = useMemo(() => {
-    if (!data) return [];
-    const q = query.trim().toLowerCase();
-    return data.leads.filter((lead) => {
-      if(!matchesLeadSource(lead,packageFilter))return false;
-      if (groupFilter !== "all" && lead.groupName !== groupFilter) return false;
-      if (verifyFilter === "unverified") {
-        if (
-          lead.emailStatus !== "unverified" &&
-          lead.phoneStatus !== "unverified"
-        )
-          return false;
-      } else if (verifyFilter === "invalid") {
-        if (
-          lead.emailStatus !== "invalid" &&
-          lead.phoneStatus !== "invalid"
-        )
-          return false;
-      } else if (verifyFilter === "valid") {
-        if (
-          lead.emailStatus !== "valid" &&
-          lead.phoneStatus !== "valid"
-        )
-          return false;
-      } else if (verifyFilter === "risky") {
-        if (lead.emailStatus !== "risky" && lead.phoneStatus !== "risky")
-          return false;
-      }
-      if (!q) return true;
-      return [
-        lead.firstName,
-        lead.lastName,
-        lead.businessName,
-        lead.email,
-        lead.phone,
-        lead.source,
-        lead.groupName,
-        lead.status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(q);
-    });
-  }, [data, query, groupFilter, verifyFilter, packageFilter]);
+  const groups = directory.data?.groups || [];
+  const verifyStats = directory.data?.stats || {unverified:0,valid:0,invalid:0,suppressed:0};
+  const filtered = directory.data?.leads || data?.leads || [];
+  const totalLeads = directory.data?.total ?? data?.leads.length ?? 0;
+  const packages = directory.data?.packages || listManualPackages(data?.leads||[]);
 
   async function onUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -134,9 +72,10 @@ export default function LeadsPage() {
       form.set("groupName", groupName);
       form.set("purchaseDate", purchaseDate);
       form.set("costDollars", costDollars);
-      const res = await uploadFileToApi("/api/leads/upload", form);
+      const res = await uploadFileToApi("/api/leads/imports", form);
       const json = (await res.json().catch(() => ({}))) as {
         error?: string;
+        job?: {id:string};
         importedCount?: number;
         duplicateCount?: number;
         skippedEmpty?: number;
@@ -144,6 +83,7 @@ export default function LeadsPage() {
         verifiedOnImport?: { valid?: number; invalid?: number; risky?: number };
       };
       if (!res.ok) throw new Error(json.error || "Upload failed");
+      if(json.job){setImportRevision(v=>v+1);setFile(null);toast.success("File uploaded. Background import started; no campaign launched.");await directory.refresh();return;}
       const skipBits = [
         json.skippedEmpty
           ? `${json.skippedEmpty} missing email/phone`
@@ -182,7 +122,7 @@ export default function LeadsPage() {
       const res = await fetch("/api/leads/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ onlyUnverified }),
+        body: JSON.stringify({ onlyUnverified, leadIds: filtered.map(l=>l.id) }),
       });
       const json = (await res.json()) as {
         error?: string;
@@ -219,7 +159,7 @@ export default function LeadsPage() {
         description="Shared pool for every entity. Upload once, verify contacts, then Autopilot rotates offers through each portal — never mixing brands. Click a lead for the full history page."
       />
 
-      <section className="mb-5 rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-medium">Manual lead packages</h2><p className="mt-1 text-sm text-[color:var(--ink-muted)]">Keep each hand-picked audience in its own folder. Select its package under campaign audience sources.</p></div><Button variant="outline" onClick={openAddLead}>Add one or multiple contacts</Button></div><div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant={packageFilter==="all"?"default":"outline"} onClick={()=>setPackageFilter("all")}>All leads</Button>{listManualPackages(data.leads).map(p=><div key={p.id} className="flex items-center gap-2 rounded-md border border-[color:var(--ink-border)] p-1"><Button size="sm" variant={packageFilter===manualPackageSource(p.id)?"default":"outline"} onClick={()=>{setPackageFilter(manualPackageSource(p.id));setGroupFilter("all");setVerifyFilter("all");setQuery("");}}>{p.name} ({p.count}) · {p.id.slice(0,8)}</Button><Link className="px-2 text-xs underline" href={`/campaigns/new?brandId=abstract&channel=email&source=${encodeURIComponent(manualPackageSource(p.id))}`}>Use in campaign</Link></div>)}</div></section>
+      <section className="mb-5 rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-medium">Manual lead packages</h2><p className="mt-1 text-sm text-[color:var(--ink-muted)]">Keep each hand-picked audience in its own folder. Select its package under campaign audience sources.</p></div><Button variant="outline" onClick={openAddLead}>Add one or multiple contacts</Button></div><div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant={packageFilter==="all"?"default":"outline"} onClick={()=>setPackageFilter("all")}>All leads</Button>{packages.map(p=><div key={p.id} className="flex items-center gap-2 rounded-md border border-[color:var(--ink-border)] p-1"><Button size="sm" variant={packageFilter===manualPackageSource(p.id)?"default":"outline"} onClick={()=>{setPackageFilter(manualPackageSource(p.id));setGroupFilter("all");setVerifyFilter("all");setQuery("");}}>{p.name} ({p.count}) · {p.id.slice(0,8)}</Button><Link className="px-2 text-xs underline" href={`/campaigns/new?brandId=abstract&channel=email&source=${encodeURIComponent(manualPackageSource(p.id))}`}>Use in campaign</Link></div>)}</div></section>
 
       <p className="mb-4 rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] px-4 py-3 text-sm text-[color:var(--ink-soft)] animate-rise">
         <strong className="text-[color:var(--ink)]">Global opt-out</strong>{" "}
@@ -300,18 +240,7 @@ export default function LeadsPage() {
         </div>
         <p className="text-xs text-[color:var(--ink-muted)] md:col-span-2 xl:col-span-6">
           <strong className="text-[color:var(--ink)]">What matters:</strong>{" "}
-          each row needs a valid <strong>email or phone</strong> (required for
-          sends). Capture <strong>first/last name</strong>,{" "}
-          <strong>business/company</strong>, and set <strong>Source</strong>{" "}
-          here (or map source/group columns). Accepts <strong>CSV</strong> or{" "}
-          <strong>Excel (.xlsx / .xls)</strong> — first sheet only. Headers
-          auto-map across vendors — email, phone, mobile, first_name,
-          last_name, name, company, business_name, source, list/group (spaces
-          OK). Extra columns are ignored. Invalid contacts are skipped on
-          import and blocked again at send. Up to <strong>30,000 rows</strong>{" "}
-          / ~20&nbsp;MB per upload (chunked DB writes); if the host rejects
-          large bodies (~4.5&nbsp;MB on some plans) or times out, split the
-          file and import each batch.{" "}
+          CSV imports support up to <strong>1,000,000 rows / 200 MB</strong> per file with background processing and resumable checkpoints. Excel (.xlsx / .xls, first sheet) supports up to 20 MB and 5 million cells; export larger workbooks as CSV. Headers auto-map email, phone, names, and business name; extra fields are ignored. A contact with a usable email stays available for email even if its phone is invalid. Records with no usable channel appear under Junk. Local format checks do not prove deliverability or SMS consent.{" "}
           <a className="underline underline-offset-2" href="/sample-leads.csv">
             Download sample CSV
           </a>
@@ -319,7 +248,8 @@ export default function LeadsPage() {
         </p>
       </form>
 
-      <ManualLeadPackages open={addOpen} onOpenChange={setAddOpen} leads={data.leads} onSaved={refresh}/>
+      <LeadImportProgress revision={importRevision} onChange={directory.refresh}/>
+      <ManualLeadPackages open={addOpen} onOpenChange={setAddOpen} leads={filtered} packageCatalog={packages} onSaved={refresh}/>
 
 
 
@@ -327,29 +257,29 @@ export default function LeadsPage() {
         <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
           <div className="text-xs text-[color:var(--ink-muted)]">In pool</div>
           <div className="mt-1 text-2xl font-[family-name:var(--font-display)]">
-            {compactNumber(data.leads.length)}
+            {compactNumber(totalLeads)}
           </div>
         </div>
         <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
-          <div className="text-xs text-[color:var(--ink-muted)]">Unverified</div>
+          <div className="text-xs text-[color:var(--ink-muted)]">Needs review</div>
           <div className="mt-1 text-2xl font-[family-name:var(--font-display)]">
             {compactNumber(verifyStats.unverified)}
           </div>
         </div>
         <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
-          <div className="text-xs text-[color:var(--ink-muted)]">Valid</div>
+          <div className="text-xs text-[color:var(--ink-muted)]">Format ready</div>
           <div className="mt-1 text-2xl font-[family-name:var(--font-display)]">
             {compactNumber(verifyStats.valid)}
           </div>
         </div>
         <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
-          <div className="text-xs text-[color:var(--ink-muted)]">Risky</div>
+          <div className="text-xs text-[color:var(--ink-muted)]">Suppressed</div>
           <div className="mt-1 text-2xl font-[family-name:var(--font-display)]">
-            {compactNumber(verifyStats.risky)}
+            {compactNumber(verifyStats.suppressed)}
           </div>
         </div>
         <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4 sm:col-span-2 xl:col-span-1">
-          <div className="text-xs text-[color:var(--ink-muted)]">Invalid</div>
+          <div className="text-xs text-[color:var(--ink-muted)]">Junk</div>
           <div className="mt-1 text-2xl font-[family-name:var(--font-display)]">
             {compactNumber(verifyStats.invalid)}
           </div>
@@ -398,10 +328,10 @@ export default function LeadsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All</SelectItem>
-                <SelectItem value="unverified">Unverified</SelectItem>
-                <SelectItem value="valid">Valid</SelectItem>
-                <SelectItem value="risky">Risky</SelectItem>
-                <SelectItem value="invalid">Invalid</SelectItem>
+                <SelectItem value="unverified">Needs verification / review</SelectItem>
+                <SelectItem value="valid">Format ready</SelectItem>
+                <SelectItem value="suppressed">Suppressed / opt-outs</SelectItem>
+                <SelectItem value="invalid">Junk — no usable channel</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -413,7 +343,7 @@ export default function LeadsPage() {
             disabled={verifying}
             onClick={() => void onVerify(true)}
           >
-            {verifying ? "Verifying…" : "Verify unverified"}
+            {verifying ? "Verifying…" : "Check unverified on page"}
           </Button>
           <Button
             type="button"
@@ -421,16 +351,16 @@ export default function LeadsPage() {
             disabled={verifying}
             onClick={() => void onVerify(false)}
           >
-            Re-check all
+            Re-check this page
           </Button>
         </div>
       </div>
 
       <p className="mb-4 text-sm text-[color:var(--ink-muted)]">
-        Showing {compactNumber(filtered.length)} of{" "}
-        {compactNumber(data.leads.length)} leads · local format checks now;
-        NeverBounce / Telnyx number lookup can plug in later.
+        Showing {compactNumber(filtered.length)} on page {directory.page} · {compactNumber(directory.data?.filteredCount??totalLeads)} matching / {compactNumber(totalLeads)} total. Format-ready is a local check; delivery verification is separate.
       </p>
+      {directory.error?<p role="alert" className="mb-3 text-sm text-red-700">{directory.error}</p>:null}
+      <div className="mb-4 flex items-center gap-3"><Button variant="outline" disabled={directory.page===1||directory.loading} onClick={directory.previous}>Previous</Button><span className="text-sm">Page {directory.page}{directory.loading?" · loading…":""}</span><Button variant="outline" disabled={!directory.data?.nextCursor||directory.loading} onClick={directory.next}>Next 100</Button></div>
 
       {data.uploads.length ? (
         <div className="mb-4 flex flex-wrap gap-2">
@@ -449,9 +379,9 @@ export default function LeadsPage() {
 
       {filtered.length === 0 ? (
         <EmptyPanel
-          title={data.leads.length === 0 ? "No leads in the pool yet" : "No leads match"}
+          title={totalLeads === 0 ? "No leads in the pool yet" : "No leads match"}
           description={
-            data.leads.length === 0
+            totalLeads === 0
               ? "Import a provider CSV or Excel file, or use Add lead to start the shared pool. Then verify and launch campaigns."
               : "Clear filters, upload another CSV/Excel file, or add a lead to see contacts in the shared pool."
           }

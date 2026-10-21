@@ -34,10 +34,10 @@ export default function BrandsPage() {
         {data.brands.map((brand) => {
           const campaigns = data.campaigns.filter((c) => c.brandId === brand.id)
             .length;
-          const offered = data.leads.filter((l) =>
+          const offered = data.leadSummary?.byBrand[brand.id]?.offered ?? data.leads.filter((l) =>
             l.offeredEntityIds.includes(brand.id),
           ).length;
-          const open = data.leads.filter(
+          const open = data.leadSummary?.byBrand[brand.id]?.open ?? data.leads.filter(
             (l) =>
               !l.optedOut &&
               l.status !== "converted" &&

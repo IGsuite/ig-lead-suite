@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { leadSourceOptions } from "@/lib/manual-packages";
+import { platformSourceOptions, platformAudienceCatalog } from "@/lib/manual-packages";
 import { CampaignAudienceControls } from "@/components/campaign-audience-controls";
-import { isLeadEligibleForEntity } from "@/lib/eligibility";
+
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useMemo, useState, useEffect } from "react";
 import { ProgramSelect } from "@/components/program-select";
 import { programTemplateMatches, programDraft } from "@/lib/programs";
 import { Sparkles } from "lucide-react";
@@ -25,7 +25,6 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { usePlatform } from "@/hooks/use-platform";
 import {
-  audienceContactKey,
   serializeAudienceFilter,
   AUDIENCE_NOT_SELECTED,
 } from "@/lib/audience-filters";
@@ -81,7 +80,7 @@ function CampaignBuilderInner() {
 
   const sources = useMemo(() => {
     if (!data) return [];
-    return leadSourceOptions(data.leads);
+    return platformSourceOptions(data);
   }, [data]);
 
   const usableTemplates = useMemo(() => {
@@ -94,16 +93,23 @@ function CampaignBuilderInner() {
 
   const groups = useMemo(() => {
     if (!data) return [];
-    return Array.from(new Set(data.leads.map((l) => l.groupName))).sort();
+    return data.leadSummary?.groups || Array.from(new Set(data.leads.map((l) => l.groupName))).sort();
   }, [data]);
 
-  const audienceCount = useMemo(() => {
-    if (!data) return 0;
-    const blocked=new Set(data.leads.filter(l=>l.optedOut||l.status==="opted_out"||l.status==="converted"||l.convertedEntityId).map(l=>audienceContactKey(l,channel)));
-    return new Set(data.leads.filter(lead=>!blocked.has(audienceContactKey(lead,channel))&&isLeadEligibleForEntity(lead,brandId,{
-      channel,sourceFilter,groupFilter,preferUnoffered:mode==="own"&&preferUnoffered,preferVerified:mode==="auto"||preferVerified,
-    })).map(lead=>audienceContactKey(lead,channel))).size;
-  },[data,sourceFilter,groupFilter,channel,mode,preferUnoffered,preferVerified,brandId]);
+  const [audienceCount,setAudienceCount]=useState<number|null>(null);
+  useEffect(()=>{
+    const abort=new AbortController();
+    const timer=setTimeout(async()=>{
+      setAudienceCount(null);
+      try{
+        const params=new URLSearchParams({brandId,channel,source:sourceFilter,group:groupFilter,unoffered:String(mode==="own"&&preferUnoffered),verified:String(mode==="auto"||preferVerified)});
+        const response=await fetch('/api/leads/audience?'+params,{signal:abort.signal});
+        if(!response.ok)throw Error('Audience unavailable');const json=await response.json();
+        if(!abort.signal.aborted)setAudienceCount(json.count);
+      }catch{if(!abort.signal.aborted)setAudienceCount(null);}
+    },300);
+    return()=>{clearTimeout(timer);abort.abort();};
+  },[sourceFilter,groupFilter,channel,mode,preferUnoffered,preferVerified,brandId]);
 
   async function draftWithAi() {
     setDrafting(true);
@@ -326,7 +332,7 @@ function CampaignBuilderInner() {
             <Input value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
 
-          <CampaignAudienceControls source={sourceFilter} group={groupFilter} mode={mode} sources={sources} groups={groups} leads={data.leads} brandId={brandId} disabled={saving} onSource={setSourceFilter} onGroup={setGroupFilter} onMode={setMode} />
+          <CampaignAudienceControls source={sourceFilter} group={groupFilter} mode={mode} sources={sources} groups={groups} leads={platformAudienceCatalog(data)} brandId={brandId} disabled={saving} onSource={setSourceFilter} onGroup={setGroupFilter} onMode={setMode} />
 
           <div className="space-y-2">
             <p className="text-xs text-[color:var(--ink-muted)]">Verification checks contact format. It does not prove mailbox ownership or guarantee delivery. Texts also require direct permission for this company.</p>
@@ -585,10 +591,10 @@ function CampaignBuilderInner() {
             Audience preview
           </h2>
           <p className="mt-3 text-4xl font-[family-name:var(--font-display)] tracking-tight">
-            {compactNumber(Math.min(volume, audienceCount))}
+            {audienceCount===null?"Checking…":compactNumber(Math.min(volume, audienceCount))}
           </p>
           <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
-            contacts selected from {compactNumber(audienceCount)} eligible shared-pool
+            contacts selected from {audienceCount===null?"Checking…":compactNumber(audienceCount)} eligible shared-pool
             leads
             {mode === "own" && preferUnoffered ? " · fresh for this entity" : ""}
             {mode === "auto" || preferVerified ? " · saved valid checks only" : ""}.
@@ -597,7 +603,7 @@ function CampaignBuilderInner() {
             <div className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2">
               Estimated hours at throttle:{" "}
               <strong>
-                {Math.max(1, Math.ceil(Math.min(volume, audienceCount) / throttlePerHour))}
+                {audienceCount===null?"Checking…":Math.max(1, Math.ceil(Math.min(volume, audienceCount) / throttlePerHour))}
               </strong>
             </div>
             <div className="rounded-xl bg-[color:var(--accent-soft)]/60 px-3 py-2">

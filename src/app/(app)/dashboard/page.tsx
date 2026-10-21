@@ -30,10 +30,10 @@ export default function DashboardPage() {
   if (error || !data)
     return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
 
-  const fresh = data.leads.filter(
+  const fresh = data.leadSummary?.fresh ?? data.leads.filter(
     (l) => !l.optedOut && l.offeredEntityIds.length === 0,
   ).length;
-  const optedOut = data.leads.filter((l) => l.optedOut).length;
+  const optedOut = data.leadSummary?.suppressed ?? data.leads.filter((l) => l.optedOut).length;
   const unread = data.replies.filter((r) => !r.read).length;
   const activeCampaigns = data.campaigns.filter((c) => c.status === "sending");
   const bestSource = [...data.providerSpend]
@@ -46,10 +46,10 @@ export default function DashboardPage() {
   const entityEmailScores = allEntityPerformanceScores(data, false, "email");
 
   const entityCoverage = data.brands.map((brand) => {
-    const offered = data.leads.filter((l) =>
+    const offered = data.leadSummary?.byBrand[brand.id]?.offered ?? data.leads.filter((l) =>
       l.offeredEntityIds.includes(brand.id),
     ).length;
-    const stillOpen = data.leads.filter(
+    const stillOpen = data.leadSummary?.byBrand[brand.id]?.open ?? data.leads.filter(
       (l) =>
         !l.optedOut &&
         l.status !== "converted" &&
@@ -93,7 +93,7 @@ export default function DashboardPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 animate-rise">
         <MetricCard
           label="Shared lead pool"
-          value={compactNumber(data.leads.length)}
+          value={compactNumber(data.leadSummary?.total ?? data.leads.length)}
           hint={`${compactNumber(fresh)} never offered · ${compactNumber(optedOut)} suppressed`}
         />
         <MetricCard
