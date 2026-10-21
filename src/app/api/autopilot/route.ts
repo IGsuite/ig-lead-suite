@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { isAdminSession } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
 import { getData, runAutopilotDay, updateRotation } from "@/lib/store";
+import { getPrisma, isNeonConfigured } from "@/lib/db";
 import type { RotationConfig } from "@/lib/types";
 
 export async function GET() {
@@ -29,6 +30,8 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Admin only" }, { status: 403 });
   }
   const patch = (await request.json()) as Partial<RotationConfig>;
+  if (patch.autopilotEnabled && isNeonConfigured() && (await getPrisma().platformSettings.findUnique({where:{id:"default"}}))?.calendarEnabled)
+    return NextResponse.json({error:"Turn off the marketing calendar before enabling generic rotation"},{status:409});
   const rotation = await updateRotation(patch);
   return NextResponse.json(rotation);
 }

@@ -13,8 +13,13 @@ export const POST = handleCallback<{ kind: string }>(async message => {
   if (message.kind !== "dispatch" || !sendingEnabled()) return;
   await dispatchQueuedSends();
   const db = getPrisma();
+  const settings = await db.platformSettings.findUniqueOrThrow({where:{id:"default"}});
+  if (settings.calendarEnabled && await db.marketingCalendarEntry.count({where:{status:{in:["approved","started"]}}})) {
+    await wakeDispatcher(60);
+    return;
+  }
   const active = (await db.campaign.findMany({ where: { status: { in: ["scheduled", "sending"] } }, select: { id: true, brandId: true, channel: true, status: true } }))
-    .filter(c => sendingEntityEnabled(c.brandId) && sendingChannelEnabled(c.channel));
+    .filter(c => !c.id.startsWith("camp-calendar-") && sendingEntityEnabled(c.brandId) && sendingChannelEnabled(c.channel));
   // An idle, manual-only suite does not need an endless queue polling loop.
   if (active.some(c => c.status === "scheduled") || (active.length && await db.sendJob.count({ where: { campaignId: { in: active.map(c => c.id) }, status: "queued" } })))
     await wakeDispatcher(60);

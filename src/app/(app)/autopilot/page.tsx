@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { ErrorPanel, LoadingPanel } from "@/components/state-panels";
@@ -27,13 +27,10 @@ import {
 
 export default function AutopilotPage() {
   const { data, loading, error, refresh } = usePlatform();
-  const [rotation, setRotation] = useState<RotationConfig | null>(null);
+  const [rotationDraft, setRotation] = useState<RotationConfig | null>(null);
+  const rotation = rotationDraft ?? data?.rotation ?? null;
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
-
-  useEffect(() => {
-    if (data) setRotation(data.rotation);
-  }, [data]);
 
   const visibility = useMemo(() => {
     if (!data || !rotation) return null;
@@ -133,6 +130,12 @@ export default function AutopilotPage() {
           </>
         }
       />
+
+      <section className="mb-6 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
+        <h2 className="text-xl font-[family-name:var(--font-display)]">Selected product campaigns</h2>
+        <p className="mt-2 text-sm text-[color:var(--ink-muted)]">Use the marketing calendar to choose each day’s company, product, campaign, template and sending time. The calendar has its own approval and enable controls; enabling it turns generic rotation off.</p>
+        <Link href="/campaigns/calendar" className="mt-3 inline-block text-sm underline">Open marketing calendar</Link>
+      </section>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 animate-rise">
         <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">

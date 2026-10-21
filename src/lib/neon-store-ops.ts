@@ -78,6 +78,9 @@ export async function setCampaignStatus(
   if (!existing) return null;
   const updated = await prisma.$transaction(async tx => {
     const row = await tx.campaign.update({ where: { id }, data: { status } });
+    if (id.startsWith("camp-calendar-") && ["paused","cancelled"].includes(status)) {
+      await tx.marketingCalendarEntry.updateMany({where:{runCampaignId:id},data:{status:"paused"}});
+    }
     if (status === "cancelled") {
       await tx.sendJob.updateMany({ where: { campaignId: id, status: "queued" }, data: { status: "skipped", error: "Campaign cancelled", finishedAt: new Date() } });
     }

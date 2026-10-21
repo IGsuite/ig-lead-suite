@@ -16,6 +16,8 @@ import { reserveInboxSend, finishInboxSend, saveInbound } from "../src/lib/inbox
 import { subscribeAbstractSms, withdrawSmsConsent, ConsentLimitError } from "../src/lib/sms-consent-store";
 import { hasSmsMarketingConsent, readSmsConsents } from "../src/lib/sms-consent";
 import { mapLead } from "../src/lib/mappers";
+import { saveCalendarDrafts, changeCalendarEntries, scheduleCalendarRuns, calendarRunAllowed } from "../src/lib/marketing-calendar-store";
+import { calendarClock } from "../src/lib/marketing-calendar";
 
 test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and never retries uncertain sends", { timeout: 90000 }, async () => {
   Object.assign(process.env, { NODE_ENV: "production", DATABASE_URL: "postgresql://postgres@127.0.0.1:55439/postgres", SENDING_ENABLED: "true", TELNYX_API_KEY: "test-only" });
@@ -26,6 +28,7 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
   await pg.exec(await readFile("prisma/migrations/202610200003_inbox_conversations/migration.sql", "utf8"));
   await pg.exec(await readFile("prisma/migrations/202610200004_manual_campaign_setup/migration.sql", "utf8"));
   await pg.exec(await readFile("prisma/migrations/202610200005_sms_consent/migration.sql", "utf8"));
+  await pg.exec(await readFile("prisma/migrations/202610200006_marketing_calendar/migration.sql", "utf8"));
   const server = new PGLiteSocketServer({ db: pg, host: "127.0.0.1", port: 55439 });
   await server.start();
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: false, max: 1 });
@@ -217,6 +220,39 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     } });
     await saveInbound({ id: "sms-stop-duplicate", brandId: "abstract", channel: "sms", from: "+12125550188", body: "STOP", providerContext: { mailbox: "+12125550000" } });
     assert.equal(await db.lead.count({ where: { id: { startsWith: "stop-duplicate-" }, optedOut: true } }), 2);
+    // A saved month never launches. Only enabled, approved, due dated runs can start.
+    const day = new Date(calendarClock("America/New_York").date+"T15:00:00Z"); day.setUTCDate(day.getUTCDate()+1);
+    const date = day.toISOString().slice(0,10);
+    const beforeCalendarJobs = await db.sendJob.count(), beforeCalendarSetups = creates;
+    const raw = {brandId:"abstract",product:"HELOC",campaignId:queuedDraft.id,startDate:date,endDate:date,weekdays:[0,1,2,3,4,5,6],startTime:"09:00",endTime:"20:00",timezone:"America/New_York",volume:1,throttlePerHour:15};
+    const [entry] = await saveCalendarDrafts(raw);
+    assert.equal(entry.status,"draft");
+    assert.equal(await db.sendJob.count(),beforeCalendarJobs); assert.equal(creates,beforeCalendarSetups);
+    assert.deepEqual(await scheduleCalendarRuns(day),[]);
+    await changeCalendarEntries([entry.id],"approve");
+    assert.equal(await calendarRunAllowed(entry.runCampaignId,day),false);
+    await db.platformSettings.update({where:{id:"default"},data:{calendarEnabled:true}});
+    await db.campaign.update({where:{id:queuedDraft.id},data:{message:"Later blueprint edits"}});
+    await scheduleCalendarRuns(day); await scheduleCalendarRuns(day);
+    assert.equal(await db.campaign.count({where:{id:entry.runCampaignId}}),1);
+    assert.equal((await db.campaign.findUniqueOrThrow({where:{id:entry.runCampaignId}})).message,(entry.snapshot as {message:string}).message);
+    assert.equal(await calendarRunAllowed(entry.runCampaignId,day),true);
+    assert.equal(await db.sendJob.count(),beforeCalendarJobs); assert.equal(creates,beforeCalendarSetups);
+    await setCampaignStatus(entry.runCampaignId,"paused");
+    assert.equal(await calendarRunAllowed(entry.runCampaignId,day),false);
+    assert.equal((await db.campaign.findUniqueOrThrow({where:{id:entry.runCampaignId}})).status,"paused");
+    await scheduleCalendarRuns(day);
+    assert.equal((await db.campaign.findUniqueOrThrow({where:{id:entry.runCampaignId}})).status,"paused");
+    await changeCalendarEntries([entry.id],"pause");
+    const [textDay] = await saveCalendarDrafts({...raw,campaignId:"queue-test"});
+    process.env.SENDING_CHANNELS = "email";
+    await assert.rejects(changeCalendarEntries([textDay.id],"approve"),/channel/);
+    assert.equal((await db.marketingCalendarEntry.findUniqueOrThrow({where:{id:textDay.id}})).status,"draft");
+    const [late] = await saveCalendarDrafts(raw); await changeCalendarEntries([late.id],"approve");
+    const expired = new Date(day);expired.setUTCDate(expired.getUTCDate()+1);
+    await scheduleCalendarRuns(expired);
+    assert.equal((await db.marketingCalendarEntry.findUniqueOrThrow({where:{id:late.id}})).status,"skipped");
+    assert.equal(await db.campaign.count({where:{id:late.runCampaignId}}),0);
   } finally {
     globalThis.fetch = originalFetch;
     await db.$disconnect();
