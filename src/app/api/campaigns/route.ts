@@ -28,7 +28,7 @@ export async function PATCH(request: Request) {
   if (body?.mode !== undefined && body.mode !== "own" && body.mode !== "auto") return NextResponse.json({error:"Choose one-time or automatic"},{status:400});
   if (!body || typeof body.id !== "string" || typeof body.sourceFilter !== "string" || typeof body.groupFilter !== "string" || !body.sourceFilter.trim() || !body.groupFilter.trim() || body.sourceFilter.length>1000 || body.groupFilter.length>1000)
     return NextResponse.json({error:"Campaign, source and group are required"},{status:400});
-  const data = await getData(), campaign = data.campaigns.find(c=>c.id === body.id);
+  const data = await getData({ leadLimit: 0 }), campaign = data.campaigns.find(c=>c.id === body.id);
   if (!campaign) return NextResponse.json({error:"Campaign not found"},{status:404});
   const gate = assertEntityAccess(session,campaign.brandId);
   if (!gate.ok) return NextResponse.json({error:gate.error},{status:gate.status});
@@ -40,7 +40,7 @@ export async function GET() {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
   const session = await getSession();
-  const data = await getData();
+  const data = await getData({ leadLimit: 0 });
   const campaigns = data.campaigns.filter((c) =>
     canAccessEntity(session, c.brandId),
   );
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
   };
 
   if (body.action === "launch" && body.id) {
-    const data = await getData();
+    const data = await getData({ leadLimit: 0 });
     const existing = data.campaigns.find((c) => c.id === body.id);
     if (!existing) {
       return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "cancel" && body.id) {
-    const data = await getData();
+    const data = await getData({ leadLimit: 0 });
     const existing = data.campaigns.find((c) => c.id === body.id);
     if (!existing) {
       return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
@@ -130,7 +130,7 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "pause" && body.id) {
-    const data = await getData();
+    const data = await getData({ leadLimit: 0 });
     const existing = data.campaigns.find((c) => c.id === body.id);
     if (!existing) {
       return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
@@ -163,7 +163,7 @@ export async function POST(request: Request) {
   }
 
   let programs: string[];
-  try { const data = await getData(); programs = validatePrograms(data.brands.find(b=>b.id===body.brandId),body.programs); }
+  try { const data = await getData({ leadLimit: 0 }); programs = validatePrograms(data.brands.find(b=>b.id===body.brandId),body.programs); }
   catch(error) { return NextResponse.json({error:error instanceof Error?error.message:"Invalid programs"},{status:400}); }
 
   const win = normalizeSendWindow({

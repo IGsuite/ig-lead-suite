@@ -27,7 +27,7 @@ export async function GET() {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
   const session = await getSession();
-  const data = await getData();
+  const data = await getData({ leadLimit: 0 });
   const templates = (data.messageTemplates || []).filter(
     (t) => !t.brandId || canAccessEntity(session, t.brandId),
   );
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   const payload = (await request.json()) as CreativeBody;
 
   if (payload.action === "delete" && payload.id) {
-    const data = await getData();
+    const data = await getData({ leadLimit: 0 });
     const existing = (data.messageTemplates || []).find(
       (t) => t.id === payload.id,
     );
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
   }
 
   if (payload.action === "update" && payload.id) {
-    const data = await getData();
+    const data = await getData({ leadLimit: 0 });
     const existing = (data.messageTemplates || []).find(
       (t) => t.id === payload.id,
     );
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
   }
 
   let programs: string[];
-  try { const data=await getData(); programs=validatePrograms(data.brands.find(b=>b.id===brandId),payload.programs); }
+  try { const data=await getData({ leadLimit: 0 }); programs=validatePrograms(data.brands.find(b=>b.id===brandId),payload.programs); }
   catch(error) { return NextResponse.json({error:error instanceof Error?error.message:"Invalid programs"},{status:400}); }
   const template = await createMessageTemplate({
     programs,

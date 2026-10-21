@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       if (!id) {
         return NextResponse.json({ error: "id required" }, { status: 400 });
       }
-      const data = await getData();
+      const data = await getData({ leadLimit: 0 });
       const existing = (data.adAssets || []).find((a) => a.id === id);
       if (!existing) {
         return NextResponse.json({ error: "Asset not found" }, { status: 404 });
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
         : String(folderRaw);
 
     if (folderId) {
-      const data = await getData();
+      const data = await getData({ leadLimit: 0 });
       const folder = (data.adFolders || []).find((f) => f.id === folderId);
       if (!folder) {
         return NextResponse.json({ error: "Folder not found" }, { status: 404 });
@@ -134,7 +134,7 @@ export async function POST(request: Request) {
   };
 
   if (payload.action === "delete" && payload.id) {
-    const data = await getData();
+    const data = await getData({ leadLimit: 0 });
     const existing = (data.adAssets || []).find((a) => a.id === payload.id);
     if (!existing) {
       return NextResponse.json({ error: "Asset not found" }, { status: 404 });
@@ -151,7 +151,7 @@ export async function POST(request: Request) {
   }
 
   if (payload.action === "update" && payload.id) {
-    const data = await getData();
+    const data = await getData({ leadLimit: 0 });
     const existing = (data.adAssets || []).find((a) => a.id === payload.id);
     if (!existing) {
       return NextResponse.json({ error: "Asset not found" }, { status: 404 });

@@ -181,7 +181,7 @@ export async function verifyLeads(input?: {
   await ensureSeeded();
   const prisma = getPrisma();
   const { verifyContact } = await import("@/lib/verify");
-  const leads = await prisma.lead.findMany();
+  const leads = await prisma.lead.findMany({where:{...(input?.leadIds!==undefined?{id:{in:input.leadIds}}:{}),...(input?.onlyUnverified!==false?{OR:[{emailStatus:"unverified"},{phoneStatus:"unverified"}]}:{})}});
   let verified = 0;
   let invalid = 0;
   let risky = 0;

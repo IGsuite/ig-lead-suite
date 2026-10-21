@@ -7,6 +7,8 @@ import { assertReplyAllowed, sendConversationReply } from "@/lib/inbox-service";
 import { conversationKey } from "@/lib/conversation-key";
 import { requireApiSession } from "@/lib/api-auth";
 import { inboxSendingDisabledReason } from "@/lib/inbox-service";
+import { getPrisma, isNeonConfigured } from "@/lib/db";
+import { mapLead } from "@/lib/mappers";
 
 type Context = { params: Promise<{ id: string }> };
 async function load(context: Context) {
@@ -14,11 +16,15 @@ async function load(context: Context) {
   if (unauthorized) return { response: unauthorized };
   const session = await getSession();
   const { id } = await context.params;
-  const data = await getData();
+  const data = await getData({leadLimit:0});
   const reply = data.replies.find((r) => r.id === id);
   if (!reply) return { response: NextResponse.json({ error: "Conversation not found" }, { status: 404 }) };
   const gate = assertEntityAccess(session, reply.brandId);
   if (!gate.ok) return { response: NextResponse.json({ error: gate.error }, { status: gate.status }) };
+  if(isNeonConfigured()){
+    const lead=await getPrisma().lead.findUnique({where:{id:reply.leadId}});
+    data.leads=lead?[mapLead(lead)]:[];
+  }
   return { data, reply };
 }
 

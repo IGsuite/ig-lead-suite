@@ -48,6 +48,7 @@ const SOCIAL_FIELDS: Array<{ key: keyof SocialLinks; label: string }> = [
 ];
 
 type BrandPayload = {
+  offeredCount?:number;
   brand: Brand;
   campaigns: Campaign[];
   leads: Lead[];
@@ -106,7 +107,7 @@ function BrandWorkspaceInner() {
     return <ErrorPanel message={error || "Unknown error"} onRetry={load} />;
 
   const { brand, campaigns, replies, sourceResults } = payload;
-  const offeredCount = payload.leads.length;
+  const offeredCount = payload.offeredCount ?? payload.leads.length;
   const scaleSources = sourceResults.filter((r) => r.recommendation === "scale_up");
   const cutSources = sourceResults.filter((r) => r.recommendation === "cut");
 

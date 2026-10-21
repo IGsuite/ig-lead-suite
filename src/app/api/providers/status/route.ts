@@ -33,7 +33,7 @@ export async function GET() {
   if (unauthorized) return unauthorized;
   const email = emailProviderName();
   const session = await getSession();
-  const brands = (await getData()).brands;
+  const brands = (await getData({ leadLimit: 0 })).brands;
   const normalize = (number: string) => number.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
   const companyReadiness = brands.filter(brand => canAccessEntity(session, brand.id)).map(brand => {
     let emailCampaignConfigured = false;

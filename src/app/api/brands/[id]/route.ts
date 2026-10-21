@@ -5,6 +5,9 @@ import { entitySourceResults } from "@/lib/analytics";
 import { getSession } from "@/lib/auth";
 import { getData, updateBrand } from "@/lib/store";
 import type { Brand } from "@/lib/types";
+import { attachLeadSummary } from "@/lib/lead-summary";
+import { getPrisma, isNeonConfigured } from "@/lib/db";
+import { mapLead } from "@/lib/mappers";
 
 export async function GET(
   _request: Request,
@@ -18,7 +21,8 @@ export async function GET(
   if (!gate.ok) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
-  const data = await getData();
+  let data = await getData({leadLimit:0});
+  if(isNeonConfigured())data=await attachLeadSummary(data);
   const brand = data.brands.find((b) => b.id === id);
   if (!brand) {
     return NextResponse.json({ error: "Brand not found" }, { status: 404 });
@@ -26,7 +30,8 @@ export async function GET(
   return NextResponse.json({
     brand,
     campaigns: data.campaigns.filter((c) => c.brandId === id),
-    leads: data.leads.filter((l) => l.offeredEntityIds.includes(id)),
+    leads: isNeonConfigured()?(await getPrisma().lead.findMany({where:{offeredEntityIds:{has:id}},take:100,orderBy:{createdAt:"desc"}})).map(mapLead):data.leads.filter((l) => l.offeredEntityIds.includes(id)),
+    offeredCount:data.leadSummary?.byBrand[id]?.offered,
     replies: data.replies.filter((r) => r.brandId === id),
     sourceResults: entitySourceResults(data, id),
   });

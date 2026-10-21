@@ -13,7 +13,7 @@ export async function PATCH(
   if (unauthorized) return unauthorized;
   const { id } = await context.params;
   const session = await getSession();
-  const data = await getData();
+  const data = await getData({ leadLimit: 0 });
   const existing = data.replies.find((r) => r.id === id);
   if (!existing) {
     return NextResponse.json({ error: "Reply not found" }, { status: 404 });

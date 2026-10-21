@@ -33,7 +33,7 @@ export async function createBulkImport(input: {
   const metadata = await head(input.blobPath);
   const excel = isExcelUpload({ name: input.filename });
   if (!metadata.size || metadata.size > (excel ? BULK_EXCEL_MAX_BYTES : BULK_MAX_BYTES)) throw new Error(excel ? "Excel files must be at most 20 MB; export larger workbooks as CSV." : "CSV files must be at most 200 MB.");
-  const job = await db.leadImportJob.create({ data: { ...input, id: `import-${randomUUID()}`, sizeBytes: metadata.size, environment: importEnvironment() } });
+  const job = await db.leadImportJob.create({ data: { ...input, purchaseDate:new Date(`${input.purchaseDate}T00:00:00.000Z`), id: `import-${randomUUID()}`, sizeBytes: metadata.size, environment: importEnvironment() } });
   await wakeImport(job.id, 0).catch(async () => {
     await db.leadImportJob.update({ where: { id: job.id }, data: { error: "Background worker could not be reached. Use Resume to retry." } });
   });
