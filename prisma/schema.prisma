@@ -63,6 +63,8 @@ model Lead {
   verifyNotes       String?
   verifiedAt        DateTime?
   uploadBatchId     String?
+  /// Append-only affirmative SMS choices. Imports and inbound replies never grant marketing consent.
+  smsConsents       Json      @default("[]")
   createdAt         DateTime  @default(now())
 
   uploadBatch UploadBatch? @relation(fields: [uploadBatchId], references: [id])
@@ -76,6 +78,13 @@ model Lead {
   @@index([emailStatus])
   @@index([phoneStatus])
   @@index([businessName])
+}
+
+/// Anonymous public-form abuse counters, never a contact or consent record.
+model ConsentRateLimit {
+  id        String   @id
+  count     Int      @default(1)
+  expiresAt DateTime
 }
 
 /// Durable send / assignment history for fair Auto wheel + Own campaign rotation

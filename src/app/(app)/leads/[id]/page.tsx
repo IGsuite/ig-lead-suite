@@ -25,6 +25,7 @@ import type {
   Reply,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { LeadSmsConsent } from "@/components/lead-sms-consent";
 
 type LeadDetailPayload = {
   lead: Lead;
@@ -42,6 +43,13 @@ type LeadDetailPayload = {
   brands: Brand[];
 };
 
+async function fetchLeadDetail(id: string, signal?: AbortSignal) {
+  const res = await fetch(`/api/leads/${encodeURIComponent(id)}`, { cache: "no-store", signal });
+  const json = (await res.json()) as LeadDetailPayload & { error?: string };
+  if (!res.ok) throw new Error(json.error || "Lead not found");
+  return json;
+}
+
 export default function LeadDetailPage() {
   const params = useParams<{ id: string }>();
   const [payload, setPayload] = useState<LeadDetailPayload | null>(null);
@@ -49,13 +57,10 @@ export default function LeadDetailPage() {
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
-    setLoading(true);
-    setError(null);
     try {
-      const res = await fetch(`/api/leads/${params.id}`, { cache: "no-store" });
-      const json = (await res.json()) as LeadDetailPayload & { error?: string };
-      if (!res.ok) throw new Error(json.error || "Lead not found");
+      const json = await fetchLeadDetail(params.id);
       setPayload(json);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load lead");
     } finally {
@@ -64,11 +69,16 @@ export default function LeadDetailPage() {
   }
 
   useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const controller = new AbortController();
+    void fetchLeadDetail(params.id, controller.signal).then(json => {
+      if (!controller.signal.aborted) { setPayload(json); setError(null); }
+    }).catch(err => {
+      if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Failed to load lead");
+    }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
   }, [params.id]);
 
-  if (loading) return <LoadingPanel label="Loading lead…" />;
+  if (loading || (!error && payload?.lead.id !== params.id)) return <LoadingPanel label="Loading lead…" />;
   if (error || !payload)
     return <ErrorPanel message={error || "Unknown error"} onRetry={load} />;
 
@@ -114,6 +124,8 @@ export default function LeadDetailPage() {
           channels — not just one portal.
         </p>
       )}
+
+      <LeadSmsConsent lead={lead} brands={payload.brands} onChange={load} />
 
       <div className="mb-6 grid gap-4 lg:grid-cols-3 animate-rise">
         <section className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 lg:col-span-1">

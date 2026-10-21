@@ -1,0 +1,6 @@
+ALTER TABLE "Lead" ADD COLUMN "smsConsents" JSONB NOT NULL DEFAULT '[]';
+CREATE TABLE "ConsentRateLimit" (
+  "id" TEXT NOT NULL PRIMARY KEY,
+  "count" INTEGER NOT NULL DEFAULT 1,
+  "expiresAt" TIMESTAMP(3) NOT NULL
+);

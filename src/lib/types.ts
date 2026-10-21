@@ -163,6 +163,19 @@ export interface Brand {
   notes?: string;
 }
 
+export interface SmsConsent {
+  id: string;
+  brandId: string;
+  phone: string;
+  status: "granted" | "revoked";
+  recordedAt: string;
+  sourceUrl: string;
+  disclosure: string;
+  disclosureVersion: string;
+  method: "web_form" | "operator";
+  recordedBy?: string;
+}
+
 export interface Lead {
   id: string;
   email?: string;
@@ -189,6 +202,7 @@ export interface Lead {
   verifyNotes?: string;
   verifiedAt?: string;
   uploadBatchId?: string;
+  smsConsents?: SmsConsent[];
   createdAt: string;
 }
 
