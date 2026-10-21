@@ -18,6 +18,8 @@ import { hasSmsMarketingConsent, readSmsConsents } from "../src/lib/sms-consent"
 import { mapLead } from "../src/lib/mappers";
 import { saveCalendarDrafts, changeCalendarEntries, scheduleCalendarRuns, calendarRunAllowed } from "../src/lib/marketing-calendar-store";
 import { calendarClock } from "../src/lib/marketing-calendar";
+import { updateDraftAudience } from "../src/lib/campaign-audience";
+import { AUDIENCE_NOT_SELECTED, matchesAudienceFilter } from "../src/lib/audience-filters";
 
 test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and never retries uncertain sends", { timeout: 90000 }, async () => {
   Object.assign(process.env, { NODE_ENV: "production", DATABASE_URL: "postgresql://postgres@127.0.0.1:55439/postgres", SENDING_ENABLED: "true", TELNYX_API_KEY: "test-only" });
@@ -253,6 +255,17 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     await scheduleCalendarRuns(expired);
     assert.equal((await db.marketingCalendarEntry.findUniqueOrThrow({where:{id:late.id}})).status,"skipped");
     assert.equal(await db.campaign.count({where:{id:late.runCampaignId}}),0);
+    const audienceDraft = await createCampaign({...mapCampaign(await db.campaign.findUniqueOrThrow({where:{id:queuedDraft.id}})),name:"Awaiting lead source",status:"draft",sourceFilter:AUDIENCE_NOT_SELECTED,groupFilter:"all"});
+    assert.equal(matchesAudienceFilter(AUDIENCE_NOT_SELECTED,AUDIENCE_NOT_SELECTED),false);
+    await assert.rejects(enqueueCampaign(audienceDraft.id),/Choose and save a lead source/);
+    assert.equal(await db.emailCampaignSetup.count({where:{campaignId:audienceDraft.id}}),0);
+    const jobsBeforeAudience = await db.sendJob.count();
+    await assert.rejects(updateDraftAudience(audienceDraft.id,"not-an-existing-source","all"),/existing lead source/);
+    const edited = await updateDraftAudience(audienceDraft.id,"email-queue-fixture","all");
+    assert.equal(edited.sourceFilter,"email-queue-fixture"); assert.equal(edited.status,"draft");
+    assert.equal(await db.sendJob.count(),jobsBeforeAudience);
+    assert.equal(await db.emailCampaignSetup.count({where:{campaignId:audienceDraft.id}}),0);
+    await assert.rejects(updateDraftAudience(queuedDraft.id,"all","all"),/untouched drafts/);
   } finally {
     globalThis.fetch = originalFetch;
     await db.$disconnect();

@@ -3,6 +3,7 @@ import { getPrisma } from "@/lib/db";
 import { mapCampaign, mapMessageTemplate } from "@/lib/mappers";
 import { calendarInput, calendarDates, calendarSnapshot, calendarDisposition, type CalendarEntry } from "@/lib/marketing-calendar";
 import { assertCampaignSendingReady } from "@/lib/dispatch-scheduler";
+import { AUDIENCE_NOT_SELECTED } from "@/lib/audience-filters";
 import type { Prisma } from "@/generated/prisma/client";
 
 export async function saveCalendarDrafts(raw: unknown) {
@@ -31,6 +32,7 @@ export async function changeCalendarEntries(ids: string[], action: "approve" | "
     for (const entry of entries) {
       if (action === "approve") {
         assertCampaignSendingReady(entry.brandId,entry.channel);
+        if ((entry.snapshot as unknown as CalendarEntry["snapshot"]).sourceFilter === AUDIENCE_NOT_SELECTED) throw new Error("Choose the campaign's audience, then save new calendar drafts before approval");
         if (!["draft","paused","approved"].includes(entry.status)) throw new Error("Started or expired entries cannot be approved again");
         if (calendarDisposition(entry,false) === "expired") throw new Error("Past entries cannot be activated; create a new dated draft");
         if (await tx.campaign.findUnique({where:{id:entry.runCampaignId}})) throw new Error("This run already started. Create a new date instead of changing its saved copy");

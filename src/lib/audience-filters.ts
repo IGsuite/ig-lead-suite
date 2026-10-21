@@ -27,11 +27,15 @@ export function matchesAudienceFilter(
   value: string | null | undefined,
   filter: string | null | undefined,
 ): boolean {
+  if (filter === AUDIENCE_NOT_SELECTED) return false;
   const parsed = parseAudienceFilter(filter);
   if (parsed === "all") return true;
   const v = (value || "").trim();
   return parsed.includes(v);
 }
+
+/** A saved draft awaiting the operator's deliberate source choice; never matches a lead. */
+export const AUDIENCE_NOT_SELECTED = "__audience_not_selected__";
 
 export function toggleAudienceValue(
   current: string[],
