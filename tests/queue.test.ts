@@ -146,6 +146,7 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
       if (path.endsWith("/schedule")) {
         assert.equal(typeof body.max_new_leads_per_day, "number", "Smartlead requires the new-lead daily limit");
         assert.ok(!("max_leads_per_day" in body), "Smartlead rejects the old daily-limit field");
+        assert.ok(Number(body.min_time_btw_emails)>=3,"Smartlead rejects campaign intervals below three minutes");
       }
       if (path.endsWith("/sequences")) {
         if (init?.method === "GET") return Response.json(providerSequences.get(path) || []);
@@ -332,7 +333,7 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     const providerRunId=await ensureEmailCampaign(mapCampaign(providerRun),brand);
     const datedSchedule=setupCalls.find(c=>c.path===`/api/v1/campaigns/${providerRunId}/schedule`)!.body;
     assert.equal(datedSchedule.max_new_leads_per_day,250);
-    assert.equal(datedSchedule.min_time_btw_emails,2);
+    assert.equal(datedSchedule.min_time_btw_emails,3);
     assert.deepEqual(datedSchedule.days_of_the_week,[day.getUTCDay()]);
   } finally {
     globalThis.fetch = originalFetch;
