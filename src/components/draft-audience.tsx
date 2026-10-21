@@ -19,7 +19,7 @@ export function DraftAudience({campaign,sources,groups,leads,onSaved}:{campaign:
       await onSaved();toast.success("Audience and run settings saved. Calendar days remain drafts.");
     }catch(e){toast.error(e instanceof Error?e.message:"Settings could not save");}finally{setSaving(false);}
   }
-  return <div className="mt-3 space-y-3">
+  return <div className="mt-3 max-w-xl space-y-3 whitespace-normal">
     <CampaignAudienceControls source={source} group={group} mode={mode} sources={sources} groups={groups} leads={leads} brandId={campaign.brandId} campaignId={campaign.id} disabled={saving} onSource={setSource} onGroup={setGroup} onMode={setMode} />
     <p className="max-w-xl text-xs text-[color:var(--ink-muted)]">Automatic runs require a saved valid contact for the channel: email for email, phone plus direct text permission for SMS. Basic verification checks format, not mailbox ownership or guaranteed delivery.</p>
     <Button size="sm" variant="outline" disabled={saving||source===AUDIENCE_NOT_SELECTED||(source===campaign.sourceFilter&&group===campaign.groupFilter&&mode===campaign.mode)} onClick={()=>void save()}>{saving?"Saving…":"Save audience & schedule"}</Button>

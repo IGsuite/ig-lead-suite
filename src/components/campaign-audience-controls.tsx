@@ -15,7 +15,7 @@ export function CampaignAudienceControls({source,group,mode,sources,groups,leads
   const parsedGroups=parseAudienceFilter(group);
   const selectedGroups=group===AUDIENCE_NOT_SELECTED||parsedGroups==="all"?[]:parsedGroups;
   const field="rounded-md border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-2 text-xs";
-  return <fieldset disabled={disabled} className="mt-3 min-w-64 space-y-3 text-xs">
+  return <fieldset disabled={disabled} className="mt-3 min-w-64 max-w-xl space-y-3 whitespace-normal text-xs">
     <legend className="font-medium">Audience & schedule</legend>
     <div className="flex flex-wrap gap-2" aria-label="Audience selection">
       <Button type="button" size="sm" aria-pressed={source==="all"} variant={source==="all"?"default":"outline"} onClick={()=>{onSource("all");onGroup("all");}}>Pool — all leads</Button>
