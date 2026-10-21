@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { platformSourceOptions, platformAudienceCatalog } from "@/lib/manual-packages";
 import { ProgramSelect } from "@/components/program-select";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { campaignStatusFilters, type CampaignStatusFilter, type CampaignListStatus } from "@/lib/campaign-status-filters";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
@@ -34,7 +35,7 @@ import type { CampaignChannel } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function CampaignsInner() {
-  const { data, loading, error, refresh } = usePlatform();
+  const { data, loading, error, refresh } = usePlatform({ omitLeads: true });
   const searchParams = useSearchParams();
   const initialChannel = searchParams.get("channel");
   const [channel, setChannel] = useState<CampaignChannel>(
@@ -45,12 +46,37 @@ function CampaignsInner() {
   );
 
   const [programs,setPrograms] = useState<string[]>([]);
-  const campaigns = useMemo(() => {
+  const [statusFilter, setStatusFilter] = useState<CampaignStatusFilter>("all");
+  const [statuses, setStatuses] = useState<Record<string, CampaignListStatus> | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    const controller = new AbortController();
+    let inFlight = false;
+    async function loadStatuses() {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const res = await fetch("/api/campaigns/overview", { cache: "no-store", signal: controller.signal });
+        if (!res.ok) throw new Error("Campaign statuses could not be refreshed");
+        const result = await res.json() as { statuses: Record<string, CampaignListStatus> };
+        if (!controller.signal.aborted) { setStatuses(result.statuses); setStatusError(null); }
+      } catch (err) {
+        if (!controller.signal.aborted) setStatusError(err instanceof Error ? err.message : "Status refresh failed");
+      } finally { inFlight = false; }
+    }
+    void loadStatuses();
+    const timer = setInterval(() => { if (document.visibilityState === "visible") void loadStatuses(); }, 30000);
+    return () => { controller.abort(); clearInterval(timer); };
+  }, [data]);
+  const matchingCampaigns = useMemo(() => {
     if (!data) return [];
     return data.campaigns.filter(
       (c) => c.brandId === entityId && c.channel === channel && (!programs.length || programs.some(p=>c.programs?.includes(p))),
     );
   }, [data, entityId, channel, programs]);
+  const campaigns = matchingCampaigns.filter(c => statusFilter === "all" || statuses?.[c.id]?.group === statusFilter);
+  const statusCounts = Object.fromEntries(campaignStatusFilters.map(status => [status, status === "all" ? matchingCampaigns.length : matchingCampaigns.filter(c => statuses?.[c.id]?.group === status).length]));
 
   const counts = useMemo(() => {
     if (!data) return { sms: 0, email: 0 };
@@ -122,6 +148,7 @@ function CampaignsInner() {
   if (loading) return <LoadingPanel />;
   if (error || !data)
     return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
+  if (!statuses) return statusError ? <ErrorPanel message={statusError} onRetry={refresh} /> : <LoadingPanel />;
 
   const brand = data.brands.find((b) => b.id === entityId);
   const channelLabel = channel === "sms" ? "SMS" : "Email";
@@ -183,6 +210,15 @@ function CampaignsInner() {
         </Button>
       </div>
 
+      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Campaign status filters">
+        {campaignStatusFilters.map(status => <Button key={status} type="button" size="sm" variant={statusFilter === status ? "default" : "outline"} aria-pressed={statusFilter === status} onClick={() => setStatusFilter(status)}>
+          {status.charAt(0).toUpperCase()+status.slice(1)} ({statusCounts[status]})
+        </Button>)}
+        <Button type="button" size="sm" variant="ghost" onClick={() => void refresh()}>Refresh</Button>
+      </div>
+      <p className="mb-4 text-xs text-[color:var(--ink-muted)]">Active = sending now · Pending = scheduled · Inactive = draft or paused. Statuses update every 30 seconds.</p>
+      {statusError ? <p role="alert" className="mb-4 text-sm text-amber-800">{statusError}. Showing the last successful status check; use Refresh to retry.</p> : null}
+
       <div className="mb-6 max-w-sm space-y-2 animate-rise">
         <label className="text-sm font-medium">Entity portal</label>
         <Select
@@ -209,6 +245,7 @@ function CampaignsInner() {
       </div>
 
       {campaigns.length === 0 ? (
+        matchingCampaigns.length > 0 ? <EmptyPanel title={`No ${statusFilter} ${channelLabel} campaigns`} description="Choose All or another status to see the other campaigns in this portal." action={<Button variant="outline" onClick={()=>setStatusFilter("all")}>Show all statuses</Button>} /> :
         <EmptyPanel
           title={`No ${brand?.shortName || "entity"} ${channelLabel} campaigns`}
           description={`Create a ${channelLabel} campaign for this portal. Audience still comes from the shared pool, but the offer and send identity stay here.`}
@@ -281,7 +318,8 @@ function CampaignsInner() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <StatusPill status={campaign.status} />
+                    <StatusPill status={statuses[campaign.id]?.status || campaign.status} />
+                    {statuses[campaign.id]?.detail ? <p className="mt-1 max-w-56 text-xs text-[color:var(--ink-muted)]">{statuses[campaign.id].detail}</p> : null}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex flex-wrap items-center justify-end gap-2">
