@@ -17,6 +17,8 @@ const PUBLIC_PATHS = [
   "/api/webhooks/",
   "/api/cron/dispatch",
   "/api/queues/dispatch",
+  "/sms/abstract",
+  "/api/sms/subscribe",
   // No secrets echoed — used by Go live checklist / ops probes
 
 ];

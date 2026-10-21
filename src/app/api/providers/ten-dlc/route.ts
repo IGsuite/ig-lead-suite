@@ -57,14 +57,15 @@ export async function GET() {
           },
         );
         const cJson = (await cRes.json().catch(() => ({}))) as {
-          records?: Array<{ campaignId?: string; status?: string }>;
-          data?: Array<{ campaignId?: string; status?: string }>;
+          records?: Array<{ campaignId?: string; status?: string; campaignStatus?: string; failureReasons?: unknown[] }>;
+          data?: Array<{ campaignId?: string; status?: string; campaignStatus?: string; failureReasons?: unknown[] }>;
         };
         const records = cJson.records || cJson.data || [];
         return {
           ...brand,
+          needsCorrection: records.some(r => /FAILED|REJECT|DECLIN/i.test(r.campaignStatus || "") || Boolean(r.failureReasons?.length)),
           campaigns: records.map(
-            (r) => `${r.campaignId || "?"} (${r.status || "unknown"})`,
+            (r) => `${r.campaignId || "?"} (${r.campaignStatus || "carrier approval unverified"}; registration ${r.status || "unknown"})`,
           ),
         };
       }),
@@ -72,12 +73,13 @@ export async function GET() {
 
     const brandOk = withCampaigns.some((b) => b.status === "OK");
     const hasCampaign = withCampaigns.some((b) => b.campaigns.length > 0);
+    const needsCorrection = withCampaigns.some(b => "needsCorrection" in b && b.needsCorrection);
     let summary = "No 10DLC brands registered";
     if (brandOk && !hasCampaign) {
       summary =
         "10DLC Brand approved (status OK) — register a 10DLC Campaign next for volume SMS";
     } else if (brandOk && hasCampaign) {
-      summary = "10DLC Brand + Campaign present";
+      summary = needsCorrection ? "10DLC campaign needs correction — outgoing texts remain unavailable" : "10DLC campaign present — verify carrier approval before enabling texts";
     } else if (withCampaigns.length) {
       summary = `Brand status: ${withCampaigns.map((b) => b.status).join(", ")}`;
     }
@@ -86,7 +88,7 @@ export async function GET() {
       configured: true,
       brands: withCampaigns,
       summary,
-      pending: brandOk && !hasCampaign ? "10dlc_campaign" : !brandOk ? "10dlc_brand" : null,
+      pending: brandOk ? "10dlc_campaign" : "10dlc_brand",
     });
   } catch (err) {
     return NextResponse.json(

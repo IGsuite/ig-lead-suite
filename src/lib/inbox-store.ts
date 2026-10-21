@@ -4,6 +4,7 @@ import path from "node:path";
 import { getPrisma, isNeonConfigured } from "@/lib/db";
 import { ensureStore, writeStore } from "@/lib/json-store-io";
 import { normalizeContact } from "@/lib/eligibility";
+import { smsPhone } from "@/lib/sms-consent";
 import { mapReply } from "@/lib/mappers";
 import type { InboundReply } from "@/lib/reply-routing";
 import type { InboxSend, Reply } from "@/lib/types";
@@ -34,7 +35,8 @@ function sentiment(body: string): Reply["sentiment"] {
 export async function saveInbound(input: InboundReply, client?: Prisma.TransactionClient): Promise<Reply> {
   assertStorage();
   const id = input.id || `reply-${randomUUID()}`;
-  const contact = normalizeContact(input.from);
+  const identity = (value: string) => input.channel === "sms" ? smsPhone(value) || normalizeContact(value) : normalizeContact(value);
+  const contact = identity(input.from);
   const kind = sentiment(input.body);
   if (client || isNeonConfigured()) {
     const persist = async (tx: Prisma.TransactionClient) => {
@@ -45,7 +47,7 @@ export async function saveInbound(input: InboundReply, client?: Prisma.Transacti
       if (!await tx.entity.findUnique({ where: { id: input.brandId } })) throw new Error("Unknown entity");
       const leads = await tx.lead.findMany({ where: input.channel === "email"
         ? { email: { equals: input.from, mode: "insensitive" } } : { phone: { not: null } } });
-      let lead = leads.find((l) => normalizeContact(input.channel === "email" ? l.email || "" : l.phone || "") === contact);
+      let lead = leads.find((l) => identity(input.channel === "email" ? l.email || "" : l.phone || "") === contact);
       if (!lead) lead = await tx.lead.create({ data: {
         id: `lead-inbound-${randomUUID()}`, email: input.channel === "email" ? input.from : null,
         phone: input.channel === "sms" ? input.from : null, source: "Inbound reply", groupName: "Inbound",
@@ -71,6 +73,10 @@ export async function saveInbound(input: InboundReply, client?: Prisma.Transacti
         lastEntityId: input.brandId, status: lead.optedOut || kind === "opt_out" ? "opted_out" : "replied",
         ...(kind === "opt_out" ? { optedOut: true } : {}),
       } });
+      if (kind === "opt_out") {
+        const matchingIds = leads.filter(l => identity(input.channel === "email" ? l.email || "" : l.phone || "") === contact).map(l => l.id);
+        await tx.lead.updateMany({ where: { id: { in: [...new Set([...matchingIds, lead.id])] } }, data: { optedOut: true, status: "opted_out" } });
+      }
       await tx.campaign.update({ where: { id: campaignId }, data: { replyCount: { increment: 1 } } });
       return mapReply(row);
     };
@@ -83,7 +89,7 @@ export async function saveInbound(input: InboundReply, client?: Prisma.Transacti
     if (!data.brands.some((b) => b.id === input.brandId)) throw new Error("Unknown entity");
     const campaign = input.campaignId ? data.campaigns.find((c) => c.id === input.campaignId && c.brandId === input.brandId && c.channel === input.channel) : undefined;
     if (input.campaignId && !campaign) throw new Error("Campaign does not belong to this entity and channel");
-    let lead = data.leads.find((l) => normalizeContact(input.channel === "email" ? l.email || "" : l.phone || "") === contact);
+    let lead = data.leads.find((l) => identity(input.channel === "email" ? l.email || "" : l.phone || "") === contact);
     if (!lead) {
       lead = { id: `lead-inbound-${randomUUID()}`, email: input.channel === "email" ? input.from : undefined,
         phone: input.channel === "sms" ? input.from : undefined, source: "Inbound reply", groupName: "Inbound",
@@ -96,7 +102,9 @@ export async function saveInbound(input: InboundReply, client?: Prisma.Transacti
     const reply: Reply = { id, brandId: input.brandId, campaignId: campaign?.id || `camp-inbound-${input.brandId}-${input.channel}`,
       leadId: lead.id, channel: input.channel, from: input.from, body: input.body, sentiment: kind,
       manualForwarded: false, crmSynced: false, read: false, createdAt: new Date().toISOString(), providerContext: input.providerContext };
-    if (kind === "opt_out") lead.optedOut = true;
+    if (kind === "opt_out") for (const match of data.leads.filter(l => identity(input.channel === "email" ? l.email || "" : l.phone || "") === contact)) {
+      match.optedOut = true; match.status = "opted_out";
+    }
     lead.status = lead.optedOut ? "opted_out" : "replied";
     lead.lastEntityId = input.brandId;
     data.replies.unshift(reply);

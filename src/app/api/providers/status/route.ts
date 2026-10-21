@@ -11,6 +11,7 @@ import { LIVE_CAP_DEFAULT, LIVE_CAP_MAX, resolveLiveCap } from "@/lib/send";
 import { isNeonConfigured, getData } from "@/lib/store";
 import { getSession } from "@/lib/auth";
 import { canAccessEntity } from "@/lib/acl";
+import { createHash } from "node:crypto";
 
 function hasAnyCampaign(
   prefix: "INSTANTLY" | "SMARTLEAD",
@@ -42,7 +43,13 @@ export async function GET() {
     return { entityId: brand.id, sendingEnabled: sendingEntityEnabled(brand.id), emailCampaignConfigured, uniqueSmsNumber };
   });
   const publicAppUrl = process.env.PUBLIC_APP_URL?.trim().replace(/\/$/, "") || null;
+  let databaseScopeId: string | null = null;
+  try {
+    const dbUrl = new URL(process.env.DATABASE_URL || "");
+    databaseScopeId = createHash("sha256").update(dbUrl.hostname.replace("-pooler.", ".") + dbUrl.pathname).digest("hex").slice(0, 16);
+  } catch { /* Local JSON storage has no database scope. */ }
   return NextResponse.json({
+    databaseScopeId,
     neon: isNeonConfigured() ? "live" : "local",
     telnyx: isTelnyxConfigured() ? "live" : "mock",
     email,

@@ -12,7 +12,10 @@ import { ensureEmailCampaign } from "../src/lib/providers/campaign-setup";
 import { mapCampaign, mapEntity } from "../src/lib/mappers";
 import { POST as emailWebhook } from "../src/app/api/webhooks/email/route";
 import { processWebhook } from "../src/lib/webhook-security";
-import { reserveInboxSend, finishInboxSend } from "../src/lib/inbox-store";
+import { reserveInboxSend, finishInboxSend, saveInbound } from "../src/lib/inbox-store";
+import { subscribeAbstractSms, withdrawSmsConsent, ConsentLimitError } from "../src/lib/sms-consent-store";
+import { hasSmsMarketingConsent, readSmsConsents } from "../src/lib/sms-consent";
+import { mapLead } from "../src/lib/mappers";
 
 test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and never retries uncertain sends", { timeout: 90000 }, async () => {
   Object.assign(process.env, { NODE_ENV: "production", DATABASE_URL: "postgresql://postgres@127.0.0.1:55439/postgres", SENDING_ENABLED: "true", TELNYX_API_KEY: "test-only" });
@@ -22,6 +25,7 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
   await pg.exec(await readFile("prisma/migrations/202610200002_delivery_outbox/migration.sql", "utf8"));
   await pg.exec(await readFile("prisma/migrations/202610200003_inbox_conversations/migration.sql", "utf8"));
   await pg.exec(await readFile("prisma/migrations/202610200004_manual_campaign_setup/migration.sql", "utf8"));
+  await pg.exec(await readFile("prisma/migrations/202610200005_sms_consent/migration.sql", "utf8"));
   const server = new PGLiteSocketServer({ db: pg, host: "127.0.0.1", port: 55439 });
   await server.start();
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: false, max: 1 });
@@ -31,16 +35,31 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
   let calls = 0;
   try {
     await ensureSeeded();
+    process.env.AUTH_SECRET = "consent-test-secret-only".repeat(2);
+    await subscribeAbstractSms("(212) 555-0199", "https://suite.example.invalid/sms/abstract", "test-visitor");
+    const signup = await db.lead.findFirstOrThrow({ where: { phone: "+12125550199" } });
+    assert.equal(hasSmsMarketingConsent(mapLead(signup), "abstract"), true);
+    assert.equal(hasSmsMarketingConsent(mapLead(signup), "ahava"), false);
+    assert.equal(readSmsConsents(signup.smsConsents)[0].method, "web_form");
+    await withdrawSmsConsent(signup.id, "abstract");
+    assert.equal(hasSmsMarketingConsent(mapLead(await db.lead.findUniqueOrThrow({ where: { id: signup.id } })), "abstract"), false);
+    await db.lead.update({ where: { id: signup.id }, data: { optedOut: true } });
+    await subscribeAbstractSms(signup.phone!, "https://suite.example.invalid/sms/abstract", "test-visitor");
+    assert.equal(readSmsConsents((await db.lead.findUniqueOrThrow({ where: { id: signup.id } })).smsConsents).length, 2);
+    for (let i = 0; i < 3; i++) await subscribeAbstractSms(signup.phone!, "https://suite.example.invalid/sms/abstract", "test-visitor");
+    await assert.rejects(subscribeAbstractSms(signup.phone!, "https://suite.example.invalid/sms/abstract", "test-visitor"), ConsentLimitError);
     await db.platformSettings.update({ where: { id: "default" }, data: { autopilotEnabled: false } });
     await db.entity.update({ where: { id: "abstract" }, data: { phoneNumbers: ["+12125550000"] } });
     await db.campaign.create({ data: { id: "queue-test", brandId: "abstract", name: "Queue test", channel: "sms", message: "Hello", volume: 4, throttlePerHour: 3600000, status: "draft", sendWindowPreset: "any", preferUnoffered: false } });
-    for (let i = 0; i < 4; i++) await db.lead.create({ data: { id: `test-${i}`, phone: `+1212555100${i}`, source: "integration-test", groupName: "test", purchaseDate: new Date(), costCents: 0, offeredEntityIds: [], status: "available", phoneStatus: "valid", emailStatus: "unverified" } });
+    for (let i = 0; i < 5; i++) await db.lead.create({ data: { id: `test-${i}`, phone: `+1212555100${i}`, source: "integration-test", groupName: "test", purchaseDate: new Date(), costCents: 0, offeredEntityIds: [], status: "available", phoneStatus: "valid", emailStatus: "unverified",
+      smsConsents: i === 4 ? [] : [{ id: `choice-${i}`, brandId: "abstract", phone: `+1212555100${i}`, status: "granted", recordedAt: new Date().toISOString(), sourceUrl: "https://fixture.example.invalid/sms", disclosure: "Fixture SMS marketing opt-in", disclosureVersion: "fixture-v1", method: "web_form" }] } });
     await db.campaign.update({ where: { id: "queue-test" }, data: { sourceFilter: "integration-test" } });
     await enqueueCampaign("queue-test");
     await enqueueCampaign("queue-test");
     assert.equal(await db.sendJob.count(), 4);
     assert.equal((await db.campaign.findUniqueOrThrow({ where: { id: "queue-test" } })).sentCount, 0);
-    await db.lead.update({ where: { id: "test-2" }, data: { optedOut: true } });
+    // Permission withdrawn after queueing must stop the provider call too.
+    await db.lead.update({ where: { id: "test-2" }, data: { smsConsents: [] } });
     globalThis.fetch = async (_input, init) => {
       calls++;
       const body = JSON.parse(String(init?.body));
@@ -193,6 +212,11 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     assert.ok(setupCalls.every(c => c.body.status !== "START" && !c.path.endsWith("/leads")));
     await db.$executeRaw`INSERT INTO "WorkerLease" (id, owner, "expiresAt") VALUES ('dispatch', 'other-worker', NOW() + interval '1 minute')`;
     assert.equal((await dispatchQueuedSends()).busy, true);
+    for (const [index, phone] of ["+12125550188", "(212) 555-0188"].entries()) await db.lead.create({ data: {
+      id: `stop-duplicate-${index}`, phone, source: "fixture", groupName: "fixture", purchaseDate: new Date(), costCents: 0, offeredEntityIds: [], status: "available",
+    } });
+    await saveInbound({ id: "sms-stop-duplicate", brandId: "abstract", channel: "sms", from: "+12125550188", body: "STOP", providerContext: { mailbox: "+12125550000" } });
+    assert.equal(await db.lead.count({ where: { id: { startsWith: "stop-duplicate-" }, optedOut: true } }), 2);
   } finally {
     globalThis.fetch = originalFetch;
     await db.$disconnect();

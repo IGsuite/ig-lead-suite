@@ -1,4 +1,5 @@
 import { normalizeRotation } from "@/lib/autopilot";
+import { readSmsConsents } from "@/lib/sms-consent";
 import type {
   AdAsset,
   AdFolder,
@@ -85,6 +86,7 @@ type LeadRow = {
   verifyNotes: string | null;
   verifiedAt: Date | null;
   uploadBatchId: string | null;
+  smsConsents?: unknown;
   createdAt: Date;
 };
 
@@ -141,6 +143,7 @@ export function mapLead(row: LeadRow): Lead {
     verifyNotes: row.verifyNotes ?? undefined,
     verifiedAt: row.verifiedAt?.toISOString(),
     uploadBatchId: row.uploadBatchId ?? undefined,
+    smsConsents: readSmsConsents(row.smsConsents),
     createdAt: row.createdAt.toISOString(),
   };
 }

@@ -51,7 +51,9 @@ test("provider campaigns cannot be shared across company identities", () => {
 test("a missing production provider never counts a mock send as delivered", async () => {
   delete process.env.TELNYX_API_KEY;
   const data = createSeedData();
-  const lead = { ...data.leads[0], id: "test", phone: "+12125551234", phoneStatus: "valid" as const };
+  const lead = { ...data.leads[0], id: "test", phone: "+12125551234", phoneStatus: "valid" as const, optedOut: false, status: "available" as const,
+    smsConsents: [{ id: "fixture", brandId: data.brands[0].id, phone: "+12125551234", status: "granted" as const,
+      recordedAt: new Date().toISOString(), sourceUrl: "https://fixture.example.invalid/sms", disclosure: "Fixture SMS consent", disclosureVersion: "fixture-v1", method: "web_form" as const }] };
   const brand = { ...data.brands[0], phoneNumbers: ["+12125550000"] };
   const campaign = { ...data.campaigns[0], channel: "sms" as const, preferVerified: true };
   const result = await deliverCampaignBatch({ campaign, brand, leads: [lead] });

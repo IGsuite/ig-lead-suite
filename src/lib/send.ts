@@ -12,6 +12,7 @@ import {
 } from "@/lib/providers/telnyx";
 import type { Brand, Campaign, Lead } from "@/lib/types";
 import { contactOkForChannel } from "@/lib/verify";
+import { hasSmsMarketingConsent } from "@/lib/sms-consent";
 
 export type ContactSendResult = { leadId: string; status: "accepted" | "failed" | "skipped" | "mock" | "uncertain"; providerId?: string; error?: string };
 
@@ -135,6 +136,11 @@ export async function deliverCampaignBatch(input: {
       : isColdEmailConfigured();
 
   for (const lead of input.leads) {
+    if (input.campaign.channel === "sms" && !hasSmsMarketingConsent(lead, input.brand.id)) {
+      skipped += 1;
+      results.push({ leadId: lead.id, status: "skipped", error: "SMS marketing permission is missing or withdrawn for this business and number" });
+      continue;
+    }
     // Double-check at send: never deliver to format-invalid email/phone.
     if (
       !contactOkForChannel(
