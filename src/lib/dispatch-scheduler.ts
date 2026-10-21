@@ -1,4 +1,5 @@
 import { send } from "@vercel/queue";
+import { dispatchWakeSlot } from "@/lib/dispatch-timing";
 
 export const DISPATCH_TOPIC = "campaign-dispatch";
 export function sendingEnabled() {
@@ -25,7 +26,7 @@ export function assertCampaignSendingReady(entityId: string, channel: string) {
 export async function wakeDispatcher(delaySeconds = 0, probe = false) {
   if (process.env.VERCEL !== "1") return { scheduled: false, reason: "local" };
   if (!probe && !sendingEnabled()) return { scheduled: false, reason: "paused" };
-  const slot = Math.floor((Date.now() + delaySeconds * 1000) / 60000);
+  const slot = dispatchWakeSlot(delaySeconds);
   const result = await send(DISPATCH_TOPIC, { kind: probe ? "probe" : "dispatch" }, {
     delaySeconds, retentionSeconds: 86400,
     idempotencyKey: `${probe ? "probe" : "dispatch"}:${process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_URL}:${slot}`,
