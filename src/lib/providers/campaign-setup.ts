@@ -36,7 +36,8 @@ async function request(path: string, method = "GET", body?: unknown): Promise<un
 /** Called only for an explicitly launched campaign with eligible recipients. No leads or START requests here. */
 export function emailCampaignFingerprint(campaign: Campaign, brand: Brand): string {
   return messageFingerprint("email", JSON.stringify([campaign.message, campaign.htmlMessage, campaign.imageUrl,
-    campaign.subject, brand.shortName, campaign.sendWindowPreset, campaign.sendWindowStart, campaign.sendWindowEnd, campaign.timezone]));
+    campaign.subject, brand.shortName, campaign.sendWindowPreset, campaign.sendWindowStart, campaign.sendWindowEnd, campaign.timezone,
+    campaign.volume,campaign.throttlePerHour]));
 }
 export async function ensureEmailCampaign(campaign: Campaign, brand: Brand): Promise<string> {
   if (campaign.brandId !== brand.id) throw new Error("Campaign does not belong to this business.");
