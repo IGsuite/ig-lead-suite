@@ -59,6 +59,7 @@ export type SelectLeadsInput = {
   /** Auto wheel cursor into the fair-rotation ordered pool. */
   poolCursor?: number;
   now?: Date;
+  excludedContactKeys?: ReadonlySet<string>;
 };
 
 export type SelectLeadsResult = {
@@ -93,7 +94,7 @@ export function selectLeadsForSend(input: SelectLeadsInput): SelectLeadsResult {
   }
 
   const candidates = input.leads.filter((lead) => {
-    if(!key(lead)||blocked.has(key(lead)))return false;
+    if(!key(lead)||blocked.has(key(lead))||input.excludedContactKeys?.has(key(lead)))return false;
     if (
       !isLeadEligibleForEntity(lead, input.entityId, {
         channel: input.channel,

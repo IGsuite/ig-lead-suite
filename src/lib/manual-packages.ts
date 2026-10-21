@@ -22,10 +22,10 @@ export function leadSourceOptions(leads:Pick<Lead,"source"|"manualPackages">[]):
   return [...new Set(leads.map(l=>l.source))].sort().concat(listManualPackages(leads).map(p=>manualPackageSource(p.id)));
 }
 export function leadSourceLabel(value:string,leads:Pick<Lead,"manualPackages">[]):string{
-  if(value==="all")return "All sources";
+  if(value==="all")return "Pool — all leads";
   if(value==="__audience_not_selected__")return "Not selected";
   const parsed=parseAudienceFilter(value);
-  if(parsed==="all")return "All sources";
+  if(parsed==="all")return "Pool — all leads";
   const packages=listManualPackages(leads);
   return parsed.map(s=>s.startsWith("manual-package:")?`Manual package — ${packages.find(p=>manualPackageSource(p.id)===s)?.name||"Package"} · ${s.slice("manual-package:".length,"manual-package:".length+8)}`:s==="Manual"?"Manual — all contacts":s).join(" + ");
 }

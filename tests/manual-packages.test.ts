@@ -5,14 +5,14 @@ import {leadSourceLabel,listManualPackages,manualPackageSource,matchesLeadSource
 import {selectLeadsForSend} from "../src/lib/rotation-select";
 import type {Lead} from "../src/lib/types";
 const packageId="41e187b7-b10a-4cf9-aa19-d487c55cb89b",secondId="7283086e-9e0c-493a-91dd-51cfb05110cf";
-const base:Lead={id:"old",source:"Manual",groupName:"Manual",purchaseDate:"2026-10-21",costCents:0,offeredEntityIds:[],lastEntityId:null,convertedEntityId:null,status:"available",optedOut:false,emailStatus:"valid",phoneStatus:"unverified",email:"old@example.invalid",createdAt:"2026-10-21"};
+const base:Lead={id:"old",source:"Manual",groupName:"Manual",purchaseDate:"2026-10-21",costCents:0,offeredEntityIds:[],lastEntityId:null,convertedEntityId:null,status:"available",optedOut:false,emailStatus:"valid",phoneStatus:"unverified",email:"old@fixture.invalid",createdAt:"2026-10-21"};
 test("a ten-contact manual package excludes all old manual contacts and remains separate from a same-named package",()=>{
- const original=[base],rows=Array.from({length:10},(_,i)=>({email:`new${i}@example.invalid`}));
+ const original=[base],rows=Array.from({length:10},(_,i)=>({email:`new${i}@fixture.invalid`}));
  const first=planManualPackage(original,[],{id:packageId,name:"Review group",rows});
  assert.equal(first.result.total,10);assert.equal(first.result.created,10);assert.equal(first.leads.length,11);assert.equal(original[0].manualPackages,undefined);
- const second=planManualPackage(first.leads,[],{id:secondId,name:"Review group",rows:[{email:"second@example.invalid"}]});
+ const second=planManualPackage(first.leads,[],{id:secondId,name:"Review group",rows:[{email:"second@fixture.invalid"}]});
  const chosen=selectLeadsForSend({leads:second.leads,sendEvents:[],entityId:"abstract",channel:"email",volume:100,mode:"own",messageFingerprint:"manual",sourceFilter:manualPackageSource(packageId)});
- assert.equal(chosen.selected.length,10);assert.ok(chosen.selected.every(l=>l.id!=="old"&&l.email!=="second@example.invalid"));
+ assert.equal(chosen.selected.length,10);assert.ok(chosen.selected.every(l=>l.id!=="old"&&l.email!=="second@fixture.invalid"));
  assert.equal(listManualPackages(second.leads).length,2);assert.match(leadSourceLabel(manualPackageSource(packageId),second.leads),/Review group/);
  assert.equal(matchesLeadSource(base,manualPackageSource(packageId)),false);
 });

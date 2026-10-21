@@ -3,7 +3,7 @@ import { getPrisma } from "@/lib/db";
 import { AUDIENCE_NOT_SELECTED, parseAudienceFilter } from "@/lib/audience-filters";
 
 /** Audience changes are allowed only before any provider setup or recipient reservation. */
-export async function updateDraftAudience(id: string, sourceFilter: string, groupFilter: string) {
+export async function updateDraftAudience(id: string, sourceFilter: string, groupFilter: string, mode?: "own" | "auto") {
   const db = getPrisma();
   return db.$transaction(async tx => {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('ig-send-enqueue'))::text`;
@@ -17,17 +17,20 @@ export async function updateDraftAudience(id: string, sourceFilter: string, grou
       const parsed = parseAudienceFilter(value);
       if (parsed !== "all" && parsed.some(v=>!values.includes(v))) throw new Error(`Choose an existing lead ${label}`);
     }
-    if (sourceFilter !== AUDIENCE_NOT_SELECTED) {
-      const waiting = await tx.marketingCalendarEntry.findMany({where:{campaignId:id,brandId:campaign.brandId,status:"draft"}});
-      for (const entry of waiting) {
+    await tx.$queryRaw`SELECT id FROM "MarketingCalendarEntry" WHERE "campaignId" = ${id} ORDER BY id FOR UPDATE`;
+    const waiting = await tx.marketingCalendarEntry.findMany({where:{campaignId:id,brandId:campaign.brandId}});
+    if (waiting.some(e=>!["draft","paused"].includes(e.status)) || await tx.campaign.count({where:{id:{in:waiting.map(e=>e.runCampaignId)}}}))
+      throw new Error("This calendar plan was already approved or started. Create a new draft to change its audience or run settings.");
+    const runMode=mode || campaign.mode;
+    {
+      for (const entry of waiting.filter(e=>e.status==="draft")) {
         const snapshot = entry.snapshot;
-        if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot) && snapshot.sourceFilter === AUDIENCE_NOT_SELECTED) {
-          // Only fill an unset audience. Assigned snapshots and approved dates stay immutable.
-          await tx.marketingCalendarEntry.updateMany({where:{id:entry.id,status:"draft",snapshot:{path:["sourceFilter"],equals:AUDIENCE_NOT_SELECTED}},
-            data:{snapshot:{...snapshot,sourceFilter,groupFilter}}});
+        if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)) {
+          await tx.marketingCalendarEntry.updateMany({where:{id:entry.id,status:"draft"},
+            data:{snapshot:{...snapshot,sourceFilter,groupFilter,mode:"auto",preferVerified:true,preferUnoffered:false}}});
         }
       }
     }
-    return tx.campaign.update({where:{id},data:{sourceFilter,groupFilter}});
+    return tx.campaign.update({where:{id},data:{sourceFilter,groupFilter,mode:runMode,...(runMode==="auto"?{preferVerified:true,preferUnoffered:false}:{})}});
   });
 }

@@ -27,6 +27,7 @@ export async function saveCalendarDrafts(raw: unknown) {
 export async function changeCalendarEntries(ids: string[], action: "approve" | "pause") {
   const db = getPrisma();
   return db.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM "MarketingCalendarEntry" WHERE id = ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
     const entries = await tx.marketingCalendarEntry.findMany({where:{id:{in:ids}}});
     if (entries.length !== ids.length) throw new Error("A calendar entry no longer exists");
     for (const entry of entries) {
@@ -91,7 +92,7 @@ export async function scheduleCalendarRuns(now = new Date()) {
       await tx.campaign.upsert({where:{id:entry.runCampaignId},update:{},create:{
         id:entry.runCampaignId,brandId:entry.brandId,programs:snapshot.programs || [],name:`${entry.product} · ${snapshot.name} · ${entry.date}`,channel:entry.channel,
         subject:snapshot.subject,message:snapshot.message,htmlMessage:snapshot.htmlMessage,imageUrl:snapshot.imageUrl,imageAlt:snapshot.imageAlt,
-        sourceFilter:snapshot.sourceFilter,groupFilter:snapshot.groupFilter,preferUnoffered:snapshot.preferUnoffered,preferVerified:snapshot.preferVerified,
+        sourceFilter:snapshot.sourceFilter,groupFilter:snapshot.groupFilter,preferUnoffered:false,preferVerified:true,
         mode:"auto",volume:snapshot.volume,throttlePerHour:snapshot.throttlePerHour,sendWindowPreset:"custom",sendWindowStart:entry.startTime,sendWindowEnd:entry.endTime,timezone:entry.timezone,status:"scheduled",
       }});
       await tx.marketingCalendarEntry.update({where:{id:entry.id},data:{status:"started",error:null}});

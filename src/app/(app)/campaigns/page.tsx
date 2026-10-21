@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { DraftAudience } from "@/components/draft-audience";
+import { calendarOnly } from "@/lib/calendar-audience-client";
 import { AUDIENCE_NOT_SELECTED } from "@/lib/audience-filters";
 import { StatusPill } from "@/components/status-pill";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/state-panels";
@@ -260,7 +261,7 @@ function CampaignsInner() {
                     <div className="mt-1 select-all break-all text-[10px] text-[color:var(--ink-muted)]">
                       Campaign ID: {campaign.id}
                     </div>
-                    {campaign.status === "draft" && !campaign.id.startsWith("camp-calendar-") ? <DraftAudience campaign={campaign} sources={leadSourceOptions(data.leads)} leads={data.leads} groups={[...new Set(data.leads.map(l=>l.groupName))].sort()} onSaved={refresh} />:null}
+                    {campaign.status === "draft" && !campaign.id.startsWith("camp-calendar-") ? <DraftAudience key={[campaign.id,campaign.sourceFilter,campaign.groupFilter,campaign.mode].join("|")} campaign={campaign} sources={leadSourceOptions(data.leads)} leads={data.leads} groups={[...new Set(data.leads.map(l=>l.groupName))].sort()} onSaved={refresh} />:null}
                   </TableCell>
                   <TableCell>
                     <span
@@ -270,7 +271,7 @@ function CampaignsInner() {
                           : "rounded-md border border-[color:var(--ink-border)] px-2 py-0.5 text-xs font-medium"
                       }
                     >
-                      {campaign.mode === "auto" ? "Auto" : "Own"}
+                      {campaign.mode === "auto" ? "Calendar auto" : "One-time"}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -286,7 +287,7 @@ function CampaignsInner() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                      {campaign.status === "draft" ||
+                      {calendarOnly(campaign) ? <Link href={`/campaigns/calendar?brandId=${campaign.brandId}&campaignId=${campaign.id}`} className={buttonVariants({size:"sm",variant:"outline"})}>View calendar</Link> : campaign.status === "draft" ||
                       campaign.status === "scheduled" ? (
                         <Button size="sm" disabled={campaign.sourceFilter === AUDIENCE_NOT_SELECTED} onClick={() => launch(campaign.id)}>
                           Launch

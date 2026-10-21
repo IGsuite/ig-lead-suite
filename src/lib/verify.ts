@@ -89,7 +89,8 @@ export function applyVerification(lead: Lead): Lead {
 /**
  * Send-time gate: always re-check format so garbage never goes out,
  * even when preferVerified is off or stored status is stale.
- * When preferVerified is on, also require valid|risky (not unverified).
+ * Verified-only requires the saved channel result and a current valid format.
+ * Local checks do not prove mailbox ownership or deliverability.
  */
 export function contactOkForChannel(
   lead: Lead,
@@ -101,12 +102,12 @@ export function contactOkForChannel(
     if (!lead.email) return false;
     if (live.emailStatus === "invalid") return false;
     if (!preferVerified) return true;
-    return live.emailStatus === "valid" || live.emailStatus === "risky";
+    return lead.emailStatus === "valid" && live.emailStatus === "valid";
   }
   if (!lead.phone) return false;
   if (live.phoneStatus === "invalid") return false;
   if (!preferVerified) return true;
-  return live.phoneStatus === "valid" || live.phoneStatus === "risky";
+  return lead.phoneStatus === "valid" && live.phoneStatus === "valid";
 }
 
 /** True when the lead has at least one contact that is not format-invalid. */

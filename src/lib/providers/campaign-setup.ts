@@ -89,10 +89,12 @@ export async function ensureEmailCampaign(campaign: Campaign, brand: Brand): Pro
     const window = resolveWindowHours(campaign) || { start: "00:00", end: "23:59" };
     const accountLimit = accounts.reduce((sum, a) => sum + Math.max(1, Number(a.message_per_day || a.max_email_per_day) || 15), 0);
     const scheduler = object(template.scheduler_cron_value);
+    const datedRun = campaign.id.startsWith("camp-calendar-") ? await db.marketingCalendarEntry.findUnique({where:{runCampaignId:campaign.id}}) : null;
     await request(`${prefix}/schedule`, "POST", { timezone: campaign.timezone || "America/New_York",
-      days_of_the_week: Array.isArray(scheduler.days) && scheduler.days.length ? scheduler.days : [0, 1, 2, 3, 4, 5, 6],
-      start_hour: window.start, end_hour: window.end, min_time_btw_emails: Math.max(1, Math.ceil(60 / Math.max(1, campaign.throttlePerHour)), Number(template.min_time_btwn_emails) || 1),
-      max_new_leads_per_day: Math.min(accountLimit, Number(template.max_new_leads_per_day || template.max_leads_per_day) || accountLimit) });
+      days_of_the_week: datedRun ? [new Date(datedRun.date+"T12:00:00Z").getUTCDay()] : Array.isArray(scheduler.days) && scheduler.days.length ? scheduler.days : [0, 1, 2, 3, 4, 5, 6],
+      // The CRM outbox enforces the exact hourly throttle. Do not inherit an old template's slower interval/cap.
+      start_hour: window.start, end_hour: window.end, min_time_btw_emails: Math.max(1, Math.floor(60 / Math.max(1, campaign.throttlePerHour))),
+      max_new_leads_per_day: Math.min(accountLimit,campaign.volume) });
     await request(`${prefix}/settings`, "POST", { stop_lead_settings: "REPLY_TO_AN_EMAIL", track_settings: template.track_settings || [] });
     const subject = toSmartleadTemplate(campaign.subject || "", brand.shortName);
     const emailBody = toSmartleadEmailHtml(toSmartleadTemplate(campaign.htmlMessage?.trim() || campaign.message, brand.shortName));

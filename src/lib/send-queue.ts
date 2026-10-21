@@ -4,6 +4,7 @@ import { emailProviderName, resolveCompanyCampaign } from "@/lib/providers/email
 import { randomUUID } from "crypto";
 import { calendarRunAllowed, scheduleCalendarRuns } from "@/lib/marketing-calendar-store";
 import { calendarDisposition } from "@/lib/marketing-calendar";
+import { calendarOnly, calendarUsedContacts } from "@/lib/calendar-audience";
 import { AUDIENCE_NOT_SELECTED, audienceContactKey } from "@/lib/audience-filters";
 import { getPrisma } from "@/lib/db";
 import { ensureSeeded } from "@/lib/neon-store-seed";
@@ -24,6 +25,7 @@ export async function enqueueCampaign(id: string): Promise<LaunchResult | null> 
   const db = getPrisma();
   const initial = await db.campaign.findUnique({ where: { id } });
   if (!initial) return null;
+  if (calendarOnly(mapCampaign(initial))) return {campaign:mapCampaign(initial),deferred:true,reason:"calendar_only"};
   if (initial.sourceFilter === AUDIENCE_NOT_SELECTED) throw new Error("Choose and save a lead source before launching this campaign.");
   if (!await calendarRunAllowed(id)) return {campaign:mapCampaign(initial),deferred:true,reason:"calendar_not_active"};
   assertCampaignSendingReady(initial.brandId, initial.channel);
@@ -42,7 +44,8 @@ export async function enqueueCampaign(id: string): Promise<LaunchResult | null> 
     const pick = selectLeadsForSend({ leads: data.leads.filter(l => !reserved.has(audienceContactKey(l,"email"))), sendEvents: data.sendEvents || [],
       entityId: campaign.brandId, channel: campaign.channel, volume: campaign.volume, mode: campaign.mode,
       messageFingerprint: messageFingerprint(campaign.channel, campaign.message, campaign.subject), sourceFilter: campaign.sourceFilter,
-      groupFilter: campaign.groupFilter, preferVerified: campaign.preferVerified, preferUnoffered: campaign.preferUnoffered, poolCursor: data.rotation.poolCursor });
+      groupFilter: campaign.groupFilter, preferVerified: campaign.preferVerified, preferUnoffered: campaign.preferUnoffered, poolCursor: data.rotation.poolCursor,
+      excludedContactKeys:await calendarUsedContacts(db,id,data.leads,campaign.channel) });
     if (pick.selected.length) await ensureEmailCampaign(campaign, brand);
   }
   return db.$transaction(async tx => {
@@ -50,6 +53,7 @@ export async function enqueueCampaign(id: string): Promise<LaunchResult | null> 
     const row = await tx.campaign.findUnique({ where: { id } });
     if (!row) return null;
     const campaign = mapCampaign(row);
+    if (calendarOnly(campaign)) return {campaign,deferred:true,reason:"calendar_only"};
     if (campaign.sourceFilter === AUDIENCE_NOT_SELECTED) throw new Error("Choose and save a lead source before launching this campaign.");
     if (id.startsWith("camp-calendar-")) {
       const entry = await tx.marketingCalendarEntry.findUnique({where:{runCampaignId:id}});
@@ -99,7 +103,8 @@ export async function enqueueCampaign(id: string): Promise<LaunchResult | null> 
     const rotation = mapRotation(settings, [brand]);
     const pick = selectLeadsForSend({ leads: leads.map(mapLead).filter(l => !reserved.has(audienceContactKey(l,campaign.channel))), sendEvents: events.map(mapLeadSendEvent), entityId: campaign.brandId,
       channel: campaign.channel, volume: campaign.volume, mode: campaign.mode, messageFingerprint: messageFingerprint(campaign.channel, campaign.message, campaign.subject),
-      sourceFilter: campaign.sourceFilter, groupFilter: campaign.groupFilter, preferVerified: campaign.preferVerified, preferUnoffered: campaign.preferUnoffered, poolCursor: rotation.poolCursor });
+      sourceFilter: campaign.sourceFilter, groupFilter: campaign.groupFilter, preferVerified: campaign.preferVerified, preferUnoffered: campaign.preferUnoffered, poolCursor: rotation.poolCursor,
+      excludedContactKeys:await calendarUsedContacts(tx,id,leads.map(mapLead),campaign.channel) });
     if (!pick.selected.length) return { campaign, deferred: false, emptyAudience: true, eligibleCount: 0, reason: "empty_audience" };
     if (campaign.channel === "email" && emailProviderName() === "smartlead" && !providerCampaignId) throw new Error("Email campaign setup is required before queuing recipients.");
     const start = Date.now();
