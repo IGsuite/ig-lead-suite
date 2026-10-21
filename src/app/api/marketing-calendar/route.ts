@@ -13,14 +13,16 @@ export async function GET(request: Request) {
   const session = await getSession();
   const url = new URL(request.url), brandId = url.searchParams.get("brandId"), month = url.searchParams.get("month");
   if (!brandId || !month || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return NextResponse.json({error:"Company and month are required"},{status:400});
-  if (!canAccessEntity(session,brandId)) return NextResponse.json({error:"Forbidden"},{status:403});
+  if (brandId !== "all" && !canAccessEntity(session,brandId)) return NextResponse.json({error:"Forbidden"},{status:403});
   const db = getPrisma();
+  // The overview combines only companies this session can access.
+  const brandIds = brandId === "all" ? (await db.entity.findMany({select:{id:true}})).filter(b=>canAccessEntity(session,b.id)).map(b=>b.id) : [brandId];
   const [entries,settings] = await Promise.all([
-    db.marketingCalendarEntry.findMany({where:{brandId,date:{startsWith:month+"-"}},orderBy:[{date:"asc"},{startTime:"asc"}]}),
+    db.marketingCalendarEntry.findMany({where:{brandId:{in:brandIds},date:{startsWith:month+"-"}},orderBy:[{date:"asc"},{startTime:"asc"}]}),
     db.platformSettings.findUniqueOrThrow({where:{id:"default"}}),
   ]);
   return NextResponse.json({entries,enabled:settings.calendarEnabled,canManage:isAdminSession(session),
-    readiness:{email:sendingEnabled() && sendingEntityEnabled(brandId) && sendingChannelEnabled("email"),sms:sendingEnabled() && sendingEntityEnabled(brandId) && sendingChannelEnabled("sms")}});
+    readiness:{email:sendingEnabled() && brandIds.some(sendingEntityEnabled) && sendingChannelEnabled("email"),sms:sendingEnabled() && brandIds.some(sendingEntityEnabled) && sendingChannelEnabled("sms")}});
 }
 
 export async function POST(request: Request) {
