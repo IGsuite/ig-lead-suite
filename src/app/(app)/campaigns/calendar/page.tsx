@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { ProgramSelect } from "@/components/program-select";
+import { programTemplateMatches } from "@/lib/programs";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -23,7 +25,8 @@ function CalendarInner() {
   const [calendar,setCalendar] = useState<CalendarState | null>(null);
   const [calendarError,setCalendarError] = useState("");
   const [busy,setBusy] = useState(false);
-  const [product,setProduct] = useState("");
+  const [programs,setPrograms] = useState<string[]>([]);
+  const product=programs.length ? programs.join(" + ") : "General";
   const [campaignId,setCampaignId] = useState("");
   const [templateId,setTemplateId] = useState("");
   const [startDate,setStartDate] = useState("");
@@ -56,9 +59,9 @@ function CalendarInner() {
   if (loading) return <LoadingPanel />;
   if (error || !data) return <ErrorPanel message={error || "Workspace unavailable"} onRetry={refresh} />;
   const brand = data.brands.find(b=>b.id === brandId);
-  const campaigns = data.campaigns.filter(c=>c.brandId === brandId && !c.id.startsWith("camp-calendar-"));
+  const campaigns = data.campaigns.filter(c=>c.brandId === brandId && !c.id.startsWith("camp-calendar-") && (!programs.length || (c.programs?.length===programs.length && programs.every(p=>c.programs?.includes(p)))));
   const campaign = campaigns.find(c=>c.id === campaignId);
-  const templates = data.messageTemplates.filter(t=>(!t.brandId || t.brandId === brandId) && t.channel === campaign?.channel);
+  const templates = data.messageTemplates.filter(t=>campaign && programTemplateMatches(t,brandId,campaign.programs || [],campaign.channel));
   const entries = calendar?.entries || [];
   const monthDate = new Date(month+"-01T12:00:00Z");
   const count = new Date(Date.UTC(monthDate.getUTCFullYear(),monthDate.getUTCMonth()+1,0)).getUTCDate();
@@ -68,7 +71,7 @@ function CalendarInner() {
   return <div>
     <PageHeader title="Marketing calendar" description="Plan each company’s product campaigns by day. Saving creates drafts. Approve selected days, then enable the calendar when you are ready to send." actions={<Link className="text-sm underline" href={`/campaigns?brandId=${brandId}&channel=email`}>Back to campaigns</Link>} />
     <div className="mb-5 flex flex-wrap items-end gap-4">
-      <label className="space-y-1 text-sm">Company<select aria-label="Company" className={field} value={brandId} onChange={e=>{setBrandId(e.target.value);setCampaignId("");setTemplateId("");setProduct("");setCalendar(null);}}>{data.brands.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
+      <label className="space-y-1 text-sm">Company<select aria-label="Company" className={field} value={brandId} onChange={e=>{setBrandId(e.target.value);setCampaignId("");setTemplateId("");setPrograms([]);setCalendar(null);}}>{data.brands.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
       <Button variant="outline" onClick={()=>changeMonth(-1)}>Previous month</Button>
       <label className="space-y-1 text-sm">Month<Input aria-label="Month" type="month" value={month} onChange={e=>{if(e.target.value)setMonth(e.target.value);}} /></label>
       <Button variant="outline" onClick={()=>changeMonth(1)}>Next month</Button>
@@ -104,12 +107,12 @@ function CalendarInner() {
         })}
       </div>
     </div>
-    {calendar?.canManage ? <form className={panel} onSubmit={e=>{e.preventDefault();void act({brandId,product,campaignId,templateId:templateId || undefined,startDate,endDate,weekdays:days,startTime,endTime,timezone,volume,throttlePerHour:throttle});}}>
+    {calendar?.canManage ? <form className={panel} onSubmit={e=>{e.preventDefault();void act({brandId,product:campaign?.programs?.length ? campaign.programs.join(" + ") : product,campaignId,templateId:templateId || undefined,startDate,endDate,weekdays:days,startTime,endTime,timezone,volume,throttlePerHour:throttle});}}>
       <h2 className="mb-2 text-xl font-[family-name:var(--font-display)]">Add product campaign days</h2>
       <p className="mb-4 text-sm text-[color:var(--ink-muted)]">Choose an existing campaign as the starting copy and audience, or <Link className="underline" href={`/campaigns/new?brandId=${brandId}&channel=email`}>build a campaign</Link> first. Selected copy is saved as a snapshot; later edits will not change these days. Plan up to 12 months ahead.</p>
       <div className="grid gap-4 md:grid-cols-3">
-        <label className="space-y-1 text-sm">Product / program<Input aria-label="Product / program" list="calendar-products" required value={product} onChange={e=>setProduct(e.target.value)} placeholder="HELOC, SBA, lines of credit…" /><datalist id="calendar-products">{[...new Set([...(brand?.programs || []),...(brandId === "abstract" ? ["HELOC"]:[])])].map(p=><option key={p} value={p} />)}</datalist></label>
-        <label className="space-y-1 text-sm">Campaign<select className={field} required value={campaignId} onChange={e=>{setCampaignId(e.target.value);setTemplateId("");}}><option value="">Choose campaign</option>{campaigns.map(c=><option key={c.id} value={c.id}>{c.name} ({c.channel})</option>)}</select></label>
+        <ProgramSelect brand={brand} value={programs} onChange={p=>{setPrograms(p);setCampaignId("");setTemplateId("");}} />
+        <label className="space-y-1 text-sm">Campaign<select className={field} required value={campaignId} onChange={e=>{setCampaignId(e.target.value);setTemplateId("");setPrograms(campaigns.find(c=>c.id===e.target.value)?.programs || []);}}><option value="">Choose campaign</option>{campaigns.map(c=><option key={c.id} value={c.id}>{c.name} ({c.channel})</option>)}</select></label>
         <label className="space-y-1 text-sm">Template<select className={field} value={templateId} onChange={e=>setTemplateId(e.target.value)}><option value="">Use campaign’s saved copy & artwork</option>{templates.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>
         <label className="space-y-1 text-sm">First day<Input type="date" required value={startDate} onChange={e=>setStartDate(e.target.value)} /></label>
         <label className="space-y-1 text-sm">Last day<Input type="date" required value={endDate} onChange={e=>setEndDate(e.target.value)} /></label>

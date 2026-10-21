@@ -44,6 +44,7 @@ export async function createCampaign(
     data: {
       id: `camp-${randomUUID()}`,
       brandId: input.brandId,
+      programs: input.programs ?? [],
       name: input.name,
       channel: input.channel,
       subject: input.subject ?? null,

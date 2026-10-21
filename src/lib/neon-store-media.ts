@@ -29,6 +29,7 @@ export async function createMessageTemplate(
       subject: input.subject ?? null,
       body: input.body,
       brandId: input.brandId,
+      programs: input.programs ?? [],
       folderId: input.folderId ?? null,
     },
   });
@@ -56,6 +57,7 @@ export async function updateMessageTemplate(
         patch.brandId === undefined ? existing.brandId : patch.brandId,
       folderId:
         patch.folderId === undefined ? existing.folderId : patch.folderId,
+      programs: patch.programs === undefined ? existing.programs : patch.programs,
     },
   });
   return mapMessageTemplate(row);

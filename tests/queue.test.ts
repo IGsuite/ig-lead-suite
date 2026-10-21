@@ -31,6 +31,7 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
   await pg.exec(await readFile("prisma/migrations/202610200004_manual_campaign_setup/migration.sql", "utf8"));
   await pg.exec(await readFile("prisma/migrations/202610200005_sms_consent/migration.sql", "utf8"));
   await pg.exec(await readFile("prisma/migrations/202610200006_marketing_calendar/migration.sql", "utf8"));
+  await pg.exec(await readFile("prisma/migrations/202610210007_program_campaigns/migration.sql", "utf8"));
   const server = new PGLiteSocketServer({ db: pg, host: "127.0.0.1", port: 55439 });
   await server.start();
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: false, max: 1 });
@@ -40,6 +41,9 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
   let calls = 0;
   try {
     await ensureSeeded();
+    const programFixture=await createCampaign({brandId:"abstract",programs:["HELOC","SBA 7(a)"],name:"Program fixture",channel:"email",subject:"Fixture",message:"No sending",volume:1,throttlePerHour:1,sourceFilter:"__audience_not_selected__",groupFilter:"all",preferUnoffered:true,preferVerified:true,mode:"own",sendWindowPreset:"any",timezone:"America/New_York",status:"draft"});
+    assert.deepEqual(programFixture.programs,["HELOC","SBA 7(a)"]);
+    assert.deepEqual((await db.campaign.findUniqueOrThrow({where:{id:programFixture.id}})).programs,["HELOC","SBA 7(a)"]);
     process.env.AUTH_SECRET = "consent-test-secret-only".repeat(2);
     await subscribeAbstractSms("(212) 555-0199", "https://suite.example.invalid/sms/abstract", "test-visitor");
     const signup = await db.lead.findFirstOrThrow({ where: { phone: "+12125550199" } });

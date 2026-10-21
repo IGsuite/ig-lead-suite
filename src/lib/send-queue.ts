@@ -4,7 +4,7 @@ import { emailProviderName, resolveCompanyCampaign } from "@/lib/providers/email
 import { randomUUID } from "crypto";
 import { calendarRunAllowed, scheduleCalendarRuns } from "@/lib/marketing-calendar-store";
 import { calendarDisposition } from "@/lib/marketing-calendar";
-import { AUDIENCE_NOT_SELECTED } from "@/lib/audience-filters";
+import { AUDIENCE_NOT_SELECTED, audienceContactKey } from "@/lib/audience-filters";
 import { getPrisma } from "@/lib/db";
 import { ensureSeeded } from "@/lib/neon-store-seed";
 import { mapCampaign, mapEntity, mapLead, mapLeadSendEvent, mapRotation } from "@/lib/mappers";
@@ -37,8 +37,9 @@ export async function enqueueCampaign(id: string): Promise<LaunchResult | null> 
     const campaign = mapCampaign(initial), brand = data.brands.find(b => b.id === campaign.brandId);
     if (!brand) throw new Error("Business not found");
     const reservations = await db.sendJob.findMany({ where: { channel: "email", status: { in: ["queued", "processing", "uncertain"] } }, select: { leadId: true } });
-    const reserved = new Set(reservations.map(j => j.leadId));
-    const pick = selectLeadsForSend({ leads: data.leads.filter(l => !reserved.has(l.id)), sendEvents: data.sendEvents || [],
+    const reservedIds = new Set(reservations.map(j => j.leadId));
+    const reserved = new Set(data.leads.filter(l=>reservedIds.has(l.id)).map(l=>audienceContactKey(l,"email")));
+    const pick = selectLeadsForSend({ leads: data.leads.filter(l => !reserved.has(audienceContactKey(l,"email"))), sendEvents: data.sendEvents || [],
       entityId: campaign.brandId, channel: campaign.channel, volume: campaign.volume, mode: campaign.mode,
       messageFingerprint: messageFingerprint(campaign.channel, campaign.message, campaign.subject), sourceFilter: campaign.sourceFilter,
       groupFilter: campaign.groupFilter, preferVerified: campaign.preferVerified, preferUnoffered: campaign.preferUnoffered, poolCursor: data.rotation.poolCursor });
@@ -92,10 +93,11 @@ export async function enqueueCampaign(id: string): Promise<LaunchResult | null> 
     const leads = await tx.lead.findMany();
     const events = await tx.leadSendEvent.findMany({ where: { sentAt: { gte: new Date(Date.now() - 7 * 86400000) } } });
     const reservations = await tx.sendJob.findMany({ where: { status: { in: ["queued", "processing", "uncertain"] } }, select: { leadId: true, channel: true } });
-    const reserved = new Set(reservations.filter(j => j.channel === campaign.channel).map(j => j.leadId));
+    const reservedIds = new Set(reservations.filter(j => j.channel === campaign.channel).map(j => j.leadId));
+    const reserved = new Set(leads.filter(l=>reservedIds.has(l.id)).map(l=>audienceContactKey(l,campaign.channel)));
     const settings = await tx.platformSettings.findUniqueOrThrow({ where: { id: "default" } });
     const rotation = mapRotation(settings, [brand]);
-    const pick = selectLeadsForSend({ leads: leads.map(mapLead).filter(l => !reserved.has(l.id)), sendEvents: events.map(mapLeadSendEvent), entityId: campaign.brandId,
+    const pick = selectLeadsForSend({ leads: leads.map(mapLead).filter(l => !reserved.has(audienceContactKey(l,campaign.channel))), sendEvents: events.map(mapLeadSendEvent), entityId: campaign.brandId,
       channel: campaign.channel, volume: campaign.volume, mode: campaign.mode, messageFingerprint: messageFingerprint(campaign.channel, campaign.message, campaign.subject),
       sourceFilter: campaign.sourceFilter, groupFilter: campaign.groupFilter, preferVerified: campaign.preferVerified, preferUnoffered: campaign.preferUnoffered, poolCursor: rotation.poolCursor });
     if (!pick.selected.length) return { campaign, deferred: false, emptyAudience: true, eligibleCount: 0, reason: "empty_audience" };

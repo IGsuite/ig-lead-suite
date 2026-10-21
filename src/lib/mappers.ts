@@ -177,6 +177,7 @@ export function mapUpload(row: {
 export function mapCampaign(row: {
   id: string;
   brandId: string;
+  programs?: string[];
   name: string;
   channel: string;
   subject: string | null;
@@ -210,6 +211,7 @@ export function mapCampaign(row: {
   return {
     id: row.id,
     brandId: row.brandId,
+    programs: row.programs ?? [],
     name: row.name,
     channel: row.channel as Campaign["channel"],
     subject: row.subject ?? undefined,
@@ -347,6 +349,7 @@ export function mapCostEntry(row: {
 
 export function mapMessageTemplate(row: {
   id: string;
+  programs?: string[];
   name: string;
   channel: string;
   subject: string | null;
@@ -360,6 +363,7 @@ export function mapMessageTemplate(row: {
     id: row.id,
     name: row.name,
     channel: row.channel as CampaignChannel,
+    programs: row.programs ?? [],
     subject: row.subject ?? undefined,
     body: row.body,
     brandId: row.brandId,

@@ -5,6 +5,12 @@
  * - comma-separated — match any (multi-select)
  */
 
+/** Delivery identity, so overlapping packages do not duplicate a recipient. */
+export function audienceContactKey(lead: {email?:string|null;phone?:string|null}, channel:"email"|"sms"):string {
+  if(channel==="email")return (lead.email||"").trim().toLowerCase();
+  const digits=(lead.phone||"").replace(/\D/g,"");return digits.length===10?"1"+digits:digits;
+}
+
 export function parseAudienceFilter(filter: string | null | undefined): "all" | string[] {
   const raw = (filter || "all").trim();
   if (!raw || raw === "all") return "all";

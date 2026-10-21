@@ -222,6 +222,8 @@ export interface UploadBatch {
 export interface Campaign {
   id: string;
   brandId: string;
+  /** Canonical program name from this company's program catalog. */
+  programs?: string[];
   name: string;
   channel: CampaignChannel;
   subject?: string;
@@ -283,6 +285,7 @@ export interface AdAsset {
 /** Reusable SMS / email blast copy (Ads library). */
 export interface MessageTemplate {
   id: string;
+  programs?: string[];
   name: string;
   channel: CampaignChannel;
   subject?: string;

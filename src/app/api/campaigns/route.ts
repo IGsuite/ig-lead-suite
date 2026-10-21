@@ -15,6 +15,7 @@ import type {
 } from "@/lib/types";
 import { normalizeSendWindow } from "@/lib/send-window";
 import { updateDraftAudience } from "@/lib/campaign-audience";
+import { validatePrograms } from "@/lib/programs";
 import { mapCampaign } from "@/lib/mappers";
 
 export const maxDuration = 300;
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
     id?: string;
     brandId?: string;
     name?: string;
+    programs?: string[];
     channel?: CampaignChannel;
     subject?: string;
     message?: string;
@@ -159,6 +161,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
 
+  let programs: string[];
+  try { const data = await getData(); programs = validatePrograms(data.brands.find(b=>b.id===body.brandId),body.programs); }
+  catch(error) { return NextResponse.json({error:error instanceof Error?error.message:"Invalid programs"},{status:400}); }
+
   const win = normalizeSendWindow({
     sendWindowPreset: body.sendWindowPreset,
     sendWindowStart: body.sendWindowStart,
@@ -182,6 +188,7 @@ export async function POST(request: Request) {
   const campaign = await createCampaign({
     brandId: body.brandId,
     name: body.name,
+    programs,
     channel: body.channel,
     subject: body.subject,
     message: body.message,

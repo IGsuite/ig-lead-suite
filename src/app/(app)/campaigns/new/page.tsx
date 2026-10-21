@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
+import { ProgramSelect } from "@/components/program-select";
+import { programTemplateMatches, programDraft } from "@/lib/programs";
 import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
@@ -20,6 +22,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { usePlatform } from "@/hooks/use-platform";
 import {
+  audienceContactKey,
   serializeAudienceFilter,
   toggleAudienceValue,
 } from "@/lib/audience-filters";
@@ -43,6 +46,7 @@ function CampaignBuilderInner() {
   const initialChannel: CampaignChannel =
     searchParams.get("channel") === "email" ? "email" : "sms";
   const [channel, setChannel] = useState<CampaignChannel>(initialChannel);
+  const [programs, setPrograms] = useState<string[]>(searchParams.getAll("program"));
   const [mode, setMode] = useState<CampaignPoolMode>("own");
   const [name, setName] = useState(
     initialChannel === "email"
@@ -81,10 +85,9 @@ function CampaignBuilderInner() {
     if (!data) return [];
     return (data.messageTemplates || []).filter(
       (t) =>
-        t.channel === channel &&
-        (t.brandId === null || t.brandId === brandId),
+        programTemplateMatches(t,brandId,programs,channel),
     );
-  }, [data, channel, brandId]);
+  }, [data, channel, brandId, programs]);
 
   const groups = useMemo(() => {
     if (!data) return [];
@@ -93,7 +96,7 @@ function CampaignBuilderInner() {
 
   const audienceCount = useMemo(() => {
     if (!data) return 0;
-    return data.leads.filter((lead) => {
+    return new Set(data.leads.filter((lead) => {
       if (lead.optedOut || lead.status === "opted_out") return false;
       if (lead.status === "converted" || lead.convertedEntityId) return false;
       if (
@@ -124,7 +127,7 @@ function CampaignBuilderInner() {
         }
       }
       return true;
-    }).length;
+    }).map(lead=>audienceContactKey(lead,channel))).size;
   }, [
     data,
     selectedSources,
@@ -144,6 +147,7 @@ function CampaignBuilderInner() {
         body: JSON.stringify({
           channel,
           brandId,
+          programs,
           tone: draftTone,
         }),
       });
@@ -188,10 +192,12 @@ function CampaignBuilderInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           brandId,
+          programs,
           name,
           channel,
           subject: channel === "email" ? subject : undefined,
           message,
+          htmlMessage: channel === "email" && /<(html|table|div|p)\b/i.test(message) ? message : null,
           imageUrl: channel === "email" ? imageUrl.trim() || null : null,
           imageAlt: channel === "email" ? imageAlt.trim() || null : null,
           sourceFilter: serializeAudienceFilter(selectedSources),
@@ -210,7 +216,7 @@ function CampaignBuilderInner() {
           status: "draft",
         }),
       });
-      if (!res.ok) throw new Error("Could not create campaign");
+      if (!res.ok) { const failed=await res.json(); throw new Error(failed.error || "Could not create campaign"); }
       const campaign = (await res.json()) as { id: string };
       if (status === "scheduled") {
         const launchRes = await fetch("/api/campaigns", {
@@ -258,6 +264,12 @@ function CampaignBuilderInner() {
     }
   }
 
+  function changePrograms(next: string[], nextChannel=channel) {
+    setPrograms(next);setTemplateId("");setImageUrl("");setImageAlt("");
+    const draft=programDraft(next,nextChannel);setSubject(draft.subject);setMessage(draft.message);
+    setName(`${data?.brands.find(b=>b.id===brandId)?.shortName || "Company"} — ${next.join(" + ") || "General"} — ${nextChannel}`);
+  }
+
   if (loading) return <LoadingPanel />;
   if (error || !data)
     return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
@@ -293,7 +305,7 @@ function CampaignBuilderInner() {
               <Select
                 value={brandId}
                 onValueChange={(value) => {
-                  if (value) setBrandId(value);
+                  if (value) {setBrandId(value);changePrograms([]);setName(`${data.brands.find(b=>b.id===value)?.shortName || "Company"} — General — ${channel}`);}
                 }}
               >
                 <SelectTrigger className="w-full">
@@ -316,13 +328,9 @@ function CampaignBuilderInner() {
                   if (!value) return;
                   const next = value as CampaignChannel;
                   setChannel(next);
+                  changePrograms(programs,next);
                   setTemplateId("");
-                  if (next === "email" && name.toLowerCase().includes("sms")) {
-                    setName(name.replace(/SMS/i, "email"));
-                  }
-                  if (next === "sms" && name.toLowerCase().includes("email")) {
-                    setName(name.replace(/email/i, "SMS"));
-                  }
+
                 }}
               >
                 <SelectTrigger>
@@ -339,6 +347,7 @@ function CampaignBuilderInner() {
             </div>
           </div>
 
+          <ProgramSelect brand={data.brands.find(b=>b.id===brandId)} value={programs} onChange={changePrograms} />
           <div className="space-y-2">
             <Label>Campaign name</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} required />
@@ -421,7 +430,7 @@ function CampaignBuilderInner() {
                 const tpl = usableTemplates.find((t) => t.id === value);
                 if (!tpl) return;
                 setTemplateId(tpl.id);
-                setMessage(tpl.body);
+                setMessage(tpl.body);setImageUrl("");setImageAlt("");
                 if (tpl.channel === "email" && tpl.subject) {
                   setSubject(tpl.subject);
                 }
@@ -443,9 +452,9 @@ function CampaignBuilderInner() {
             </Select>
             <p className="text-xs text-[color:var(--ink-muted)]">
               {usableTemplates.length
-                ? "Shared + this company's Ads templates for the selected channel."
+                ? "Templates tagged to your selected programs and channel."
                 : "No matching templates — create some under Ads."}{" "}
-              <Link href="/creatives" className="underline underline-offset-2">
+              <Link href={`/creatives?brandId=${brandId}${programs.map(p=>`&program=${encodeURIComponent(p)}`).join("")}`} className="underline underline-offset-2">
                 Open Ads
               </Link>
             </p>

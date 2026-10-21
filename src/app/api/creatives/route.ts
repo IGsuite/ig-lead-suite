@@ -8,6 +8,7 @@ import {
   getData,
   updateMessageTemplate,
 } from "@/lib/store";
+import { validatePrograms } from "@/lib/programs";
 import type { CampaignChannel } from "@/lib/types";
 
 type CreativeBody = {
@@ -19,6 +20,7 @@ type CreativeBody = {
   body?: string;
   brandId?: string | null;
   folderId?: string | null;
+  programs?: string[];
 };
 
 export async function GET() {
@@ -89,8 +91,13 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: gate.error }, { status: gate.status });
       }
     }
+    const nextBrandId = payload.brandId === undefined ? existing.brandId : payload.brandId;
+    let programs: string[];
+    try { programs=validatePrograms(data.brands.find(b=>b.id===nextBrandId),payload.programs ?? existing.programs ?? []); }
+    catch(error) { return NextResponse.json({error:error instanceof Error?error.message:"Invalid programs"},{status:400}); }
     const updated = await updateMessageTemplate(payload.id, {
       name: payload.name,
+      programs,
       channel: payload.channel,
       subject: payload.subject,
       body: payload.body,
@@ -123,7 +130,11 @@ export async function POST(request: Request) {
     );
   }
 
+  let programs: string[];
+  try { const data=await getData(); programs=validatePrograms(data.brands.find(b=>b.id===brandId),payload.programs); }
+  catch(error) { return NextResponse.json({error:error instanceof Error?error.message:"Invalid programs"},{status:400}); }
   const template = await createMessageTemplate({
+    programs,
     name: payload.name.trim(),
     channel: payload.channel,
     subject:

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { programTemplateMatches } from "@/lib/programs";
 import type { Campaign, MessageTemplate } from "@/lib/types";
 
 export type CalendarEntry = {
@@ -13,7 +14,7 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(s => {
 }, "Invalid calendar date");
 const time = z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
 export const calendarInput = z.object({
-  brandId: z.string().min(1), product: z.string().trim().min(1).max(120),
+  brandId: z.string().min(1), product: z.string().trim().min(1).max(1000),
   campaignId: z.string().min(1), templateId: z.string().optional(),
   startDate: date, endDate: date,
   weekdays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
@@ -44,6 +45,8 @@ export function calendarDates(input: z.infer<typeof calendarInput>, now = new Da
 
 export function calendarSnapshot(campaign: Campaign, template: MessageTemplate | undefined, input: z.infer<typeof calendarInput>): Campaign {
   if (campaign.brandId !== input.brandId) throw new Error("Campaign belongs to another company");
+  if (campaign.programs?.length && campaign.programs.join(" + ") !== input.product) throw new Error("Use the campaign’s selected funding programs");
+  if (template && !programTemplateMatches(template,campaign.brandId,campaign.programs || [],campaign.channel)) throw new Error("Choose a template for these funding programs");
   if (template && ((template.brandId && template.brandId !== input.brandId) || template.channel !== campaign.channel)) throw new Error("Choose a template for this company and channel");
   return {...campaign, subject: template ? template.subject : campaign.subject,
     message: template ? template.body : campaign.message,

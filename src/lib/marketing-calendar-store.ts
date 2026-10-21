@@ -89,7 +89,7 @@ export async function scheduleCalendarRuns(now = new Date()) {
       const enabled = await tx.platformSettings.findUniqueOrThrow({where:{id:"default"}});
       if (calendarDisposition(current,enabled.calendarEnabled,now) !== "due") return;
       await tx.campaign.upsert({where:{id:entry.runCampaignId},update:{},create:{
-        id:entry.runCampaignId,brandId:entry.brandId,name:`${entry.product} · ${snapshot.name} · ${entry.date}`,channel:entry.channel,
+        id:entry.runCampaignId,brandId:entry.brandId,programs:snapshot.programs || [],name:`${entry.product} · ${snapshot.name} · ${entry.date}`,channel:entry.channel,
         subject:snapshot.subject,message:snapshot.message,htmlMessage:snapshot.htmlMessage,imageUrl:snapshot.imageUrl,imageAlt:snapshot.imageAlt,
         sourceFilter:snapshot.sourceFilter,groupFilter:snapshot.groupFilter,preferUnoffered:snapshot.preferUnoffered,preferVerified:snapshot.preferVerified,
         mode:"auto",volume:snapshot.volume,throttlePerHour:snapshot.throttlePerHour,sendWindowPreset:"custom",sendWindowStart:entry.startTime,sendWindowEnd:entry.endTime,timezone:entry.timezone,status:"scheduled",

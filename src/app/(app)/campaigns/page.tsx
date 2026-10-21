@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ProgramSelect } from "@/components/program-select";
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -41,12 +42,13 @@ function CampaignsInner() {
     searchParams.get("brandId") || searchParams.get("entity") || "abstract",
   );
 
+  const [programs,setPrograms] = useState<string[]>([]);
   const campaigns = useMemo(() => {
     if (!data) return [];
     return data.campaigns.filter(
-      (c) => c.brandId === entityId && c.channel === channel,
+      (c) => c.brandId === entityId && c.channel === channel && (!programs.length || programs.some(p=>c.programs?.includes(p))),
     );
-  }, [data, entityId, channel]);
+  }, [data, entityId, channel, programs]);
 
   const counts = useMemo(() => {
     if (!data) return { sms: 0, email: 0 };
@@ -140,6 +142,7 @@ function CampaignsInner() {
         }
       />
 
+      <div className="mb-4 max-w-xl"><ProgramSelect brand={brand} value={programs} onChange={setPrograms} label="Filter by funding programs" /><p className="text-xs text-[color:var(--ink-muted)]">No selection shows all programs.</p></div>
       <div className="mb-4 flex flex-wrap gap-3 text-sm animate-rise">
         <div className="rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] px-3 py-2">
           <span className="font-medium">Auto</span>
@@ -185,7 +188,7 @@ function CampaignsInner() {
         <Select
           value={entityId}
           onValueChange={(value) => {
-            if (value) setEntityId(value);
+            if (value) setEntityId(value);setPrograms([]);
           }}
         >
           <SelectTrigger className="w-full">
@@ -244,7 +247,7 @@ function CampaignsInner() {
               {campaigns.map((campaign) => (
                 <TableRow key={campaign.id}>
                   <TableCell>
-                    <div className="font-medium">{campaign.name}</div>
+                    <div className="font-medium">{campaign.name}{campaign.programs?.length ? <span className="mt-1 block text-xs text-[color:var(--ink-muted)]">{campaign.programs.join(" · ")}</span>:null}</div>
                     <div className="text-xs text-[color:var(--ink-muted)]">
                       {relativeDay(campaign.createdAt)} · throttle{" "}
                       {campaign.throttlePerHour}/hr · {brand?.shortName} ·{" "}
