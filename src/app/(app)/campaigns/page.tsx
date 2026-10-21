@@ -126,12 +126,15 @@ function CampaignsInner() {
         title="Campaigns"
         description="SMS and email stay separate. Pick a channel, then an entity portal — Ahava never sends under Abstract. Auto = Ferris-wheel daily volume; Own = standalone campaign outside the wheel."
         actions={
+          <>
+          <Link className={cn(buttonVariants({variant:"outline"}))} href={`/campaigns/calendar?brandId=${entityId}`}>Marketing calendar</Link>
           <Link
             href={`/campaigns/new?brandId=${entityId}&channel=${channel}`}
             className={cn(buttonVariants())}
           >
             Build Own {channelLabel} for {brand?.shortName || "entity"}
           </Link>
+          </>
         }
       />
 

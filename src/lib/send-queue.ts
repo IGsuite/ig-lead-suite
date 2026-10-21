@@ -2,6 +2,8 @@ import { sendingEnabled, sendingEntityEnabled, sendingChannelEnabled, assertCamp
 import { ensureEmailCampaign, emailCampaignFingerprint } from "@/lib/providers/campaign-setup";
 import { emailProviderName, resolveCompanyCampaign } from "@/lib/providers/email";
 import { randomUUID } from "crypto";
+import { calendarRunAllowed, scheduleCalendarRuns } from "@/lib/marketing-calendar-store";
+import { calendarDisposition } from "@/lib/marketing-calendar";
 import { getPrisma } from "@/lib/db";
 import { ensureSeeded } from "@/lib/neon-store-seed";
 import { mapCampaign, mapEntity, mapLead, mapLeadSendEvent, mapRotation } from "@/lib/mappers";
@@ -21,6 +23,7 @@ export async function enqueueCampaign(id: string): Promise<LaunchResult | null> 
   const db = getPrisma();
   const initial = await db.campaign.findUnique({ where: { id } });
   if (!initial) return null;
+  if (!await calendarRunAllowed(id)) return {campaign:mapCampaign(initial),deferred:true,reason:"calendar_not_active"};
   assertCampaignSendingReady(initial.brandId, initial.channel);
   // Configure a separate provider campaign before entering the database transaction.
   // Draft creation never calls this function, and empty/out-of-window launches do not provision anything.
@@ -44,6 +47,11 @@ export async function enqueueCampaign(id: string): Promise<LaunchResult | null> 
     const row = await tx.campaign.findUnique({ where: { id } });
     if (!row) return null;
     const campaign = mapCampaign(row);
+    if (id.startsWith("camp-calendar-")) {
+      const entry = await tx.marketingCalendarEntry.findUnique({where:{runCampaignId:id}});
+      const settings = await tx.platformSettings.findUniqueOrThrow({where:{id:"default"}});
+      if (!entry || calendarDisposition(entry,settings.calendarEnabled) !== "due") return {campaign,deferred:true,reason:"calendar_not_active"};
+    }
     assertCampaignSendingReady(campaign.brandId, campaign.channel);
     if (!locks[0]?.acquired) return { campaign, deferred: true, reason: "already_launching" };
     if (["cancelled", "completed"].includes(campaign.status)) return { campaign, deferred: true, reason: campaign.status };
@@ -112,6 +120,17 @@ export async function scheduleAutopilot(force = false): Promise<AutopilotRunResu
   const brands = (await db.entity.findMany()).map(mapEntity);
   const rotation = mapRotation(settings, brands);
   const result: AutopilotRunResult = { ranAt: new Date().toISOString(), nextRunAt: tomorrowIso(), legs: [] };
+  if (settings.calendarEnabled) {
+    for (const id of await scheduleCalendarRuns()) {
+      try {
+        const queued = await enqueueCampaign(id);
+        if (queued) result.legs.push({entityId:queued.campaign.brandId,channel:queued.campaign.channel,campaignId:id,sent:queued.campaign.sentCount,volume:queued.campaign.volume});
+      } catch (error) {
+        await db.marketingCalendarEntry.update({where:{runCampaignId:id},data:{error:error instanceof Error ? error.message:"Campaign setup failed"}});
+      }
+    }
+    return result;
+  }
   if (!force && !rotation.autopilotEnabled) return result;
   for (const entityId of rotation.entityOrder) {
     const brand = brands.find(b => b.id === entityId);
@@ -151,7 +170,7 @@ export async function dispatchQueuedSends() {
     // An interrupted provider request may have succeeded. Require reconciliation rather than duplicate it.
     await db.sendJob.updateMany({ where: { status: "processing", claimedAt: { lt: new Date(Date.now() - 600000) } }, data: { status: "uncertain", error: "Worker interrupted; reconcile provider before retrying" } });
     await scheduleAutopilot();
-    for (const c of await db.campaign.findMany({ where: { status: "scheduled" }, take: 25 })) if (sendingEntityEnabled(c.brandId) && sendingChannelEnabled(c.channel)) await enqueueCampaign(c.id);
+    for (const c of await db.campaign.findMany({ where: { status: "scheduled" }, take: 25 })) if (!c.id.startsWith("camp-calendar-") && sendingEntityEnabled(c.brandId) && sendingChannelEnabled(c.channel)) await enqueueCampaign(c.id);
     while (processed < 200 && Date.now() < stopAt) {
       const jobs = await db.sendJob.findMany({ where: { status: "queued", scheduledAt: { lte: new Date() }, ...(activeSendingEntities()?.length ? { entityId: { in: activeSendingEntities() } } : {}) }, orderBy: { scheduledAt: "asc" }, take: 100 });
       let eligibleJob: typeof jobs[number] | undefined;
@@ -162,6 +181,7 @@ export async function dispatchQueuedSends() {
           continue;
         }
         if (!sendingEntityEnabled(job.entityId) || !sendingChannelEnabled(job.channel)) continue;
+        if (!await calendarRunAllowed(job.campaignId)) continue;
         if (campaign.status === "sending" && isWithinSendWindow(mapCampaign(campaign))) {
           const prior = await db.sendJob.findFirst({ where: { campaignId: campaign.id, claimedAt: { not: null } }, orderBy: { claimedAt: "desc" }, select: { claimedAt: true } });
           const nextAllowed = prior?.claimedAt ? prior.claimedAt.getTime() + 3600000 / Math.max(1, campaign.throttlePerHour) : 0;
@@ -175,6 +195,7 @@ export async function dispatchQueuedSends() {
       }
       if (!eligibleJob) break;
       const job = eligibleJob;
+      if (!await calendarRunAllowed(job.campaignId)) continue;
       const claim = await db.sendJob.updateMany({ where: { id: job.id, status: "queued" }, data: { status: "processing", claimedAt: new Date() } });
       if (!claim.count) continue;
       processed++;
@@ -185,6 +206,11 @@ export async function dispatchQueuedSends() {
         await db.sendJob.update({ where: { id: job.id }, data: { status: "skipped", error: "Contact unavailable, converted, or opted out", finishedAt: new Date() } });
       } else {
         try {
+          // Check again after claiming: an operator can pause the calendar at any time.
+          if (!await calendarRunAllowed(job.campaignId)) {
+            await db.sendJob.update({where:{id:job.id},data:{status:"queued",claimedAt:null}});
+            continue;
+          }
           const summary = await deliverCampaignBatch({ campaign: payload.campaign, brand: payload.brand, leads: [mapLead(current)], liveCap: 1, providerCampaignId: payload.providerCampaignId });
           const result = summary.results[0];
           if (result?.status === "accepted") {
