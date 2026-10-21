@@ -50,6 +50,8 @@ model Lead {
   /// Company / DBA / merchant name from vendor CSVs
   businessName      String?
   source            String
+  /// Explicit named manual folders; membership does not replace original source or history.
+  manualPackages    Json      @default("[]")
   /// Optional buy/list group within a source (e.g. "Week 12 MCA file")
   groupName         String    @default("General")
   purchaseDate      DateTime  @db.Date

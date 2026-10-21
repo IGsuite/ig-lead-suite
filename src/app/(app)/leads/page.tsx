@@ -1,4 +1,6 @@
 "use client";
+import {ManualLeadPackages} from "@/components/manual-lead-packages";
+import {listManualPackages,matchesLeadSource,manualPackageSource} from "@/lib/manual-packages";
 import { uploadFileToApi } from "@/lib/upload-client";
 
 import Link from "next/link";
@@ -8,14 +10,6 @@ import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/state-panels";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -36,15 +30,6 @@ import {
 import { usePlatform } from "@/hooks/use-platform";
 import { compactNumber, money, relativeDay } from "@/lib/client-format";
 
-const EMPTY_MANUAL = {
-  firstName: "",
-  lastName: "",
-  businessName: "",
-  phone: "",
-  email: "",
-  source: "Manual",
-};
-
 export default function LeadsPage() {
   const { data, loading, error, refresh } = usePlatform();
   const [source, setSource] = useState("LeadForge");
@@ -60,9 +45,7 @@ export default function LeadsPage() {
   const [groupFilter, setGroupFilter] = useState("all");
   const [verifyFilter, setVerifyFilter] = useState("all");
   const [addOpen, setAddOpen] = useState(false);
-  const [manual, setManual] = useState(EMPTY_MANUAL);
-  const [adding, setAdding] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
+  const [packageFilter,setPackageFilter] = useState("all");
 
   const groups = useMemo(() => {
     if (!data) return [];
@@ -95,6 +78,7 @@ export default function LeadsPage() {
     if (!data) return [];
     const q = query.trim().toLowerCase();
     return data.leads.filter((lead) => {
+      if(!matchesLeadSource(lead,packageFilter))return false;
       if (groupFilter !== "all" && lead.groupName !== groupFilter) return false;
       if (verifyFilter === "unverified") {
         if (
@@ -134,7 +118,7 @@ export default function LeadsPage() {
         .toLowerCase()
         .includes(q);
     });
-  }, [data, query, groupFilter, verifyFilter]);
+  }, [data, query, groupFilter, verifyFilter, packageFilter]);
 
   async function onUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -222,59 +206,7 @@ export default function LeadsPage() {
     }
   }
 
-  function openAddLead() {
-    setManual(EMPTY_MANUAL);
-    setAddError(null);
-    setAddOpen(true);
-  }
-
-  async function onAddLead(e: React.FormEvent) {
-    e.preventDefault();
-    setAddError(null);
-    if (!manual.phone.trim() && !manual.email.trim()) {
-      setAddError("Phone or email is required");
-      return;
-    }
-    setAdding(true);
-    try {
-      const res = await fetch("/api/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName: manual.firstName.trim() || undefined,
-          lastName: manual.lastName.trim() || undefined,
-          businessName: manual.businessName.trim() || undefined,
-          phone: manual.phone.trim() || undefined,
-          email: manual.email.trim() || undefined,
-          source: manual.source.trim() || "Manual",
-        }),
-      });
-      const json = (await res.json()) as {
-        error?: string;
-        code?: string;
-        lead?: { id: string; firstName?: string; lastName?: string };
-      };
-      if (!res.ok) {
-        const msg = json.error || "Could not add lead";
-        setAddError(msg);
-        toast.error(msg);
-        return;
-      }
-      const name =
-        [json.lead?.firstName, json.lead?.lastName].filter(Boolean).join(" ") ||
-        "Lead";
-      toast.success(`${name} added to the shared pool`);
-      setAddOpen(false);
-      setManual(EMPTY_MANUAL);
-      await refresh();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Could not add lead";
-      setAddError(msg);
-      toast.error(msg);
-    } finally {
-      setAdding(false);
-    }
-  }
+  function openAddLead(){setAddOpen(true);}
 
   if (loading) return <LoadingPanel label="Loading lead pool…" />;
   if (error || !data)
@@ -286,6 +218,8 @@ export default function LeadsPage() {
         title="Leads"
         description="Shared pool for every entity. Upload once, verify contacts, then Autopilot rotates offers through each portal — never mixing brands. Click a lead for the full history page."
       />
+
+      <section className="mb-5 rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-medium">Manual lead packages</h2><p className="mt-1 text-sm text-[color:var(--ink-muted)]">Keep each hand-picked audience in its own folder. Select its package under campaign audience sources.</p></div><Button variant="outline" onClick={openAddLead}>Add one or multiple contacts</Button></div><div className="mt-3 flex flex-wrap gap-2"><Button size="sm" variant={packageFilter==="all"?"default":"outline"} onClick={()=>setPackageFilter("all")}>All leads</Button>{listManualPackages(data.leads).map(p=><div key={p.id} className="flex items-center gap-2 rounded-md border border-[color:var(--ink-border)] p-1"><Button size="sm" variant={packageFilter===manualPackageSource(p.id)?"default":"outline"} onClick={()=>{setPackageFilter(manualPackageSource(p.id));setGroupFilter("all");setVerifyFilter("all");setQuery("");}}>{p.name} ({p.count}) · {p.id.slice(0,8)}</Button><Link className="px-2 text-xs underline" href={`/campaigns/new?brandId=abstract&channel=email&source=${encodeURIComponent(manualPackageSource(p.id))}`}>Use in campaign</Link></div>)}</div></section>
 
       <p className="mb-4 rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] px-4 py-3 text-sm text-[color:var(--ink-soft)] animate-rise">
         <strong className="text-[color:var(--ink)]">Global opt-out</strong>{" "}
@@ -385,125 +319,9 @@ export default function LeadsPage() {
         </p>
       </form>
 
-      <Dialog
-        open={addOpen}
-        onOpenChange={(open) => {
-          setAddOpen(open);
-          if (!open) {
-            setAddError(null);
-            setManual(EMPTY_MANUAL);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md" showCloseButton>
-          <DialogHeader>
-            <DialogTitle>Add lead</DialogTitle>
-            <DialogDescription>
-              Add one contact to the shared pool. Email or phone is required
-              (valid format). Name, business, and source help personalization
-              and reporting.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={onAddLead} className="grid gap-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="manual-first">First name</Label>
-                <Input
-                  id="manual-first"
-                  value={manual.firstName}
-                  onChange={(e) =>
-                    setManual((m) => ({ ...m, firstName: e.target.value }))
-                  }
-                  placeholder="Jane"
-                  autoComplete="given-name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="manual-last">Last name</Label>
-                <Input
-                  id="manual-last"
-                  value={manual.lastName}
-                  onChange={(e) =>
-                    setManual((m) => ({ ...m, lastName: e.target.value }))
-                  }
-                  placeholder="Doe"
-                  autoComplete="family-name"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="manual-business">Business name</Label>
-              <Input
-                id="manual-business"
-                value={manual.businessName}
-                onChange={(e) =>
-                  setManual((m) => ({ ...m, businessName: e.target.value }))
-                }
-                placeholder="Acme LLC"
-                autoComplete="organization"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="manual-phone">Phone</Label>
-              <Input
-                id="manual-phone"
-                type="tel"
-                value={manual.phone}
-                onChange={(e) =>
-                  setManual((m) => ({ ...m, phone: e.target.value }))
-                }
-                placeholder="+1 555 0100"
-                autoComplete="tel"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="manual-email">Email</Label>
-              <Input
-                id="manual-email"
-                type="email"
-                value={manual.email}
-                onChange={(e) =>
-                  setManual((m) => ({ ...m, email: e.target.value }))
-                }
-                placeholder="jane@example.com"
-                autoComplete="email"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="manual-source">Source</Label>
-              <Input
-                id="manual-source"
-                value={manual.source}
-                onChange={(e) =>
-                  setManual((m) => ({ ...m, source: e.target.value }))
-                }
-                placeholder="Manual"
-              />
-            </div>
-            {addError ? (
-              <p
-                className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
-                role="alert"
-              >
-                {addError}
-              </p>
-            ) : null}
-            <DialogFooter className="mx-0 mb-0 rounded-none border-0 bg-transparent p-0 pt-1">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={adding}
-                onClick={() => setAddOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={adding}>
-                {adding ? "Saving…" : "Save lead"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <ManualLeadPackages open={addOpen} onOpenChange={setAddOpen} leads={data.leads} onSaved={refresh}/>
+
+
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5 animate-rise-delay-1">
         <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">

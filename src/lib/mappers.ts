@@ -1,4 +1,5 @@
 import { normalizeRotation } from "@/lib/autopilot";
+import { readManualPackages } from "@/lib/manual-packages";
 import { readSmsConsents } from "@/lib/sms-consent";
 import type {
   AdAsset,
@@ -66,6 +67,7 @@ type EntityRow = {
 };
 
 type LeadRow = {
+  manualPackages?: unknown;
   id: string;
   email: string | null;
   phone: string | null;
@@ -123,6 +125,7 @@ export function mapEntity(row: EntityRow): Brand {
 
 export function mapLead(row: LeadRow): Lead {
   return {
+    manualPackages: readManualPackages(row.manualPackages),
     id: row.id,
     email: row.email ?? undefined,
     phone: row.phone ?? undefined,

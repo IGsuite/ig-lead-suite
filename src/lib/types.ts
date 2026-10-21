@@ -177,6 +177,7 @@ export interface SmsConsent {
 }
 
 export interface Lead {
+  manualPackages?: Array<{id:string;name:string}>;
   id: string;
   email?: string;
   phone?: string;

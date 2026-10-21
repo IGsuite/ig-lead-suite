@@ -1,3 +1,4 @@
+import { leadSourceOptions, readManualPackages } from "@/lib/manual-packages";
 import { getPrisma } from "@/lib/db";
 import { AUDIENCE_NOT_SELECTED, parseAudienceFilter } from "@/lib/audience-filters";
 
@@ -10,8 +11,8 @@ export async function updateDraftAudience(id: string, sourceFilter: string, grou
     if (campaign.status !== "draft" || id.startsWith("camp-calendar-") || campaign.sentCount ||
       await tx.sendJob.count({where:{campaignId:id}}) || await tx.emailCampaignSetup.count({where:{campaignId:id}}))
       throw new Error("Only untouched drafts can change audience. Create a new draft for a campaign that already started.");
-    const leads = await tx.lead.findMany({select:{source:true,groupName:true}});
-    for (const [value,values,label] of [[sourceFilter,leads.map(l=>l.source),"source"],[groupFilter,leads.map(l=>l.groupName),"group"]] as const) {
+    const leads = await tx.lead.findMany({select:{source:true,groupName:true,manualPackages:true}});
+    for (const [value,values,label] of [[sourceFilter,leadSourceOptions(leads.map(l=>({...l,manualPackages:readManualPackages(l.manualPackages)}))),"source"],[groupFilter,leads.map(l=>l.groupName),"group"]] as const) {
       if (value === AUDIENCE_NOT_SELECTED) continue;
       const parsed = parseAudienceFilter(value);
       if (parsed !== "all" && parsed.some(v=>!values.includes(v))) throw new Error(`Choose an existing lead ${label}`);

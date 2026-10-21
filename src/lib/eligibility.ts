@@ -1,4 +1,5 @@
 import { matchesAudienceFilter } from "@/lib/audience-filters";
+import { matchesLeadSource } from "@/lib/manual-packages";
 import type { Campaign, Lead } from "@/lib/types";
 import { contactOkForChannel } from "@/lib/verify";
 import { hasSmsMarketingConsent } from "@/lib/sms-consent";
@@ -20,7 +21,7 @@ export function isLeadEligibleForEntity(
 ): boolean {
   if (lead.optedOut || lead.status === "opted_out") return false;
   if (lead.status === "converted" || lead.convertedEntityId) return false;
-  if (!matchesAudienceFilter(lead.source, options.sourceFilter)) return false;
+  if (!matchesLeadSource(lead, options.sourceFilter)) return false;
   if (!matchesAudienceFilter(lead.groupName, options.groupFilter || "all"))
     return false;
   if (options.channel === "sms" && !lead.phone) return false;
