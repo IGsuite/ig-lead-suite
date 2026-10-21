@@ -20,6 +20,8 @@ import { saveCalendarDrafts, changeCalendarEntries, scheduleCalendarRuns, calend
 import { calendarClock } from "../src/lib/marketing-calendar";
 import { updateDraftAudience } from "../src/lib/campaign-audience";
 import { AUDIENCE_NOT_SELECTED, matchesAudienceFilter } from "../src/lib/audience-filters";
+import {saveManualPackage} from "../src/lib/manual-package-store";
+import {manualPackageSource,matchesLeadSource} from "../src/lib/manual-packages";
 
 test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and never retries uncertain sends", { timeout: 90000 }, async () => {
   Object.assign(process.env, { NODE_ENV: "production", DATABASE_URL: "postgresql://postgres@127.0.0.1:55439/postgres", SENDING_ENABLED: "true", TELNYX_API_KEY: "test-only" });
@@ -32,6 +34,7 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
   await pg.exec(await readFile("prisma/migrations/202610200005_sms_consent/migration.sql", "utf8"));
   await pg.exec(await readFile("prisma/migrations/202610200006_marketing_calendar/migration.sql", "utf8"));
   await pg.exec(await readFile("prisma/migrations/202610210007_program_campaigns/migration.sql", "utf8"));
+  await pg.exec(await readFile("prisma/migrations/202610210008_manual_packages/migration.sql", "utf8"));
   const server = new PGLiteSocketServer({ db: pg, host: "127.0.0.1", port: 55439 });
   await server.start();
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: false, max: 1 });
@@ -278,6 +281,16 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     assert.equal(await db.sendJob.count(),jobsBeforeAudience);
     assert.equal(await db.emailCampaignSetup.count({where:{campaignId:audienceDraft.id}}),0);
     await assert.rejects(updateDraftAudience(queuedDraft.id,"all","all"),/untouched drafts/);
+    const packageId="41e187b7-b10a-4cf9-aa19-d487c55cb89b";
+    const oldManual=await db.lead.create({data:{id:"old-manual-fixture",email:"old-manual@example.invalid",source:"Manual",groupName:"Manual",purchaseDate:new Date(),costCents:0,offeredEntityIds:[],status:"available",emailStatus:"valid"}});
+    const packageRows=Array.from({length:10},(_,i)=>({email:`manual-package-${i}@example.invalid`}));
+    const packaged=await saveManualPackage({id:packageId,name:"Exactly ten",rows:packageRows});assert.equal(packaged.total,10);
+    const retry=await saveManualPackage({id:packageId,name:"Exactly ten",rows:packageRows});assert.equal(retry.created,0);assert.equal(retry.total,10);
+    const stored=await db.lead.findMany();assert.equal(stored.map(mapLead).filter(l=>matchesLeadSource(l,manualPackageSource(packageId))).length,10);
+    assert.equal(matchesLeadSource(mapLead(oldManual),manualPackageSource(packageId)),false);
+    await updateDraftAudience(audienceDraft.id,manualPackageSource(packageId),"all");
+    assert.equal((await db.campaign.findUniqueOrThrow({where:{id:audienceDraft.id}})).sourceFilter,manualPackageSource(packageId));
+    assert.equal(await db.sendJob.count(),jobsBeforeAudience);
   } finally {
     globalThis.fetch = originalFetch;
     await db.$disconnect();

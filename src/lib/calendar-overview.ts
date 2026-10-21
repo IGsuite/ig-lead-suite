@@ -1,3 +1,5 @@
+import {leadSourceLabel} from "@/lib/manual-packages";
+import type {Lead} from "@/lib/types";
 import type { CalendarEntry } from "@/lib/marketing-calendar";
 import type { Brand, MessageTemplate, SocialCampaign } from "@/lib/types";
 
@@ -17,7 +19,7 @@ function dateOnly(value:string|null|undefined):string|null {
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0,10)===raw ? raw:null;
 }
 
-export function marketingPlanItems(brands:Pick<Brand,"id"|"shortName">[],entries:CalendarEntry[],socials:SocialCampaign[],templates:Pick<MessageTemplate,"id"|"programs">[]):MarketingPlanItem[] {
+export function marketingPlanItems(brands:Pick<Brand,"id"|"shortName">[],entries:CalendarEntry[],socials:SocialCampaign[],templates:Pick<MessageTemplate,"id"|"programs">[],leads:Lead[]=[]):MarketingPlanItem[] {
   const companies=new Map(brands.map(b=>[b.id,b.shortName]));
   const templatePrograms=new Map(templates.map(t=>[t.id,t.programs || []]));
   const campaignItems=entries.filter(e=>companies.has(e.brandId) && (e.channel==="email"||e.channel==="sms")).map(e=>({
@@ -25,7 +27,7 @@ export function marketingPlanItems(brands:Pick<Brand,"id"|"shortName">[],entries
     programs:e.snapshot.programs?.length?e.snapshot.programs:[e.product],kind:e.channel as "email"|"sms",
     startDate:e.date,endDate:e.date,time:`${e.startTime}–${e.endTime} ${e.timezone}`,
     status:e.status,href:`/campaigns/calendar?brandId=${encodeURIComponent(e.brandId)}&month=${e.date.slice(0,7)}`,
-    detail:`${e.snapshot.volume} contacts · Sources: ${e.snapshot.sourceFilter === "__audience_not_selected__" ? "not selected" : e.snapshot.sourceFilter} · ${e.snapshot.subject || e.product}`,
+    detail:`${e.snapshot.volume} contacts · Sources: ${e.snapshot.sourceFilter === "__audience_not_selected__" ? "not selected" : leadSourceLabel(e.snapshot.sourceFilter,leads)} · ${e.snapshot.subject || e.product}`,
     planningOnly:false,
   }));
   const socialItems:MarketingPlanItem[]=socials.flatMap(s=>{

@@ -1,0 +1,1 @@
+ALTER TABLE "Lead" ADD COLUMN "manualPackages" JSONB NOT NULL DEFAULT '[]';

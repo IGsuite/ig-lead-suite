@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { leadSourceOptions,leadSourceLabel,matchesLeadSource } from "@/lib/manual-packages";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { ProgramSelect } from "@/components/program-select";
@@ -61,7 +62,7 @@ function CampaignBuilderInner() {
   );
   const [imageUrl, setImageUrl] = useState("");
   const [imageAlt, setImageAlt] = useState("");
-  const [selectedSources, setSelectedSources] = useState<string[]>([]);
+  const [selectedSources, setSelectedSources] = useState<string[]>(searchParams.getAll("source"));
   const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [preferUnoffered, setPreferUnoffered] = useState(true);
   const [preferVerified, setPreferVerified] = useState(true);
@@ -78,7 +79,7 @@ function CampaignBuilderInner() {
 
   const sources = useMemo(() => {
     if (!data) return [];
-    return Array.from(new Set(data.leads.map((l) => l.source))).sort();
+    return leadSourceOptions(data.leads);
   }, [data]);
 
   const usableTemplates = useMemo(() => {
@@ -101,7 +102,7 @@ function CampaignBuilderInner() {
       if (lead.status === "converted" || lead.convertedEntityId) return false;
       if (
         selectedSources.length > 0 &&
-        !selectedSources.includes(lead.source)
+        !matchesLeadSource(lead,serializeAudienceFilter(selectedSources))
       )
         return false;
       if (
@@ -379,7 +380,7 @@ function CampaignBuilderInner() {
                           )
                         }
                       />
-                      <span>{source}</span>
+                      <span>{leadSourceLabel(source,data.leads)}</span>
                     </label>
                   ))
                 )}

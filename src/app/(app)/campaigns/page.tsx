@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { leadSourceOptions } from "@/lib/manual-packages";
 import { ProgramSelect } from "@/components/program-select";
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -259,7 +260,7 @@ function CampaignsInner() {
                     <div className="mt-1 select-all break-all text-[10px] text-[color:var(--ink-muted)]">
                       Campaign ID: {campaign.id}
                     </div>
-                    {campaign.status === "draft" && !campaign.id.startsWith("camp-calendar-") ? <DraftAudience campaign={campaign} sources={[...new Set(data.leads.map(l=>l.source))].sort()} groups={[...new Set(data.leads.map(l=>l.groupName))].sort()} onSaved={refresh} />:null}
+                    {campaign.status === "draft" && !campaign.id.startsWith("camp-calendar-") ? <DraftAudience campaign={campaign} sources={leadSourceOptions(data.leads)} leads={data.leads} groups={[...new Set(data.leads.map(l=>l.groupName))].sort()} onSaved={refresh} />:null}
                   </TableCell>
                   <TableCell>
                     <span
