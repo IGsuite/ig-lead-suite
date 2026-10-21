@@ -10,7 +10,7 @@ export async function GET() {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
   const session = await getSession();
-  const data = await getData();
+  const data = await getData({ leadLimit: 0 });
   if (!isAdminSession(session) && session) {
     const allowed = new Set(session.allowedEntityIds);
     return NextResponse.json({

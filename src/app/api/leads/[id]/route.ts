@@ -4,6 +4,8 @@ import { canAccessEntity } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
 import { getData } from "@/lib/store";
 import { normalizeContact } from "@/lib/eligibility";
+import { getPrisma, isNeonConfigured } from "@/lib/db";
+import { mapLead } from "@/lib/mappers";
 
 export async function GET(
   _request: Request,
@@ -13,8 +15,9 @@ export async function GET(
   if (unauthorized) return unauthorized;
   const { id } = await context.params;
   const session = await getSession();
-  const data = await getData();
-  const lead = data.leads.find((l) => l.id === id);
+  const data = await getData({leadLimit:0});
+  const row = isNeonConfigured() ? await getPrisma().lead.findUnique({where:{id}}) : null;
+  const lead = isNeonConfigured() ? (row?mapLead(row):null) : data.leads.find((l) => l.id === id);
   if (!lead) {
     return NextResponse.json({ error: "Lead not found" }, { status: 404 });
   }

@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       return NextResponse.json(await changeCalendarEntries([...new Set<string>(body.ids)],body.action));
     }
     const parsed = calendarInput.parse(body);
-    await getData(); // Existing store performs first-time initialization when needed.
+    await getData({ leadLimit: 0 }); // Existing store performs first-time initialization when needed.
     const entries = await saveCalendarDrafts(parsed);
     return NextResponse.json({entries},{status:201});
   } catch (error) {

@@ -13,7 +13,7 @@ export async function GET(_request: Request, { params }: Params) {
   if (unauthorized) return unauthorized;
   const { id } = await params;
   const session = await getSession();
-  const data = await getData();
+  const data = await getData({ leadLimit: 0 });
   const asset = (data.adAssets || []).find((a) => a.id === id);
   if (!asset) {
     return NextResponse.json({ error: "Asset not found" }, { status: 404 });

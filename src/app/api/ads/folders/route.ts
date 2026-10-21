@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   const payload = (await request.json()) as FolderBody;
 
   if (payload.action === "delete" && payload.id) {
-    const data = await getData();
+    const data = await getData({ leadLimit: 0 });
     const existing = (data.adFolders || []).find((f) => f.id === payload.id);
     if (!existing) {
       return NextResponse.json({ error: "Folder not found" }, { status: 404 });
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   }
 
   if (payload.action === "update" && payload.id) {
-    const data = await getData();
+    const data = await getData({ leadLimit: 0 });
     const existing = (data.adFolders || []).find((f) => f.id === payload.id);
     if (!existing) {
       return NextResponse.json({ error: "Folder not found" }, { status: 404 });
@@ -90,7 +90,7 @@ export async function POST(request: Request) {
   }
 
   if (payload.parentId) {
-    const data = await getData();
+    const data = await getData({ leadLimit: 0 });
     const parent = (data.adFolders || []).find((f) => f.id === payload.parentId);
     if (!parent) {
       return NextResponse.json({ error: "Parent folder not found" }, { status: 404 });

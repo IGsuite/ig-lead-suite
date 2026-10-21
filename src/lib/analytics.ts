@@ -114,6 +114,7 @@ function channelAttributedConversions(
   entityId: string | "all",
   channel: ChannelFilter,
 ): number {
+  if(data.leadSummary)return data.leadSummary.rollups.filter(r=>r.brandId===entityId&&r.channel===channel).reduce((n,r)=>n+r.conversions,0);
   if (entityId === "all") {
     if (channel === "all") {
       return data.leads.filter((l) => l.status === "converted").length;
@@ -172,7 +173,7 @@ export function entityCostRollups(data: PlatformData): EntityCostRollup[] {
         : data.replies.filter(
             (r) => r.brandId === brandId && r.sentiment === "interested",
           ).length;
-    const conversions =
+    const conversions = data.leadSummary ? (brandId===null ? channelAttributedConversions(data,"all","all") : data.leadSummary.byBrand[brandId]?.conversions||0) :
       brandId === null
         ? data.leads.filter((l) => l.status === "converted").length
         : data.leads.filter((l) => l.convertedEntityId === brandId).length;
@@ -276,11 +277,30 @@ function buildSourceRows(
     );
 }
 
+function sourceRowsFromRollups(data:PlatformData,brandId:string,channel:ChannelFilter):EntitySourceResult[]{
+  const sourceByLead=new Map(data.leads.map(l=>[l.id,l.source]));
+  const rollups=data.leadSummary!.rollups.filter(r=>r.brandId===brandId&&r.channel===channel);
+  const sources=new Set([...rollups.map(r=>r.source),...data.replies.filter(r=>brandId==="all"||r.brandId===brandId).map(r=>sourceByLead.get(r.leadId)||"Unknown")]);
+  const rows:EntitySourceResult[]=[...sources].map(source=>{
+    const rollup=rollups.find(r=>r.source===source);
+    const replies=data.replies.filter(r=>(brandId==="all"||r.brandId===brandId)&&(sourceByLead.get(r.leadId)||"Unknown")===source);
+    const scoped=filterReplies(replies,channel),spend=brandId==="all"?data.providerSpend.find(p=>p.source===source):undefined;
+    const costCents=spend?.costCents??rollup?.costCents??0;
+    return {source,offered:rollup?.offered||0,phoneCapable:rollup?.phoneCapable||0,emailCapable:rollup?.emailCapable||0,
+      replies:scoped.length,smsReplies:replies.filter(r=>r.channel==="sms").length,emailReplies:replies.filter(r=>r.channel==="email").length,
+      interested:scoped.filter(r=>r.sentiment==="interested").length,conversions:channel==="all"&&spend?spend.conversions:rollup?.conversions||0,
+      costCents,costPerReply:scoped.length?Math.round(costCents/scoped.length):null,recommendation:"hold",channel};
+  });
+  const ranked=rows.filter(r=>r.replies>0).sort((a,b)=>(a.costPerReply??Infinity)-(b.costPerReply??Infinity));
+  return rows.map(r=>({...r,recommendation:ranked.length>1&&r.source===ranked[0].source?"scale_up" as const:ranked.length>1&&r.source===ranked.at(-1)!.source?"cut" as const:"hold" as const})).sort((a,b)=>(a.costPerReply??Infinity)-(b.costPerReply??Infinity));
+}
+
 export function entitySourceResults(
   data: PlatformData,
   entityId: string,
   channel: ChannelFilter = "all",
 ): EntitySourceResult[] {
+  if(data.leadSummary)return sourceRowsFromRollups(data,entityId,channel);
   const offered = data.leads.filter(
     (l) =>
       l.offeredEntityIds.includes(entityId) &&
@@ -416,7 +436,7 @@ export function entityPerformanceScores(
       "all",
       channel,
     );
-    const offered = data.leads.filter((l) =>
+    const offered = data.leadSummary ? data.leadSummary.rollups.filter(r=>r.brandId==="all"&&r.channel===channel).reduce((n,r)=>n+r.offered,0) : data.leads.filter((l) =>
       leadChannelCapable(l, channel),
     ).length;
     const denom = sent || offered;
@@ -454,7 +474,7 @@ export function entityPerformanceScores(
   );
   const interested = replies.filter((r) => r.sentiment === "interested").length;
   const optOuts = replies.filter((r) => r.sentiment === "opt_out").length;
-  const offered = data.leads.filter(
+  const offered = data.leadSummary ? data.leadSummary.rollups.filter(r=>r.brandId===entityId&&r.channel===channel).reduce((n,r)=>n+r.offered,0) : data.leads.filter(
     (l) =>
       l.offeredEntityIds.includes(entityId) &&
       leadChannelCapable(l, channel),
@@ -672,6 +692,7 @@ export function poolSourceResults(
   data: PlatformData,
   channel: ChannelFilter = "all",
 ): EntitySourceResult[] {
+  if(data.leadSummary)return sourceRowsFromRollups(data,"all",channel);
   const bySource = new Map<string, Lead[]>();
   for (const lead of data.leads) {
     if (!leadChannelCapable(lead, channel)) continue;

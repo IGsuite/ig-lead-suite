@@ -5,14 +5,17 @@ import { getSession } from "@/lib/auth";
 import { getData, getStorageMode, resetData } from "@/lib/store";
 import { ensureDefaultAdmin } from "@/lib/users-store";
 import { isAdminSession } from "@/lib/acl";
+import { attachLeadSummary } from "@/lib/lead-summary";
 
-export async function GET() {
+export async function GET(request: Request) {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
   try {
     await ensureDefaultAdmin();
     const session = await getSession();
-    const data = await getData();
+    let data = await getData(getStorageMode() === "neon" ? { leadLimit: 0 } : undefined);
+    if (getStorageMode() === "neon") data = await attachLeadSummary(data);
+    if (getStorageMode() === "neon" && new URL(request.url).searchParams.get("leads") === "none") data.leads = [];
     const scoped = scopePlatformData(data, session);
     return NextResponse.json({
       ...scoped,

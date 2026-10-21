@@ -58,7 +58,7 @@ export async function GET(request: Request) {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
   const session = await getSession();
-  const data = await getData();
+  const data = await getData({ leadLimit: 0 });
   const { searchParams } = new URL(request.url);
   const entityId = searchParams.get("entityId");
   const platform = searchParams.get("platform") as SocialPlatform | null;
@@ -127,7 +127,7 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "delete" && body.id) {
-    const data = await getData();
+    const data = await getData({ leadLimit: 0 });
     const existing = (data.socialCampaigns || []).find((c) => c.id === body.id);
     if (!existing) {
       return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "update" && body.id) {
-    const data = await getData();
+    const data = await getData({ leadLimit: 0 });
     const existing = (data.socialCampaigns || []).find((c) => c.id === body.id);
     if (!existing) {
       return NextResponse.json({ error: "Campaign not found" }, { status: 404 });

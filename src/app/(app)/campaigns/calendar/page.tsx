@@ -1,4 +1,6 @@
 "use client";
+import { platformAudienceCatalog } from "@/lib/manual-packages";
+
 
 import Link from "next/link";
 import {leadSourceLabel} from "@/lib/manual-packages";
@@ -103,7 +105,7 @@ function CalendarInner() {
             {entries.filter(e=>e.date === date).map(e=><label key={e.id} className="mb-2 block rounded-lg bg-[color:var(--panel-soft)] p-2 text-xs">
               {calendar?.canManage ? <input type="checkbox" aria-label={`Select ${e.product} ${e.date} ${e.startTime}`} checked={selected.includes(e.id)} onChange={v=>setSelected(s=>v.target.checked?[...s,e.id]:s.filter(id=>id!==e.id))} className="mr-1" />:null}
               <strong>{e.product}</strong><br />{e.channel === "sms"?"Text":"Email"} · {e.startTime}–{e.endTime}<br />{e.status} · {e.snapshot.volume} contacts
-              <details className="mt-1"><summary>Copy & details</summary><p className="mt-1">{e.snapshot.name}<br />{e.timezone}<br />Audience: {leadSourceLabel(e.snapshot.sourceFilter,data.leads)} / {e.snapshot.groupFilter}<br />ID: {e.id}</p>{e.snapshot.subject ? <p className="mt-1 font-medium">{e.snapshot.subject}</p>:null}<pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap">{e.snapshot.message}</pre>{e.error ? <p className="mt-1">{e.error}</p>:null}</details>
+              <details className="mt-1"><summary>Copy & details</summary><p className="mt-1">{e.snapshot.name}<br />{e.timezone}<br />Audience: {leadSourceLabel(e.snapshot.sourceFilter,platformAudienceCatalog(data))} / {e.snapshot.groupFilter}<br />ID: {e.id}</p>{e.snapshot.subject ? <p className="mt-1 font-medium">{e.snapshot.subject}</p>:null}<pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap">{e.snapshot.message}</pre>{e.error ? <p className="mt-1">{e.error}</p>:null}</details>
             </label>)}
           </div>;
         })}
@@ -125,7 +127,7 @@ function CalendarInner() {
         <label className="space-y-1 text-sm">Maximum contacts per hour<Input type="number" min={1} max={20000} required value={throttle} onChange={e=>setThrottle(Number(e.target.value))} /></label>
       </div>
       <fieldset className="my-4"><legend className="mb-2 text-sm">Repeat on selected weekdays</legend><div className="flex flex-wrap gap-4">{weekdays.map((d,i)=><label key={d} className="text-sm"><input type="checkbox" checked={days.includes(i)} onChange={e=>setDays(s=>e.target.checked?[...s,i]:s.filter(v=>v!==i))} /> {d}</label>)}</div></fieldset>
-      {campaign ? <p className="mb-3 text-sm">Saved audience: <strong>{leadSourceLabel(campaign.sourceFilter,data.leads)} / {campaign.groupFilter}</strong> · {campaign.channel === "sms"?"Text":"Email"}. Change the starting campaign to use a different audience.</p>:null}
+      {campaign ? <p className="mb-3 text-sm">Saved audience: <strong>{leadSourceLabel(campaign.sourceFilter,platformAudienceCatalog(data))} / {campaign.groupFilter}</strong> · {campaign.channel === "sms"?"Text":"Email"}. Change the starting campaign to use a different audience.</p>:null}
       <Button type="submit" disabled={busy || !campaign || !days.length}>{busy?"Saving…":"Save calendar drafts — no sending"}</Button>
     </form>:null}
   </div>;

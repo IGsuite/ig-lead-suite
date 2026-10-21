@@ -99,6 +99,7 @@ export function scopePlatformData(
   // — keep full pool so members can still run campaigns from shared leads.
   return {
     ...data,
+    leadSummary: data.leadSummary ? {...data.leadSummary, byBrand:Object.fromEntries(Object.entries(data.leadSummary.byBrand).filter(([id])=>brandSet.has(id))),rollups:data.leadSummary.rollups.filter(r=>r.brandId==="all"||brandSet.has(r.brandId))} : undefined,
     brands,
     campaigns,
     replies,

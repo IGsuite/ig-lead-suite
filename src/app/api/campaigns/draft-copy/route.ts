@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const data = await getData();
+  const data = await getData({ leadLimit: 0 });
   const brand = brandId
     ? data.brands.find((b) => b.id === brandId) || null
     : null;

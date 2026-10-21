@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PlatformData } from "@/lib/types";
 
-export function usePlatform() {
+export function usePlatform(options?: { omitLeads?: boolean }) {
+  const omitLeads = options?.omitLeads || false;
   const [data, setData] = useState<PlatformData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -12,22 +13,21 @@ export function usePlatform() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/platform", { cache: "no-store" });
+      const res = await fetch(`/api/platform${omitLeads ? "?leads=none" : ""}`, { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to load platform data");
       const json = (await res.json()) as PlatformData & {
         storageMode?: string;
       };
-      const { storageMode: _mode, ...platform } = json;
-      setData(platform);
+      setData(json);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [omitLeads]);
 
   useEffect(() => {
-    void refresh();
+    void Promise.resolve().then(refresh);
   }, [refresh]);
 
   return { data, loading, error, refresh };

@@ -8,7 +8,7 @@ import type { RotationConfig } from "@/lib/types";
 export async function GET() {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
-  const data = await getData();
+  const data = await getData({ leadLimit: 0 });
   return NextResponse.json(data.rotation);
 }
 

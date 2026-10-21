@@ -38,6 +38,7 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
   await pg.exec(await readFile("prisma/migrations/202610200006_marketing_calendar/migration.sql", "utf8"));
   await pg.exec(await readFile("prisma/migrations/202610210007_program_campaigns/migration.sql", "utf8"));
   await pg.exec(await readFile("prisma/migrations/202610210008_manual_packages/migration.sql", "utf8"));
+  await pg.exec(await readFile("prisma/migrations/202610210009_bulk_imports/migration.sql", "utf8"));
   const server = new PGLiteSocketServer({ db: pg, host: "127.0.0.1", port: 55439 });
   await server.start();
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: false, max: 1 });

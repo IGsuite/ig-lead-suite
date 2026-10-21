@@ -9,7 +9,7 @@ export async function GET() {
   const unauthorized = await requireApiSession();
   if (unauthorized) return unauthorized;
   const session = await getSession();
-  const data = await getData();
+  const data = await getData({ leadLimit: 0 });
   const entries = (data.costEntries || []).filter(
     (e) => !e.brandId || canAccessEntity(session, e.brandId),
   );

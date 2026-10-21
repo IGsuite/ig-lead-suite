@@ -45,8 +45,8 @@ export function getStorageMode(): "neon" | "local" {
   return isNeonConfigured() ? "neon" : "local";
 }
 
-export async function getData(): Promise<PlatformData> {
-  return backend().getData();
+export async function getData(options?: { leadLimit?: number }): Promise<PlatformData> {
+  return isNeonConfigured() ? neonStore.getData(options) : backend().getData();
 }
 
 export async function resetData(): Promise<PlatformData> {
