@@ -16,6 +16,17 @@ export async function updateDraftAudience(id: string, sourceFilter: string, grou
       const parsed = parseAudienceFilter(value);
       if (parsed !== "all" && parsed.some(v=>!values.includes(v))) throw new Error(`Choose an existing lead ${label}`);
     }
+    if (sourceFilter !== AUDIENCE_NOT_SELECTED) {
+      const waiting = await tx.marketingCalendarEntry.findMany({where:{campaignId:id,brandId:campaign.brandId,status:"draft"}});
+      for (const entry of waiting) {
+        const snapshot = entry.snapshot;
+        if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot) && snapshot.sourceFilter === AUDIENCE_NOT_SELECTED) {
+          // Only fill an unset audience. Assigned snapshots and approved dates stay immutable.
+          await tx.marketingCalendarEntry.updateMany({where:{id:entry.id,status:"draft",snapshot:{path:["sourceFilter"],equals:AUDIENCE_NOT_SELECTED}},
+            data:{snapshot:{...snapshot,sourceFilter,groupFilter}}});
+        }
+      }
+    }
     return tx.campaign.update({where:{id},data:{sourceFilter,groupFilter}});
   });
 }
