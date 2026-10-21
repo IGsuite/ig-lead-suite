@@ -93,8 +93,9 @@ export async function ensureEmailCampaign(campaign: Campaign, brand: Brand): Pro
     const datedRun = campaign.id.startsWith("camp-calendar-") ? await db.marketingCalendarEntry.findUnique({where:{runCampaignId:campaign.id}}) : null;
     await request(`${prefix}/schedule`, "POST", { timezone: campaign.timezone || "America/New_York",
       days_of_the_week: datedRun ? [new Date(datedRun.date+"T12:00:00Z").getUTCDay()] : Array.isArray(scheduler.days) && scheduler.days.length ? scheduler.days : [0, 1, 2, 3, 4, 5, 6],
-      // The CRM outbox enforces the exact hourly throttle. Do not inherit an old template's slower interval/cap.
-      start_hour: window.start, end_hour: window.end, min_time_btw_emails: Math.max(1, Math.floor(60 / Math.max(1, campaign.throttlePerHour))),
+      // Smartlead rejects intervals below 3 minutes. The CRM still enforces the
+      // requested maximum rate; provider pacing may make actual delivery slower.
+      start_hour: window.start, end_hour: window.end, min_time_btw_emails: Math.max(3, Math.floor(60 / Math.max(1, campaign.throttlePerHour))),
       max_new_leads_per_day: Math.min(accountLimit,campaign.volume) });
     await request(`${prefix}/settings`, "POST", { stop_lead_settings: "REPLY_TO_AN_EMAIL", track_settings: template.track_settings || [] });
     const subject = toSmartleadTemplate(campaign.subject || "", brand.shortName);
