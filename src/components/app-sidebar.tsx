@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   BarChart3,
   Building2,
+  CalendarDays,
   FerrisWheel,
   Inbox,
   LayoutDashboard,
@@ -29,6 +30,7 @@ const nav = [
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/social", label: "Social Media", icon: Share2 },
   { href: "/creatives", label: "Ads", icon: Images },
   { href: "/autopilot", label: "Autopilot", icon: FerrisWheel },

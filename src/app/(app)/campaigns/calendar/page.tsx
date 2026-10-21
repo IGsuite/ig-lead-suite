@@ -21,7 +21,7 @@ function CalendarInner() {
   const {data,loading,error,refresh} = usePlatform();
   const params = useSearchParams();
   const [brandId,setBrandId] = useState(params.get("brandId") || "abstract");
-  const [month,setMonth] = useState(()=>new Date().toLocaleDateString("en-CA",{timeZone:"America/New_York"}).slice(0,7));
+  const [month,setMonth] = useState(()=>/^\d{4}-(0[1-9]|1[0-2])$/.test(params.get("month")||"") ? params.get("month")! : new Date().toLocaleDateString("en-CA",{timeZone:"America/New_York"}).slice(0,7));
   const [calendar,setCalendar] = useState<CalendarState | null>(null);
   const [calendarError,setCalendarError] = useState("");
   const [busy,setBusy] = useState(false);
@@ -29,9 +29,10 @@ function CalendarInner() {
   const product=programs.length ? programs.join(" + ") : "General";
   const [campaignId,setCampaignId] = useState("");
   const [templateId,setTemplateId] = useState("");
-  const [startDate,setStartDate] = useState("");
-  const [endDate,setEndDate] = useState("");
-  const [days,setDays] = useState([1,2,3,4,5]);
+  const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(params.get("date")||"") ? params.get("date")! : "";
+  const [startDate,setStartDate] = useState(requestedDate);
+  const [endDate,setEndDate] = useState(requestedDate);
+  const [days,setDays] = useState(requestedDate ? [new Date(requestedDate+"T12:00:00Z").getUTCDay()] : [1,2,3,4,5]);
   const [startTime,setStartTime] = useState("09:00");
   const [endTime,setEndTime] = useState("20:00");
   const [timezone,setTimezone] = useState("America/New_York");
@@ -69,7 +70,7 @@ function CalendarInner() {
   const changeMonth = (delta:number) => {const d = new Date(month+"-01T12:00:00Z");d.setUTCMonth(d.getUTCMonth()+delta);setMonth(d.toISOString().slice(0,7));};
   const draftIds = entries.filter(e=>["draft","paused","approved"].includes(e.status)).map(e=>e.id);
   return <div>
-    <PageHeader title="Marketing calendar" description="Plan each company’s product campaigns by day. Saving creates drafts. Approve selected days, then enable the calendar when you are ready to send." actions={<Link className="text-sm underline" href={`/campaigns?brandId=${brandId}&channel=email`}>Back to campaigns</Link>} />
+    <PageHeader title="Email & text calendar" description="Plan each company’s product campaigns by day. Saving creates drafts. Approve selected days, then enable the calendar when you are ready to send." actions={<div className="flex gap-4"><Link className="text-sm underline" href={`/calendar?brandId=${brandId}&month=${month}`}>All marketing calendar</Link><Link className="text-sm underline" href={`/campaigns?brandId=${brandId}&channel=email`}>Back to campaigns</Link></div>} />
     <div className="mb-5 flex flex-wrap items-end gap-4">
       <label className="space-y-1 text-sm">Company<select aria-label="Company" className={field} value={brandId} onChange={e=>{setBrandId(e.target.value);setCampaignId("");setTemplateId("");setPrograms([]);setCalendar(null);}}>{data.brands.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label>
       <Button variant="outline" onClick={()=>changeMonth(-1)}>Previous month</Button>
