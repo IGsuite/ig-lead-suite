@@ -28,7 +28,7 @@ function CalendarInner() {
   const [busy,setBusy] = useState(false);
   const [programs,setPrograms] = useState<string[]>([]);
   const product=programs.length ? programs.join(" + ") : "General";
-  const [campaignId,setCampaignId] = useState("");
+  const [campaignId,setCampaignId] = useState(params.get("campaignId") || "");
   const [templateId,setTemplateId] = useState("");
   const requestedDate = /^\d{4}-\d{2}-\d{2}$/.test(params.get("date")||"") ? params.get("date")! : "";
   const [startDate,setStartDate] = useState(requestedDate);
@@ -37,8 +37,8 @@ function CalendarInner() {
   const [startTime,setStartTime] = useState("09:00");
   const [endTime,setEndTime] = useState("20:00");
   const [timezone,setTimezone] = useState("America/New_York");
-  const [volume,setVolume] = useState(1);
-  const [throttle,setThrottle] = useState(15);
+  const [volume,setVolume] = useState(()=>Math.min(20000,Math.max(1,Math.floor(Number(params.get("volume"))||1))));
+  const [throttle,setThrottle] = useState(()=>Math.min(20000,Math.max(1,Math.floor(Number(params.get("throttle"))||15))));
   const [selected,setSelected] = useState<string[]>([]);
   const load = useCallback(async (signal?:AbortSignal) => {
     if (signal?.aborted) return;
@@ -81,7 +81,7 @@ function CalendarInner() {
     </div>
     <div className={`${panel} mb-5 text-sm`}>
       <p>Email: {calendar?.readiness.email ? "available for approved launches":"not enabled"} · Text: {calendar?.readiness.sms ? "available for approved launches":"not enabled — drafts only"}.</p>
-      <p className="mt-2 text-[color:var(--ink-muted)]">Every day creates a separate campaign ID and selects fresh eligible leads from the saved audience. Opt-outs, text permission, message cooldowns and sender limits apply. The time is the sending start; delivery is paced by your provider. Missed days are skipped. Pausing stops new submissions; messages already accepted by the provider may still send.</p>
+      <p className="mt-2 text-[color:var(--ink-muted)]">Each approved day draws up to its own daily quantity from Pool or your selected lists. The same contact is not reused across dates of this plan, even if the email appears in multiple CSVs. If fewer eligible contacts remain, it sends fewer; missed days are skipped. Email requires a saved valid email check; texts require a saved valid phone check and direct permission. Basic checks do not guarantee delivery. Sender limits apply. Pausing stops new submissions; messages already accepted by the provider may still send.</p>
       {calendar?.canManage ? <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="outline" disabled={busy || !selected.length} onClick={()=>{if(!calendar.enabled || window.confirm("Calendar sending is ON. Approving due entries can start sending now. Approve selected days?")) void act({action:"approve",ids:selected});}}>Approve selected days ({selected.length})</Button>
         <Button variant="outline" disabled={busy || !selected.length} onClick={()=>void act({action:"pause",ids:selected})}>Pause selected days</Button>
@@ -111,7 +111,7 @@ function CalendarInner() {
     </div>
     {calendar?.canManage ? <form className={panel} onSubmit={e=>{e.preventDefault();void act({brandId,product:campaign?.programs?.length ? campaign.programs.join(" + ") : product,campaignId,templateId:templateId || undefined,startDate,endDate,weekdays:days,startTime,endTime,timezone,volume,throttlePerHour:throttle});}}>
       <h2 className="mb-2 text-xl font-[family-name:var(--font-display)]">Add product campaign days</h2>
-      <p className="mb-4 text-sm text-[color:var(--ink-muted)]">Choose an existing campaign as the starting copy and audience, or <Link className="underline" href={`/campaigns/new?brandId=${brandId}&channel=email`}>build a campaign</Link> first. Selected copy is saved as a snapshot; later edits will not change these days. Plan up to 12 months ahead.</p>
+      <p className="mb-4 text-sm text-[color:var(--ink-muted)]">Choose an existing campaign as the starting copy and audience, or <Link className="underline" href={`/campaigns/new?brandId=${brandId}&channel=email`}>build a campaign</Link> first. Copy is saved as a snapshot. Saving audience settings on an untouched campaign also updates its draft days; approved days are protected. Plan up to 12 months ahead.</p>
       <div className="grid gap-4 md:grid-cols-3">
         <ProgramSelect brand={brand} value={programs} onChange={p=>{setPrograms(p);setCampaignId("");setTemplateId("");}} />
         <label className="space-y-1 text-sm">Campaign<select className={field} required value={campaignId} onChange={e=>{setCampaignId(e.target.value);setTemplateId("");setPrograms(campaigns.find(c=>c.id===e.target.value)?.programs || []);}}><option value="">Choose campaign</option>{campaigns.map(c=><option key={c.id} value={c.id}>{c.name} ({c.channel})</option>)}</select></label>

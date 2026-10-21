@@ -22,6 +22,9 @@ import { updateDraftAudience } from "../src/lib/campaign-audience";
 import { AUDIENCE_NOT_SELECTED, matchesAudienceFilter } from "../src/lib/audience-filters";
 import {saveManualPackage} from "../src/lib/manual-package-store";
 import {manualPackageSource,matchesLeadSource} from "../src/lib/manual-packages";
+import {calendarUsedContacts} from "../src/lib/calendar-audience";
+import {selectLeadsForSend} from "../src/lib/rotation-select";
+import {audienceContactKey} from "../src/lib/audience-filters";
 
 test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and never retries uncertain sends", { timeout: 90000 }, async () => {
   Object.assign(process.env, { NODE_ENV: "production", DATABASE_URL: "postgresql://postgres@127.0.0.1:55439/postgres", SENDING_ENABLED: "true", TELNYX_API_KEY: "test-only" });
@@ -129,7 +132,7 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
       id, brandId: "abstract", name: id, channel: "email", subject: "Fixture", message: `Different copy ${id}`,
       volume: 1, throttlePerHour: 15, status: "draft", sendWindowPreset: "custom", sendWindowStart: "09:00", sendWindowEnd: "20:00", timezone: "America/New_York",
     } }));
-    let creates = 0, wrongMailbox = false, interruptedCreate = false;
+    let creates = 0, wrongMailbox = false, interruptedCreate = false, mailboxCap = 15;
     const setupCalls: Array<{ path: string; body: Record<string, unknown> }> = [];
     const providerSequences = new Map<string, Array<{ id: number; seq_number: number; subject: string; email_body: string }>>();
     globalThis.fetch = async (input, init) => {
@@ -154,7 +157,7 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
         return Response.json({ ok: true });
       }
       if (path.endsWith("/email-accounts") && init?.method === "GET") return Response.json([{ id: 10,
-        from_email: wrongMailbox ? "info@other-business.invalid" : "info@abstractcapitalgroup.com", is_smtp_success: true, is_imap_success: true, message_per_day: 15 }]);
+        from_email: wrongMailbox ? "info@other-business.invalid" : "info@abstractcapitalgroup.com", is_smtp_success: true, is_imap_success: true, message_per_day: mailboxCap }]);
       if (path.endsWith("/campaigns/provider-email-test")) return Response.json({ scheduler_cron_value: { days: [1, 2, 3, 4, 5] }, max_leads_per_day: 100, min_time_btwn_emails: 10 });
       if (path.endsWith("/campaigns/create")) {
         creates++;
@@ -175,7 +178,7 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     assert.equal(creates, 2);
     const schedules = setupCalls.filter(c => c.path.endsWith("/schedule"));
     assert.equal(schedules.length, 2);
-    assert.equal(schedules[0].body.max_new_leads_per_day, 15);
+    assert.equal(schedules[0].body.max_new_leads_per_day, 1);
     assert.equal(schedules[0].body.start_hour, "09:00");
     assert.equal(schedules[0].body.end_hour, "20:00");
     assert.equal(await db.sendJob.count(), jobsBefore);
@@ -275,9 +278,10 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     assert.equal((filled.snapshot as {sourceFilter:string}).sourceFilter,"email-queue-fixture");
     assert.equal((filled.snapshot as {volume:number}).volume,250); assert.equal(filled.status,"draft");
     await changeCalendarEntries([waitingCalendar.id],"approve");
-    await updateDraftAudience(audienceDraft.id,"all","all");
+    await assert.rejects(updateDraftAudience(audienceDraft.id,"all","all"),/already approved or started/);
     const approvedSnapshot = await db.marketingCalendarEntry.findUniqueOrThrow({where:{id:waitingCalendar.id}});
     assert.equal((approvedSnapshot.snapshot as {sourceFilter:string}).sourceFilter,"email-queue-fixture"); assert.equal(approvedSnapshot.status,"approved");
+    await changeCalendarEntries([waitingCalendar.id],"pause");
     assert.equal(await db.sendJob.count(),jobsBeforeAudience);
     assert.equal(await db.emailCampaignSetup.count({where:{campaignId:audienceDraft.id}}),0);
     await assert.rejects(updateDraftAudience(queuedDraft.id,"all","all"),/untouched drafts/);
@@ -291,6 +295,44 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     await updateDraftAudience(audienceDraft.id,manualPackageSource(packageId),"all");
     assert.equal((await db.campaign.findUniqueOrThrow({where:{id:audienceDraft.id}})).sourceFilter,manualPackageSource(packageId));
     assert.equal(await db.sendJob.count(),jobsBeforeAudience);
+
+    // Calendar plans persist settings without provisioning or direct launching the parent.
+    const poolParent=await createCampaign({...audienceDraft,name:"Pool four-day fixture",mode:"auto",sourceFilter:"all",groupFilter:"cycle",preferVerified:true,preferUnoffered:false});
+    assert.equal((await enqueueCampaign(poolParent.id))?.reason,"calendar_only");
+    assert.equal(await db.emailCampaignSetup.count({where:{campaignId:poolParent.id}}),0);
+    const endDay=new Date(day);endDay.setUTCDate(endDay.getUTCDate()+3);
+    const cycleDays=await saveCalendarDrafts({...raw,campaignId:poolParent.id,endDate:endDay.toISOString().slice(0,10),volume:250});
+    assert.equal(cycleDays.length,4);
+    await updateDraftAudience(poolParent.id,"all","all","auto");
+    const cycleSnapshots=await db.marketingCalendarEntry.findMany({where:{campaignId:poolParent.id}});
+    assert.ok(cycleSnapshots.every(e=>(e.snapshot as {sourceFilter:string}).sourceFilter==="all"&&(e.snapshot as {preferVerified:boolean}).preferVerified&&e.status==="draft"));
+    const cycleRows=Array.from({length:1000},(_,i)=>({id:`cycle-${i}`,email:`cycle-${i}@fixture.invalid`,source:i%2?"CSV A":"CSV B",groupName:"cycle",purchaseDate:new Date(),costCents:0,offeredEntityIds:[],status:"available",emailStatus:"valid"}));
+    await db.lead.createMany({data:[...cycleRows,{...cycleRows[0],id:"cycle-alias",email:cycleRows[0].email.toUpperCase(),source:"CSV C"}]});
+    const allCycleLeads=(await db.lead.findMany({where:{groupName:"cycle"}})).map(mapLead);
+    const consumed=new Set<string>();
+    for(const [index,cycleDay]of cycleDays.entries()){
+      const excludedContactKeys=await calendarUsedContacts(db,cycleDay.runCampaignId,allCycleLeads,"email");
+      assert.equal(excludedContactKeys.size,index*250);
+      const picked=selectLeadsForSend({leads:allCycleLeads,sendEvents:[],entityId:"abstract",channel:"email",volume:250,mode:"auto",sourceFilter:"all",groupFilter:"cycle",messageFingerprint:"four-days",excludedContactKeys,poolCursor:index*250});
+      assert.equal(picked.selected.length,250);
+      await db.sendJob.createMany({data:picked.selected.map(l=>({id:`cycle-job-${index}-${l.id}`,campaignId:cycleDay.runCampaignId,leadId:l.id,entityId:"abstract",channel:"email",status:["accepted","uncertain","queued","delivered"][index],payload:{lead:l} as never}))});
+      for(const l of picked.selected){const key=audienceContactKey(l,"email");assert.ok(!consumed.has(key));consumed.add(key);}
+    }
+    assert.equal(consumed.size,1000);
+    assert.equal((await calendarUsedContacts(db,cycleDays[0].runCampaignId,allCycleLeads,"email")).size,1000);
+    // A separate program/plan has its own history; uncertain jobs stay consumed in the original plan.
+    assert.equal((await calendarUsedContacts(db,waitingCalendar.runCampaignId,allCycleLeads,"email")).size,0);
+    // New dated provider schedules use this plan's volume and pace, not an old template's 100/day and 10-minute defaults.
+    mailboxCap=250;
+    const scheduleFixture=await makeEmail("calendar-schedule-fixture");
+    const scheduleParent=await db.campaign.update({where:{id:scheduleFixture.id},data:{volume:250,throttlePerHour:25}});
+    const [providerDay]=await saveCalendarDrafts({...raw,campaignId:scheduleFixture.id,volume:250,throttlePerHour:25});
+    const providerRun=await db.campaign.create({data:{...scheduleParent,id:providerDay.runCampaignId,mode:"auto"}});
+    const providerRunId=await ensureEmailCampaign(mapCampaign(providerRun),brand);
+    const datedSchedule=setupCalls.find(c=>c.path===`/api/v1/campaigns/${providerRunId}/schedule`)!.body;
+    assert.equal(datedSchedule.max_new_leads_per_day,250);
+    assert.equal(datedSchedule.min_time_btw_emails,2);
+    assert.deepEqual(datedSchedule.days_of_the_week,[day.getUTCDay()]);
   } finally {
     globalThis.fetch = originalFetch;
     await db.$disconnect();

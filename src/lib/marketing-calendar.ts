@@ -53,7 +53,7 @@ export function calendarSnapshot(campaign: Campaign, template: MessageTemplate |
     // An explicitly selected template replaces the full body, including any old HTML/image override.
     htmlMessage: template ? (/<(?:html|table|div|p)\b/i.test(template.body) ? template.body : null) : campaign.htmlMessage,
     imageUrl: template ? null : campaign.imageUrl, imageAlt: template ? null : campaign.imageAlt,
-    mode:"auto", volume:input.volume, throttlePerHour:input.throttlePerHour,
+    mode:"auto", preferVerified:true, preferUnoffered:false, volume:input.volume, throttlePerHour:input.throttlePerHour,
     sendWindowPreset:"custom",sendWindowStart:input.startTime,sendWindowEnd:input.endTime,timezone:input.timezone,
     status:"draft",sentCount:0,replyCount:0,optOutCount:0,bounceCount:0,startedAt:undefined};
 }

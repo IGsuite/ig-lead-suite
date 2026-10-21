@@ -24,14 +24,15 @@ export async function PATCH(request: Request) {
   const unauthorized = await requireApiSession(); if (unauthorized) return unauthorized;
   if (request.headers.get("origin") !== new URL(request.url).origin) return NextResponse.json({error:"Origin not allowed"},{status:403});
   const session = await getSession();
-  const body = await request.json().catch(()=>null) as {id?:unknown;sourceFilter?:unknown;groupFilter?:unknown} | null;
+  const body = await request.json().catch(()=>null) as {id?:unknown;sourceFilter?:unknown;groupFilter?:unknown;mode?:unknown} | null;
+  if (body?.mode !== undefined && body.mode !== "own" && body.mode !== "auto") return NextResponse.json({error:"Choose one-time or automatic"},{status:400});
   if (!body || typeof body.id !== "string" || typeof body.sourceFilter !== "string" || typeof body.groupFilter !== "string" || !body.sourceFilter.trim() || !body.groupFilter.trim() || body.sourceFilter.length>1000 || body.groupFilter.length>1000)
     return NextResponse.json({error:"Campaign, source and group are required"},{status:400});
   const data = await getData(), campaign = data.campaigns.find(c=>c.id === body.id);
   if (!campaign) return NextResponse.json({error:"Campaign not found"},{status:404});
   const gate = assertEntityAccess(session,campaign.brandId);
   if (!gate.ok) return NextResponse.json({error:gate.error},{status:gate.status});
-  try {return NextResponse.json(mapCampaign(await updateDraftAudience(body.id,body.sourceFilter.trim(),body.groupFilter.trim())));}
+  try {return NextResponse.json(mapCampaign(await updateDraftAudience(body.id,body.sourceFilter.trim(),body.groupFilter.trim(),body.mode as "own"|"auto"|undefined)));}
   catch(error) {return NextResponse.json({error:error instanceof Error?error.message:"Unable to save audience"},{status:409});}
 }
 
@@ -197,8 +198,8 @@ export async function POST(request: Request) {
     imageAlt,
     sourceFilter: body.sourceFilter || "all",
     groupFilter: body.groupFilter || "all",
-    preferUnoffered: body.preferUnoffered ?? true,
-    preferVerified: body.preferVerified ?? true,
+    preferUnoffered: body.mode === "auto" ? false : body.preferUnoffered ?? true,
+    preferVerified: body.mode === "auto" ? true : body.preferVerified ?? true,
     mode: body.mode === "auto" ? "auto" : "own",
     volume: body.volume,
     throttlePerHour: body.throttlePerHour,

@@ -8,6 +8,7 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { DraftAudience } from "@/components/draft-audience";
+import { calendarOnly } from "@/lib/calendar-audience-client";
 import { AUDIENCE_NOT_SELECTED } from "@/lib/audience-filters";
 import { StatusPill } from "@/components/status-pill";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/state-panels";
@@ -129,7 +130,7 @@ function CampaignsInner() {
     <div>
       <PageHeader
         title="Campaigns"
-        description="SMS and email stay separate. Pick a channel, then an entity portal — Ahava never sends under Abstract. Auto = Ferris-wheel daily volume; Own = standalone campaign outside the wheel."
+        description="Pick a company and channel, then choose Pool or selected lists. Run one batch, or use approved calendar dates for automatic daily batches. Email and text stay separate."
         actions={
           <>
           <Link className={cn(buttonVariants({variant:"outline"}))} href={`/campaigns/calendar?brandId=${entityId}`}>Marketing calendar</Link>
@@ -137,7 +138,7 @@ function CampaignsInner() {
             href={`/campaigns/new?brandId=${entityId}&channel=${channel}`}
             className={cn(buttonVariants())}
           >
-            Build Own {channelLabel} for {brand?.shortName || "entity"}
+            Build {channelLabel} campaign for {brand?.shortName || "entity"}
           </Link>
           </>
         }
@@ -146,19 +147,17 @@ function CampaignsInner() {
       <div className="mb-4 max-w-xl"><ProgramSelect brand={brand} value={programs} onChange={setPrograms} label="Filter by funding programs" /><p className="text-xs text-[color:var(--ink-muted)]">No selection shows all programs.</p></div>
       <div className="mb-4 flex flex-wrap gap-3 text-sm animate-rise">
         <div className="rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] px-3 py-2">
-          <span className="font-medium">Auto</span>
+          <span className="font-medium">Automatic — calendar</span>
           <span className="text-[color:var(--ink-muted)]">
             {" "}
-            — Autopilot wheel pulls this entity’s daily volume from the shared
-            pool with fair rotation.
+            — Each approved date draws its own quantity from the saved pool or lists.
           </span>
         </div>
         <div className="rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] px-3 py-2">
-          <span className="font-medium">Own</span>
+          <span className="font-medium">One-time batch</span>
           <span className="text-[color:var(--ink-muted)]">
             {" "}
-            — Standalone campaign you build here; still respects opt-outs and
-            message cooldowns.
+            — Launch one batch from the saved audience. Opt-outs and cooldowns apply.
           </span>
         </div>
       </div>
@@ -260,7 +259,7 @@ function CampaignsInner() {
                     <div className="mt-1 select-all break-all text-[10px] text-[color:var(--ink-muted)]">
                       Campaign ID: {campaign.id}
                     </div>
-                    {campaign.status === "draft" && !campaign.id.startsWith("camp-calendar-") ? <DraftAudience campaign={campaign} sources={leadSourceOptions(data.leads)} leads={data.leads} groups={[...new Set(data.leads.map(l=>l.groupName))].sort()} onSaved={refresh} />:null}
+                    {campaign.status === "draft" && !campaign.id.startsWith("camp-calendar-") ? <DraftAudience key={[campaign.id,campaign.sourceFilter,campaign.groupFilter,campaign.mode].join("|")} campaign={campaign} sources={leadSourceOptions(data.leads)} leads={data.leads} groups={[...new Set(data.leads.map(l=>l.groupName))].sort()} onSaved={refresh} />:null}
                   </TableCell>
                   <TableCell>
                     <span
@@ -270,7 +269,7 @@ function CampaignsInner() {
                           : "rounded-md border border-[color:var(--ink-border)] px-2 py-0.5 text-xs font-medium"
                       }
                     >
-                      {campaign.mode === "auto" ? "Auto" : "Own"}
+                      {campaign.mode === "auto" ? "Calendar auto" : "One-time"}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -286,7 +285,7 @@ function CampaignsInner() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                      {campaign.status === "draft" ||
+                      {calendarOnly(campaign) ? <Link href={`/campaigns/calendar?brandId=${campaign.brandId}&campaignId=${campaign.id}`} className={buttonVariants({size:"sm",variant:"outline"})}>View calendar</Link> : campaign.status === "draft" ||
                       campaign.status === "scheduled" ? (
                         <Button size="sm" disabled={campaign.sourceFilter === AUDIENCE_NOT_SELECTED} onClick={() => launch(campaign.id)}>
                           Launch

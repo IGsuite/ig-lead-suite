@@ -27,7 +27,7 @@ test("multi-program calendar snapshots preserve selected products and multiple l
 });
 test("multiple packages select their union once per delivery address and honor duplicate opt-outs and history",()=>{
  const base={id:"fixture",source:"fixture",lastEntityId:null,convertedEntityId:null,createdAt:new Date().toISOString(),status:"available",offeredEntityIds:[],emailStatus:"valid",phoneStatus:"valid",optedOut:false,groupName:"Prospects",purchaseDate:"2026-10-21",costCents:0} as Lead;
- const leads=[{...base,id:"a",source:"Package A",email:"Owner@example.invalid"},{...base,id:"b",source:"Package B",email:" owner@example.invalid "},{...base,id:"c",source:"Package B",email:"second@example.invalid"},{...base,id:"d",source:"Other",email:"other@example.invalid"}];
+ const leads=[{...base,id:"a",source:"Package A",email:"Owner@fixture.invalid"},{...base,id:"b",source:"Package B",email:" owner@fixture.invalid "},{...base,id:"c",source:"Package B",email:"second@fixture.invalid"},{...base,id:"d",source:"Other",email:"other@fixture.invalid"}];
  const sourceFilter=serializeAudienceFilter(["Package A","Package B"]);
  assert.equal(matchesAudienceFilter("Package B",sourceFilter),true);assert.equal(matchesAudienceFilter("Other",sourceFilter),false);
  const input={leads,sendEvents:[],entityId:"abstract",channel:"email" as const,volume:10,mode:"own" as const,messageFingerprint:"same",sourceFilter};

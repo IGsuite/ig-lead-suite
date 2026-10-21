@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { leadSourceOptions,leadSourceLabel,matchesLeadSource } from "@/lib/manual-packages";
+import { leadSourceOptions } from "@/lib/manual-packages";
+import { CampaignAudienceControls } from "@/components/campaign-audience-controls";
+import { isLeadEligibleForEntity } from "@/lib/eligibility";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { ProgramSelect } from "@/components/program-select";
@@ -25,7 +27,7 @@ import { usePlatform } from "@/hooks/use-platform";
 import {
   audienceContactKey,
   serializeAudienceFilter,
-  toggleAudienceValue,
+  AUDIENCE_NOT_SELECTED,
 } from "@/lib/audience-filters";
 import { compactNumber } from "@/lib/client-format";
 import type {
@@ -62,8 +64,8 @@ function CampaignBuilderInner() {
   );
   const [imageUrl, setImageUrl] = useState("");
   const [imageAlt, setImageAlt] = useState("");
-  const [selectedSources, setSelectedSources] = useState<string[]>(searchParams.getAll("source"));
-  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [sourceFilter, setSourceFilter] = useState(()=>serializeAudienceFilter(searchParams.getAll("source")));
+  const [groupFilter, setGroupFilter] = useState("all");
   const [preferUnoffered, setPreferUnoffered] = useState(true);
   const [preferVerified, setPreferVerified] = useState(true);
   const [volume, setVolume] = useState(1500);
@@ -97,47 +99,11 @@ function CampaignBuilderInner() {
 
   const audienceCount = useMemo(() => {
     if (!data) return 0;
-    return new Set(data.leads.filter((lead) => {
-      if (lead.optedOut || lead.status === "opted_out") return false;
-      if (lead.status === "converted" || lead.convertedEntityId) return false;
-      if (
-        selectedSources.length > 0 &&
-        !matchesLeadSource(lead,serializeAudienceFilter(selectedSources))
-      )
-        return false;
-      if (
-        selectedGroups.length > 0 &&
-        !selectedGroups.includes(lead.groupName)
-      )
-        return false;
-      if (channel === "sms" && !lead.phone) return false;
-      if (channel === "email" && !lead.email) return false;
-      if (preferUnoffered && lead.offeredEntityIds.includes(brandId)) return false;
-      if (preferVerified) {
-        if (channel === "email") {
-          if (
-            lead.emailStatus !== "valid" &&
-            lead.emailStatus !== "risky"
-          )
-            return false;
-        } else if (
-          lead.phoneStatus !== "valid" &&
-          lead.phoneStatus !== "risky"
-        ) {
-          return false;
-        }
-      }
-      return true;
-    }).map(lead=>audienceContactKey(lead,channel))).size;
-  }, [
-    data,
-    selectedSources,
-    selectedGroups,
-    channel,
-    preferUnoffered,
-    preferVerified,
-    brandId,
-  ]);
+    const blocked=new Set(data.leads.filter(l=>l.optedOut||l.status==="opted_out"||l.status==="converted"||l.convertedEntityId).map(l=>audienceContactKey(l,channel)));
+    return new Set(data.leads.filter(lead=>!blocked.has(audienceContactKey(lead,channel))&&isLeadEligibleForEntity(lead,brandId,{
+      channel,sourceFilter,groupFilter,preferUnoffered:mode==="own"&&preferUnoffered,preferVerified:mode==="auto"||preferVerified,
+    })).map(lead=>audienceContactKey(lead,channel))).size;
+  },[data,sourceFilter,groupFilter,channel,mode,preferUnoffered,preferVerified,brandId]);
 
   async function draftWithAi() {
     setDrafting(true);
@@ -201,8 +167,8 @@ function CampaignBuilderInner() {
           htmlMessage: channel === "email" && /<(html|table|div|p)\b/i.test(message) ? message : null,
           imageUrl: channel === "email" ? imageUrl.trim() || null : null,
           imageAlt: channel === "email" ? imageAlt.trim() || null : null,
-          sourceFilter: serializeAudienceFilter(selectedSources),
-          groupFilter: serializeAudienceFilter(selectedGroups),
+          sourceFilter,
+          groupFilter,
           preferUnoffered,
           preferVerified,
           mode,
@@ -219,6 +185,12 @@ function CampaignBuilderInner() {
       });
       if (!res.ok) { const failed=await res.json(); throw new Error(failed.error || "Could not create campaign"); }
       const campaign = (await res.json()) as { id: string };
+      if (mode === "auto") {
+        toast.success("Automatic campaign saved as a draft. Plan and approve its calendar dates when ready.");
+        await refresh();
+        router.push(`/campaigns/calendar?brandId=${brandId}&campaignId=${campaign.id}&volume=${volume}&throttle=${throttlePerHour}`);
+        return;
+      }
       if (status === "scheduled") {
         const launchRes = await fetch("/api/campaigns", {
           method: "POST",
@@ -354,72 +326,10 @@ function CampaignBuilderInner() {
             <Input value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Audience sources</Label>
-              <p className="text-xs text-[color:var(--ink-muted)]">
-                Pick one or more. Leave all unchecked = every source.
-              </p>
-              <div className="max-h-40 space-y-2 overflow-y-auto rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel-hover)] px-3 py-2">
-                {sources.length === 0 ? (
-                  <p className="text-xs text-[color:var(--ink-muted)]">
-                    No sources in the pool yet.
-                  </p>
-                ) : (
-                  sources.map((source) => (
-                    <label
-                      key={source}
-                      className="flex items-center gap-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedSources.includes(source)}
-                        onChange={(e) =>
-                          setSelectedSources((prev) =>
-                            toggleAudienceValue(prev, source, e.target.checked),
-                          )
-                        }
-                      />
-                      <span>{leadSourceLabel(source,data.leads)}</span>
-                    </label>
-                  ))
-                )}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Audience groups</Label>
-              <p className="text-xs text-[color:var(--ink-muted)]">
-                Pick one or more. Leave all unchecked = every group.
-              </p>
-              <div className="max-h-40 space-y-2 overflow-y-auto rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel-hover)] px-3 py-2">
-                {groups.length === 0 ? (
-                  <p className="text-xs text-[color:var(--ink-muted)]">
-                    No groups in the pool yet.
-                  </p>
-                ) : (
-                  groups.map((group) => (
-                    <label
-                      key={group}
-                      className="flex items-center gap-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedGroups.includes(group)}
-                        onChange={(e) =>
-                          setSelectedGroups((prev) =>
-                            toggleAudienceValue(prev, group, e.target.checked),
-                          )
-                        }
-                      />
-                      <span>{group}</span>
-                    </label>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
+          <CampaignAudienceControls source={sourceFilter} group={groupFilter} mode={mode} sources={sources} groups={groups} leads={data.leads} brandId={brandId} disabled={saving} onSource={setSourceFilter} onGroup={setGroupFilter} onMode={setMode} />
 
           <div className="space-y-2">
+            <p className="text-xs text-[color:var(--ink-muted)]">Verification checks contact format. It does not prove mailbox ownership or guarantee delivery. Texts also require direct permission for this company.</p>
             <Label>Use template</Label>
             <Select
               value={templateId || "__none__"}
@@ -551,33 +461,6 @@ function CampaignBuilderInner() {
             </div>
           ) : null}
 
-          <div className="space-y-2">
-            <Label>Campaign mode</Label>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant={mode === "own" ? "default" : "outline"}
-                onClick={() => setMode("own")}
-              >
-                Own campaign
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={mode === "auto" ? "default" : "outline"}
-                onClick={() => setMode("auto")}
-              >
-                Auto wheel
-              </Button>
-            </div>
-            <p className="text-xs text-[color:var(--ink-muted)]">
-              {mode === "own"
-                ? "Standalone blast for this entity — outside daily Autopilot volumes. Still respects global opt-outs and same-message cooldowns."
-                : "Marks this campaign as an Auto wheel leg (fair pool cursor + channel cooldown). Prefer Autopilot page for daily volumes."}
-            </p>
-          </div>
-
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -585,21 +468,22 @@ function CampaignBuilderInner() {
               onChange={(e) => setPreferUnoffered(e.target.checked)}
               disabled={mode === "auto"}
             />
-            Prefer leads not yet offered this entity (Own mode)
+            Prefer leads not yet offered this company (one-time batches)
           </label>
 
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              checked={preferVerified}
+              checked={mode === "auto" || preferVerified}
+              disabled={mode === "auto"}
               onChange={(e) => setPreferVerified(e.target.checked)}
             />
-            Only queue verified (valid/risky) contacts — skip invalids to cut bounces
+            Only queue contacts with a saved valid check for this channel (skip risky, invalid and unverified)
           </label>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>Volume</Label>
+              <Label>{mode === "auto" ? "Default contacts per scheduled day" : "Batch volume"}</Label>
               <Input
                 type="number"
                 min={1}
@@ -671,12 +555,12 @@ function CampaignBuilderInner() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" variant="outline" disabled={saving}>
+            <Button type="submit" variant="outline" disabled={saving || sourceFilter === AUDIENCE_NOT_SELECTED}>
               Save draft
             </Button>
             <Button
               type="button"
-              disabled={saving || audienceCount === 0}
+              disabled={saving || sourceFilter === AUDIENCE_NOT_SELECTED || (mode === "own" && audienceCount === 0)}
               onClick={() => void create("scheduled")}
               title={
                 audienceCount === 0
@@ -684,7 +568,7 @@ function CampaignBuilderInner() {
                   : undefined
               }
             >
-              Launch now
+              {mode === "auto" ? "Save & plan dates" : "Launch one-time batch"}
             </Button>
           </div>
           {audienceCount === 0 ? (
@@ -706,8 +590,8 @@ function CampaignBuilderInner() {
           <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
             contacts selected from {compactNumber(audienceCount)} eligible shared-pool
             leads
-            {preferUnoffered ? " · fresh for this entity" : ""}
-            {preferVerified ? " · verified only" : ""}.
+            {mode === "own" && preferUnoffered ? " · fresh for this entity" : ""}
+            {mode === "auto" || preferVerified ? " · saved valid checks only" : ""}.
           </p>
           <div className="mt-6 space-y-3 text-sm text-[color:var(--ink-soft)]">
             <div className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2">
