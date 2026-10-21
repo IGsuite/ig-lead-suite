@@ -1,3 +1,4 @@
+import { programDraft } from "@/lib/programs";
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, Output } from "ai";
 import { z } from "zod";
@@ -10,6 +11,7 @@ export type DraftCopyInput = {
   brand: Brand | null;
   tone?: DraftTone;
   brief?: string;
+  programs?: string[];
 };
 
 export type DraftCopyResult = {
@@ -65,8 +67,9 @@ function complianceSystemPrompt(channel: CampaignChannel, tone: DraftTone): stri
 function userPrompt(input: DraftCopyInput, tone: DraftTone): string {
   const brand = input.brand;
   const focus = brand?.focus || "small-business working capital options";
-  const programs = brand?.programs?.length
-    ? brand.programs.join(", ")
+  const selected = input.programs?.length ? input.programs : brand?.programs;
+  const programs = selected?.length
+    ? selected.join(", ")
     : "working capital, business growth financing";
   const brief =
     input.brief?.trim() ||
@@ -78,6 +81,7 @@ function userPrompt(input: DraftCopyInput, tone: DraftTone): string {
     `Brand display name token: {{brand}} (entity: ${brand?.shortName || "company"})`,
     `Entity focus: ${focus}`,
     `Programs / angles: ${programs}`,
+    input.programs?.length ? "Discuss only the selected programs; do not introduce other funding products. HELOC is secured by the home; include the risk of foreclosure. No invented terms or offers." : "",
     `Brief: ${brief}`,
     input.channel === "email"
       ? "Return subject + message. Greeting should use {{firstName}}."
@@ -88,6 +92,7 @@ function userPrompt(input: DraftCopyInput, tone: DraftTone): string {
 export function mockDraftCopy(input: DraftCopyInput): DraftCopyResult {
   const tone: DraftTone = input.tone === "growth" ? "growth" : "soft";
   const brandToken = "{{brand}}";
+  if (input.programs?.length) return {mode:"demo",model:null,notice:"Demo draft — review before sending.",...programDraft(input.programs,input.channel)};
 
   if (input.channel === "sms") {
     const message =

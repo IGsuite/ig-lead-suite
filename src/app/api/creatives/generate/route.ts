@@ -1,3 +1,4 @@
+import { validatePrograms, programTemplateMatches } from "@/lib/programs";
 import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { assertEntityAccess } from "@/lib/acl";
@@ -85,6 +86,7 @@ export async function POST(request: Request) {
   const body = (await request.json()) as {
     channel?: CampaignChannel;
     brief?: string;
+    programs?: string[];
     offer?: string;
     tone?: string;
     cta?: string;
@@ -132,6 +134,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Entity not found" }, { status: 404 });
   }
 
+  let programs:string[];
+  try { programs=validatePrograms(brand,body.programs); }
+  catch(error) { return NextResponse.json({error:error instanceof Error?error.message:"Invalid programs"},{status:400}); }
   let baseDraft = body.baseDraft;
   if (body.templateId) {
     const tpl = data.messageTemplates.find((t) => t.id === body.templateId);
@@ -150,6 +155,7 @@ export async function POST(request: Request) {
         );
       }
     }
+    if (!programTemplateMatches(tpl,brandId,programs,body.channel)) return NextResponse.json({error:"Choose a template for this company, channel and selected programs"},{status:400});
     baseDraft = {
       name: tpl.name,
       subject: tpl.subject,
@@ -189,19 +195,19 @@ export async function POST(request: Request) {
       assistMode === "tips");
 
   const libraryExamples = includeLibrary
-    ? recentLibraryExamples(data.messageTemplates, body.channel, brandId)
+    ? recentLibraryExamples(data.messageTemplates.filter(t=>programTemplateMatches(t,brandId,programs,body.channel!)), body.channel, brandId)
     : [];
   const winnerExamples = includeWinners
-    ? topWinnerExamples(data, body.channel, brandId)
+    ? topWinnerExamples({...data,campaigns:data.campaigns.filter(c=>c.brandId===brandId && (programs.length ? (c.programs || []).length>0 && c.programs!.every(p=>programs.includes(p)) : !c.programs?.length))}, body.channel, brandId)
     : [];
 
   const result = await generateCreativeDrafts({
     channel: body.channel,
-    brief: body.brief?.trim() || "",
-    offer: body.offer?.trim(),
+    brief: (programs.length ? `Selected funding programs: ${programs.join(", ")}. Discuss only these programs, no other funding products. A HELOC is secured by the home; disclose foreclosure risk when discussing HELOC.\n` : "") + (body.brief?.trim() || ""),
+    offer: programs.length ? programs.join(", ") + (body.offer?.trim() ? ` — ${body.offer.trim()}` : "") : body.offer?.trim(),
     tone: body.tone?.trim(),
     cta: body.cta?.trim(),
-    brand,
+    brand: brand && programs.length ? {...brand,programs,focus:`${brand.name}: ${programs.join(", ")}`} : brand,
     count: body.count ?? 3,
     assistMode,
     iterate,
@@ -213,6 +219,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ...result,
     context: {
+      programs,
       libraryCount: libraryExamples.length,
       winnerCount: winnerExamples.length,
     },

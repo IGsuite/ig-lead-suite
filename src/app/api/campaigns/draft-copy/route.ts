@@ -8,6 +8,7 @@ import {
   type DraftTone,
 } from "@/lib/draft-copy-ai";
 import { getData } from "@/lib/store";
+import { validatePrograms } from "@/lib/programs";
 import type { CampaignChannel } from "@/lib/types";
 
 export async function GET() {
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
     brandId?: string | null;
     tone?: DraftTone | string;
     brief?: string;
+    programs?: string[];
   };
 
   if (!body.channel || (body.channel !== "sms" && body.channel !== "email")) {
@@ -58,7 +60,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Entity not found" }, { status: 404 });
   }
 
+  let programs: string[];
+  try { programs=validatePrograms(brand,body.programs); }
+  catch(error) { return NextResponse.json({error:error instanceof Error?error.message:"Invalid programs"},{status:400}); }
   const result = await generateDraftCopy({
+    programs,
     channel: body.channel,
     brand,
     tone,

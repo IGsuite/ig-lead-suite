@@ -133,6 +133,7 @@ model UploadBatch {
 model Campaign {
   id              String    @id
   brandId         String
+  programs String[] @default([])
   name            String
   channel         String
   subject         String?
@@ -244,6 +245,7 @@ model AdAsset {
 
 /// Reusable SMS / email copy — write once, pull into campaigns
 model MessageTemplate {
+  programs String[] @default([])
   id        String   @id
   name      String
   channel   String

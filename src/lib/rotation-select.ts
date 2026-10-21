@@ -1,3 +1,4 @@
+import { audienceContactKey } from "@/lib/audience-filters";
 import { createHash } from "crypto";
 import { isLeadEligibleForEntity } from "@/lib/eligibility";
 import type {
@@ -35,7 +36,8 @@ function lastSentAtForLead(
 ): string | null {
   let latest: string | null = null;
   for (const e of events) {
-    if (e.leadId !== leadId) continue;
+    // Events have already been grouped by delivery identity.
+    void leadId;
     if (!latest || e.sentAt > latest) latest = e.sentAt;
   }
   return latest;
@@ -79,14 +81,19 @@ export function selectLeadsForSend(input: SelectLeadsInput): SelectLeadsResult {
   const preferUnoffered =
     input.mode === "own" ? (input.preferUnoffered ?? true) : false;
 
+  const key=(lead:Lead)=>audienceContactKey(lead,input.channel);
+  const keyById=new Map(input.leads.map(l=>[l.id,key(l)]));
+  const blocked=new Set(input.leads.filter(l=>l.optedOut||l.status==="opted_out"||l.status==="converted"||l.convertedEntityId||(preferUnoffered && l.offeredEntityIds.includes(input.entityId))).map(key));
   const byLead = new Map<string, LeadSendEvent[]>();
   for (const e of input.sendEvents) {
-    const list = byLead.get(e.leadId);
+    const identity=keyById.get(e.leadId)||e.leadId;
+    const list = byLead.get(identity);
     if (list) list.push(e);
-    else byLead.set(e.leadId, [e]);
+    else byLead.set(identity, [e]);
   }
 
-  const eligible = input.leads.filter((lead) => {
+  const candidates = input.leads.filter((lead) => {
+    if(!key(lead)||blocked.has(key(lead)))return false;
     if (
       !isLeadEligibleForEntity(lead, input.entityId, {
         channel: input.channel,
@@ -99,7 +106,7 @@ export function selectLeadsForSend(input: SelectLeadsInput): SelectLeadsResult {
       return false;
     }
 
-    const events = byLead.get(lead.id) || [];
+    const events = byLead.get(key(lead)) || [];
     for (const e of events) {
       if (
         e.messageFingerprint === input.messageFingerprint &&
@@ -119,9 +126,9 @@ export function selectLeadsForSend(input: SelectLeadsInput): SelectLeadsResult {
   });
 
   // Fair order: least recently contacted first, then fewest entity offers, then id.
-  eligible.sort((a, b) => {
-    const aLast = lastSentAtForLead(byLead.get(a.id) || [], a.id);
-    const bLast = lastSentAtForLead(byLead.get(b.id) || [], b.id);
+  candidates.sort((a, b) => {
+    const aLast = lastSentAtForLead(byLead.get(key(a)) || [], a.id);
+    const bLast = lastSentAtForLead(byLead.get(key(b)) || [], b.id);
     if (!aLast && bLast) return -1;
     if (aLast && !bLast) return 1;
     if (aLast && bLast && aLast !== bLast) {
@@ -132,6 +139,8 @@ export function selectLeadsForSend(input: SelectLeadsInput): SelectLeadsResult {
     return a.id.localeCompare(b.id);
   });
 
+  const seen=new Set<string>();
+  const eligible=candidates.filter(l=>{const identity=key(l);if(seen.has(identity))return false;seen.add(identity);return true;});
   const cursor =
     input.mode === "auto" && eligible.length > 0
       ? Math.abs(input.poolCursor ?? 0) % eligible.length
