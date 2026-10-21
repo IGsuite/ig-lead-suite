@@ -14,8 +14,25 @@ import type {
   SendWindowPreset,
 } from "@/lib/types";
 import { normalizeSendWindow } from "@/lib/send-window";
+import { updateDraftAudience } from "@/lib/campaign-audience";
+import { mapCampaign } from "@/lib/mappers";
 
 export const maxDuration = 300;
+
+export async function PATCH(request: Request) {
+  const unauthorized = await requireApiSession(); if (unauthorized) return unauthorized;
+  if (request.headers.get("origin") !== new URL(request.url).origin) return NextResponse.json({error:"Origin not allowed"},{status:403});
+  const session = await getSession();
+  const body = await request.json().catch(()=>null) as {id?:unknown;sourceFilter?:unknown;groupFilter?:unknown} | null;
+  if (!body || typeof body.id !== "string" || typeof body.sourceFilter !== "string" || typeof body.groupFilter !== "string" || !body.sourceFilter.trim() || !body.groupFilter.trim() || body.sourceFilter.length>1000 || body.groupFilter.length>1000)
+    return NextResponse.json({error:"Campaign, source and group are required"},{status:400});
+  const data = await getData(), campaign = data.campaigns.find(c=>c.id === body.id);
+  if (!campaign) return NextResponse.json({error:"Campaign not found"},{status:404});
+  const gate = assertEntityAccess(session,campaign.brandId);
+  if (!gate.ok) return NextResponse.json({error:gate.error},{status:gate.status});
+  try {return NextResponse.json(mapCampaign(await updateDraftAudience(body.id,body.sourceFilter.trim(),body.groupFilter.trim())));}
+  catch(error) {return NextResponse.json({error:error instanceof Error?error.message:"Unable to save audience"},{status:409});}
+}
 
 export async function GET() {
   const unauthorized = await requireApiSession();

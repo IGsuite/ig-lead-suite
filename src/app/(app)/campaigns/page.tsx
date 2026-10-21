@@ -5,6 +5,8 @@ import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
+import { DraftAudience } from "@/components/draft-audience";
+import { AUDIENCE_NOT_SELECTED } from "@/lib/audience-filters";
 import { StatusPill } from "@/components/status-pill";
 import { EmptyPanel, ErrorPanel, LoadingPanel } from "@/components/state-panels";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -254,6 +256,7 @@ function CampaignsInner() {
                     <div className="mt-1 select-all break-all text-[10px] text-[color:var(--ink-muted)]">
                       Campaign ID: {campaign.id}
                     </div>
+                    {campaign.status === "draft" && !campaign.id.startsWith("camp-calendar-") ? <DraftAudience campaign={campaign} sources={[...new Set(data.leads.map(l=>l.source))].sort()} groups={[...new Set(data.leads.map(l=>l.groupName))].sort()} onSaved={refresh} />:null}
                   </TableCell>
                   <TableCell>
                     <span
@@ -281,7 +284,7 @@ function CampaignsInner() {
                     <div className="flex flex-wrap items-center justify-end gap-2">
                       {campaign.status === "draft" ||
                       campaign.status === "scheduled" ? (
-                        <Button size="sm" onClick={() => launch(campaign.id)}>
+                        <Button size="sm" disabled={campaign.sourceFilter === AUDIENCE_NOT_SELECTED} onClick={() => launch(campaign.id)}>
                           Launch
                         </Button>
                       ) : null}

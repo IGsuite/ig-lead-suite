@@ -4,6 +4,7 @@ import { emailProviderName, resolveCompanyCampaign } from "@/lib/providers/email
 import { randomUUID } from "crypto";
 import { calendarRunAllowed, scheduleCalendarRuns } from "@/lib/marketing-calendar-store";
 import { calendarDisposition } from "@/lib/marketing-calendar";
+import { AUDIENCE_NOT_SELECTED } from "@/lib/audience-filters";
 import { getPrisma } from "@/lib/db";
 import { ensureSeeded } from "@/lib/neon-store-seed";
 import { mapCampaign, mapEntity, mapLead, mapLeadSendEvent, mapRotation } from "@/lib/mappers";
@@ -23,6 +24,7 @@ export async function enqueueCampaign(id: string): Promise<LaunchResult | null> 
   const db = getPrisma();
   const initial = await db.campaign.findUnique({ where: { id } });
   if (!initial) return null;
+  if (initial.sourceFilter === AUDIENCE_NOT_SELECTED) throw new Error("Choose and save a lead source before launching this campaign.");
   if (!await calendarRunAllowed(id)) return {campaign:mapCampaign(initial),deferred:true,reason:"calendar_not_active"};
   assertCampaignSendingReady(initial.brandId, initial.channel);
   // Configure a separate provider campaign before entering the database transaction.
@@ -47,6 +49,7 @@ export async function enqueueCampaign(id: string): Promise<LaunchResult | null> 
     const row = await tx.campaign.findUnique({ where: { id } });
     if (!row) return null;
     const campaign = mapCampaign(row);
+    if (campaign.sourceFilter === AUDIENCE_NOT_SELECTED) throw new Error("Choose and save a lead source before launching this campaign.");
     if (id.startsWith("camp-calendar-")) {
       const entry = await tx.marketingCalendarEntry.findUnique({where:{runCampaignId:id}});
       const settings = await tx.platformSettings.findUniqueOrThrow({where:{id:"default"}});
