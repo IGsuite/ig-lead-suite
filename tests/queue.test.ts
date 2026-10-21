@@ -238,9 +238,12 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     assert.equal((await db.campaign.findUniqueOrThrow({where:{id:entry.runCampaignId}})).message,(entry.snapshot as {message:string}).message);
     assert.equal(await calendarRunAllowed(entry.runCampaignId,day),true);
     assert.equal(await db.sendJob.count(),beforeCalendarJobs); assert.equal(creates,beforeCalendarSetups);
-    await changeCalendarEntries([entry.id],"pause");
+    await setCampaignStatus(entry.runCampaignId,"paused");
     assert.equal(await calendarRunAllowed(entry.runCampaignId,day),false);
     assert.equal((await db.campaign.findUniqueOrThrow({where:{id:entry.runCampaignId}})).status,"paused");
+    await scheduleCalendarRuns(day);
+    assert.equal((await db.campaign.findUniqueOrThrow({where:{id:entry.runCampaignId}})).status,"paused");
+    await changeCalendarEntries([entry.id],"pause");
     const [textDay] = await saveCalendarDrafts({...raw,campaignId:"queue-test"});
     process.env.SENDING_CHANNELS = "email";
     await assert.rejects(changeCalendarEntries([textDay.id],"approve"),/channel/);

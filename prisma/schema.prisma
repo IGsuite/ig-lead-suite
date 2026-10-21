@@ -34,6 +34,7 @@ model Entity {
   updatedAt        DateTime @updatedAt
 
   campaigns        Campaign[]
+  calendarEntries  MarketingCalendarEntry[]
   replies          Reply[]
   socialCampaigns  SocialCampaign[]
   socialConnections SocialConnection[]
@@ -168,6 +169,7 @@ model Campaign {
   entity     Entity          @relation(fields: [brandId], references: [id])
   replies    Reply[]
   sendEvents LeadSendEvent[]
+  calendarEntries MarketingCalendarEntry[]
 
   @@index([brandId])
   @@index([status])
@@ -192,6 +194,9 @@ model MarketingCalendarEntry {
   error         String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  entity   Entity   @relation(fields: [brandId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([brandId, date])
   @@index([status, date])

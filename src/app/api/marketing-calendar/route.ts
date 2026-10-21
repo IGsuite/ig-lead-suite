@@ -36,6 +36,7 @@ export async function POST(request: Request) {
       const enabled = body.action === "enable";
       if (enabled) {
         if (!sendingEnabled()) throw new Error("Sending is paused");
+        if (await db.campaign.count({where:{id:{startsWith:"camp-auto-"},status:{in:["sending","scheduled"]}}})) throw new Error("Pause active generic Autopilot campaigns before enabling the product calendar");
         const entries = await db.marketingCalendarEntry.findMany({where:{status:"approved"}});
         if (!entries.length) throw new Error("Approve at least one calendar entry before enabling");
         if (entries.some(e=>!sendingEntityEnabled(e.brandId) || !sendingChannelEnabled(e.channel))) throw new Error("Some approved entries belong to a business or channel that cannot send");
