@@ -4,7 +4,7 @@ import { calendarDisposition } from "@/lib/marketing-calendar";
 import type { CampaignListStatus } from "@/lib/campaign-status-filters";
 export type CampaignStatusEntry = {
   campaignId: string; runCampaignId: string; date: string; startTime: string; endTime: string;
-  timezone: string; status: string; snapshot: { volume?: number };
+  timezone: string; status: string; error?: string | null; snapshot: { volume?: number };
 };
 type CampaignState = Pick<Campaign, "id"> & { status: string };
 
@@ -17,9 +17,10 @@ export function campaignListStatus(campaign: CampaignState, entries: CampaignSta
       return { group: "active", status: "sending", detail: "Calendar run in progress" };
     if (enabled && ready.length) {
       const next = [...ready].sort((a,b) => (a.date+a.startTime).localeCompare(b.date+b.startTime))[0];
+      if (next.error) return { group: "pending", status: "pending", detail: `Needs attention: ${next.error}` };
       return { group: "pending", status: "scheduled", detail: `Next: ${next.date} at ${next.startTime} ${next.timezone} · ${next.snapshot.volume || 0} contacts` };
     }
-    if (!enabled && ready.length) return { group: "inactive", status: "paused", detail: "Approved dates saved · calendar is off" };
+    if (!enabled && ready.length) return { group: "inactive", status: "paused", detail: ready.some(e=>e.error) ? `Calendar is off · needs attention: ${ready.find(e=>e.error)!.error}` : "Approved dates saved · calendar is off" };
     if (own.every(e => ["completed", "skipped"].includes(e.status)) && own.some(e => e.status === "completed"))
       return { group: "completed", status: "completed", detail: "Calendar plan finished" };
     if (own.some(e => e.status === "draft" && calendarDisposition(e, false, now) !== "expired"))
@@ -28,6 +29,8 @@ export function campaignListStatus(campaign: CampaignState, entries: CampaignSta
   }
   if (campaign.status === "completed" || campaign.status === "cancelled") return { group: campaign.status, status: campaign.status };
   const dated = entries.find(e => e.runCampaignId === campaign.id);
+  if (dated?.error && enabled && calendarDisposition(dated,true,now)!=="expired" && ["approved","started"].includes(dated.status))
+    return { group:"pending",status:"pending",detail:`Needs attention: ${dated.error}` };
   if (dated && (!enabled || calendarDisposition(dated, true, now) === "expired" || !["approved", "started"].includes(dated.status)))
     return { group: "inactive", status: "paused", detail: "Calendar date is paused, expired, or calendar is off" };
   if (campaign.status === "sending") return { group: "active", status: "sending" };

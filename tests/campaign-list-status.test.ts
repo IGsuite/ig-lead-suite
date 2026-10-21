@@ -29,3 +29,13 @@ test("completed calendar dates stay completed; both ordinary email and SMS share
       assert.equal(campaignListStatus({id:channel,status},[],true,new Map()).group,group);
   }
 });
+test("provider setup blockers are visible on both the parent plan and dated run",()=>{
+  const blocked={...day,status:"started",error:"Email campaign setup is incomplete"};
+  const run={id:day.runCampaignId,status:"scheduled" as CampaignStatus};
+  for(const campaign of [parent,run]){
+    const state=campaignListStatus(campaign,[blocked],true,new Map([[run.id,run]]),sendingTime);
+    assert.equal(state.group,"pending");assert.match(state.detail!,/Needs attention: Email campaign setup/);
+  }
+  const paused=campaignListStatus(parent,[blocked],false,new Map(),sendingTime);
+  assert.equal(paused.group,"inactive");assert.match(paused.detail!,/needs attention/);
+});

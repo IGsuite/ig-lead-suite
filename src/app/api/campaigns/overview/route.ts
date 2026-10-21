@@ -16,7 +16,7 @@ export async function GET() {
     const scope = isAdminSession(session) ? {} : { brandId: { in: session?.allowedEntityIds || [] } };
     const [campaignRows, rows, settings] = await Promise.all([
       db.campaign.findMany({ where: scope, select: { id: true, status: true } }),
-      db.marketingCalendarEntry.findMany({ where: scope, select: { campaignId:true,runCampaignId:true,date:true,startTime:true,endTime:true,timezone:true,status:true,snapshot:true } }),
+      db.marketingCalendarEntry.findMany({ where: scope, select: { campaignId:true,runCampaignId:true,date:true,startTime:true,endTime:true,timezone:true,status:true,error:true,snapshot:true } }),
       db.platformSettings.findUnique({ where: { id: "default" }, select: { calendarEnabled: true } }),
     ]);
     campaigns = campaignRows;
