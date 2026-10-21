@@ -27,7 +27,7 @@ export function leadSourceLabel(value:string,leads:Pick<Lead,"manualPackages">[]
   const parsed=parseAudienceFilter(value);
   if(parsed==="all")return "All sources";
   const packages=listManualPackages(leads);
-  return parsed.map(s=>s.startsWith("manual-package:")?`Manual package — ${packages.find(p=>manualPackageSource(p.id)===s)?.name||s.slice(-8)}`:s==="Manual"?"Manual — all contacts":s).join(" + ");
+  return parsed.map(s=>s.startsWith("manual-package:")?`Manual package — ${packages.find(p=>manualPackageSource(p.id)===s)?.name||"Package"} · ${s.slice("manual-package:".length,"manual-package:".length+8)}`:s==="Manual"?"Manual — all contacts":s).join(" + ");
 }
 export function matchesLeadSource(lead:Pick<Lead,"source"|"manualPackages">,filter:string|null|undefined){
   if(filter==="__audience_not_selected__")return false;
