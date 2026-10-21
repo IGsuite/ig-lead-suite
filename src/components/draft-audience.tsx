@@ -26,6 +26,6 @@ export function DraftAudience({campaign,sources,groups,onSaved}:{campaign:Campai
     </select></label>
     <label className="grid gap-1 text-xs">Lead group<select aria-label={`Lead group for ${campaign.name}`} className={field} disabled={saving} value={group} onChange={e=>setGroup(e.target.value)}><option value="all">All groups</option>{[...new Set([...groups,...(campaign.groupFilter!=="all"?[campaign.groupFilter]:[])])].map(g=><option key={g} value={g}>{g}</option>)}</select></label>
     <Button size="sm" variant="outline" disabled={saving || (source===campaign.sourceFilter && group===campaign.groupFilter)} onClick={()=>void save()}>{saving?"Saving…":"Save audience"}</Button>
-    {campaign.sourceFilter===AUDIENCE_NOT_SELECTED?<span className="text-xs text-[color:var(--ink-muted)]">Select and save a source before Launch.</span>:null}
+    {campaign.sourceFilter===AUDIENCE_NOT_SELECTED?<span className="text-xs text-[color:var(--ink-muted)]">Select and save a source before Launch. This also fills calendar drafts waiting for an audience.</span>:null}
   </div>;
 }

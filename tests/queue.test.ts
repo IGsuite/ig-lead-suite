@@ -260,9 +260,17 @@ test("migrated outbox persists real outcomes, deduplicates launch/webhooks, and 
     await assert.rejects(enqueueCampaign(audienceDraft.id),/Choose and save a lead source/);
     assert.equal(await db.emailCampaignSetup.count({where:{campaignId:audienceDraft.id}}),0);
     const jobsBeforeAudience = await db.sendJob.count();
+    const [waitingCalendar] = await saveCalendarDrafts({...raw,campaignId:audienceDraft.id,volume:250});
     await assert.rejects(updateDraftAudience(audienceDraft.id,"not-an-existing-source","all"),/existing lead source/);
     const edited = await updateDraftAudience(audienceDraft.id,"email-queue-fixture","all");
     assert.equal(edited.sourceFilter,"email-queue-fixture"); assert.equal(edited.status,"draft");
+    const filled = await db.marketingCalendarEntry.findUniqueOrThrow({where:{id:waitingCalendar.id}});
+    assert.equal((filled.snapshot as {sourceFilter:string}).sourceFilter,"email-queue-fixture");
+    assert.equal((filled.snapshot as {volume:number}).volume,250); assert.equal(filled.status,"draft");
+    await changeCalendarEntries([waitingCalendar.id],"approve");
+    await updateDraftAudience(audienceDraft.id,"all","all");
+    const approvedSnapshot = await db.marketingCalendarEntry.findUniqueOrThrow({where:{id:waitingCalendar.id}});
+    assert.equal((approvedSnapshot.snapshot as {sourceFilter:string}).sourceFilter,"email-queue-fixture"); assert.equal(approvedSnapshot.status,"approved");
     assert.equal(await db.sendJob.count(),jobsBeforeAudience);
     assert.equal(await db.emailCampaignSetup.count({where:{campaignId:audienceDraft.id}}),0);
     await assert.rejects(updateDraftAudience(queuedDraft.id,"all","all"),/untouched drafts/);
