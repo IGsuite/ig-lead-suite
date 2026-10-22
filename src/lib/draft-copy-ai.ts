@@ -1,4 +1,4 @@
-import { programDraft } from "@/lib/programs";
+import { programDraft, isFinancingBrand } from "@/lib/programs";
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, Output } from "ai";
 import { z } from "zod";
@@ -41,7 +41,14 @@ export function resolveDraftCopyAiMode(): {
   return { mode: "demo", modelId: null };
 }
 
-function complianceSystemPrompt(channel: CampaignChannel, tone: DraftTone): string {
+function complianceSystemPrompt(channel: CampaignChannel, tone: DraftTone, brand: Brand | null): string {
+  if (!isFinancingBrand(brand)) return [
+    "Draft one truthful marketing SMS or email about this company's actual services. Follow only the company and selected services in the brief.",
+    "Do not introduce loans, underwriting, funding promises, or another company's products unless explicitly part of the supplied service description.",
+    "Do not invent pricing, outcomes, endorsements, availability or timelines. Keep planned software features distinct from launched services. For healthcare, invite a consultation; do not diagnose or promise results.",
+    "Use {{firstName}} and {{brand}} tokens exactly. Keep the tone helpful and low pressure.",
+    channel === "sms" ? "Return a short message with a reply CTA ending with STOP to opt out." : "Return a short subject and body with an unsubscribe line.",
+  ].join("\n");
   const toneLine =
     tone === "growth"
       ? "Tone: confident business-growth / working-capital options — still soft on promises, never aggressive loan spam."
@@ -66,6 +73,13 @@ function complianceSystemPrompt(channel: CampaignChannel, tone: DraftTone): stri
 
 function userPrompt(input: DraftCopyInput, tone: DraftTone): string {
   const brand = input.brand;
+  if (!isFinancingBrand(brand)) return [
+    `Company: ${brand?.name}. Focus: ${brand?.focus}.`,
+    `Channel: ${input.channel}. Tone: ${tone}.`,
+    `Selected services: ${(input.programs?.length ? input.programs : brand?.programs || []).join(", ")}.`,
+    brand?.id === "bankable-credit" ? "The product is preparing for launch. Provider approval is pending; invite waitlist registration, not paid enrollment or live monitoring." : "",
+    `Brief: ${input.brief?.trim() || "Invite the recipient to learn about the selected services."}`,
+  ].join("\n");
   const focus = brand?.focus || "small-business working capital options";
   const selected = input.programs?.length ? input.programs : brand?.programs;
   const programs = selected?.length
@@ -92,7 +106,7 @@ function userPrompt(input: DraftCopyInput, tone: DraftTone): string {
 export function mockDraftCopy(input: DraftCopyInput): DraftCopyResult {
   const tone: DraftTone = input.tone === "growth" ? "growth" : "soft";
   const brandToken = "{{brand}}";
-  if (input.programs?.length) return {mode:"demo",model:null,notice:"Demo draft — review before sending.",...programDraft(input.programs,input.channel)};
+  if (input.programs?.length || !isFinancingBrand(input.brand)) return {mode:"demo",model:null,notice:"Demo draft — review before sending.",...programDraft(input.programs || [],input.channel,input.brand)};
 
   if (input.channel === "sms") {
     const message =
@@ -142,7 +156,7 @@ export async function generateDraftCopy(
     const { output } = await generateText({
       model: openai(resolved.modelId!),
       output: Output.object({ schema: draftSchema }),
-      system: complianceSystemPrompt(input.channel, tone),
+      system: complianceSystemPrompt(input.channel, tone, input.brand),
       prompt: userPrompt(input, tone),
       temperature: tone === "growth" ? 0.7 : 0.55,
     });
