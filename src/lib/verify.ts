@@ -18,7 +18,7 @@ export type VerifyResult = {
   verifyNotes: string;
 };
 
-/** Built-in verifier. Swap in NeverBounce / Telnyx number lookup later via env keys. */
+/** Local format screening only; this does not establish mailbox or phone reachability. */
 export function verifyContact(input: {
   email?: string;
   phone?: string;
@@ -77,12 +77,22 @@ export function verifyContact(input: {
 
 export function applyVerification(lead: Lead): Lead {
   const result = verifyContact({ email: lead.email, phone: lead.phone });
+  // A syntactically valid address can still have bounced. Local screening has
+  // no evidence that can reverse an existing rejection, for either channel.
+  const emailStatus = lead.emailStatus === "invalid" ? "invalid" : result.emailStatus;
+  const phoneStatus = lead.phoneStatus === "invalid" ? "invalid" : result.phoneStatus;
+  const retained = lead.emailStatus === "invalid" || lead.phoneStatus === "invalid";
   return {
     ...lead,
-    emailStatus: result.emailStatus,
-    phoneStatus: result.phoneStatus,
-    verifyNotes: result.verifyNotes,
-    verifiedAt: new Date().toISOString(),
+    emailStatus,
+    phoneStatus,
+    verifyNotes: retained
+      ? lead.verifyNotes?.includes("local format recheck cannot clear rejected channels")
+        ? lead.verifyNotes
+        : `${lead.verifyNotes || "Previous contact rejection"}; local format recheck cannot clear rejected channels`
+      : result.verifyNotes,
+    // Do not make retained external evidence appear to have been refreshed.
+    verifiedAt: retained ? lead.verifiedAt : new Date().toISOString(),
   };
 }
 
@@ -100,11 +110,13 @@ export function contactOkForChannel(
   const live = verifyContact({ email: lead.email, phone: lead.phone });
   if (channel === "email") {
     if (!lead.email) return false;
+    if (lead.emailStatus === "invalid") return false;
     if (live.emailStatus === "invalid") return false;
     if (!preferVerified) return true;
     return lead.emailStatus === "valid" && live.emailStatus === "valid";
   }
   if (!lead.phone) return false;
+  if (lead.phoneStatus === "invalid") return false;
   if (live.phoneStatus === "invalid") return false;
   if (!preferVerified) return true;
   return lead.phoneStatus === "valid" && live.phoneStatus === "valid";

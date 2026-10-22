@@ -431,7 +431,7 @@ export async function verifyLeads(input?: {
   let risky = 0;
 
   for (const lead of data.leads) {
-    if (input?.leadIds?.length && !input.leadIds.includes(lead.id)) continue;
+    if (input?.leadIds !== undefined && !input.leadIds.includes(lead.id)) continue;
     if (
       input?.onlyUnverified !== false &&
       lead.emailStatus !== "unverified" &&
