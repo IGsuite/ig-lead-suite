@@ -48,19 +48,16 @@ function CampaignBuilderInner() {
   const initialChannel: CampaignChannel =
     searchParams.get("channel") === "email" ? "email" : "sms";
   const [channel, setChannel] = useState<CampaignChannel>(initialChannel);
+  const initialCopy = programDraft(searchParams.getAll("program"), initialChannel, { id: searchParams.get("brandId") || "abstract" });
   const [programs, setPrograms] = useState<string[]>(searchParams.getAll("program"));
   const [mode, setMode] = useState<CampaignPoolMode>("own");
   const [name, setName] = useState(
     initialChannel === "email"
-      ? "Abstract — working capital email"
-      : "Abstract — MCA working capital SMS",
+      ? "New email campaign"
+      : "New SMS campaign",
   );
-  const [subject, setSubject] = useState("Working capital options from {{brand}}");
-  const [message, setMessage] = useState(
-    initialChannel === "email"
-      ? "Hi {{firstName}},\n\n{{brand}} here — working capital may be available for your business. Reply if you want options.\n\nUnsubscribe anytime."
-      : "Hi {{firstName}}, {{brand}} here — working capital may be available for your business. Reply YES for options, or STOP to opt out.",
-  );
+  const [subject, setSubject] = useState(initialCopy.subject);
+  const [message, setMessage] = useState(initialCopy.message);
   const [imageUrl, setImageUrl] = useState("");
   const [imageAlt, setImageAlt] = useState("");
   const [sourceFilter, setSourceFilter] = useState(()=>serializeAudienceFilter(searchParams.getAll("source")));
@@ -243,10 +240,10 @@ function CampaignBuilderInner() {
     }
   }
 
-  function changePrograms(next: string[], nextChannel=channel) {
+  function changePrograms(next: string[], nextChannel=channel, nextBrandId=brandId) {
     setPrograms(next);setTemplateId("");setImageUrl("");setImageAlt("");
-    const draft=programDraft(next,nextChannel);setSubject(draft.subject);setMessage(draft.message);
-    setName(`${data?.brands.find(b=>b.id===brandId)?.shortName || "Company"} — ${next.join(" + ") || "General"} — ${nextChannel}`);
+    const draft=programDraft(next,nextChannel,{id:nextBrandId});setSubject(draft.subject);setMessage(draft.message);
+    setName(`${data?.brands.find(b=>b.id===nextBrandId)?.shortName || "Company"} — ${next.join(" + ") || "General"} — ${nextChannel}`);
   }
 
   if (loading) return <LoadingPanel />;
@@ -284,7 +281,7 @@ function CampaignBuilderInner() {
               <Select
                 value={brandId}
                 onValueChange={(value) => {
-                  if (value) {setBrandId(value);changePrograms([]);setName(`${data.brands.find(b=>b.id===value)?.shortName || "Company"} — General — ${channel}`);}
+                  if (value) {setBrandId(value);changePrograms([],channel,value);}
                 }}
               >
                 <SelectTrigger className="w-full">
@@ -393,7 +390,7 @@ function CampaignBuilderInner() {
                   <SelectContent>
                     <SelectItem value="soft">Soft (consultative)</SelectItem>
                     <SelectItem value="growth">
-                      Growth (working capital options)
+                      Growth / benefits
                     </SelectItem>
                   </SelectContent>
                 </Select>

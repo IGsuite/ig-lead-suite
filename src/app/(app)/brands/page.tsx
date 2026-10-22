@@ -18,7 +18,7 @@ export default function BrandsPage() {
     <div>
       <PageHeader
         title="Entity portals"
-        description="Abstract, Ahava, Take More, Venture, and TYH each get their own workspace — site, sending domain, numbers, CRM, website API — while leads stay in one shared pool."
+        description="Each company gets its own workspace — website, marketing channels, sending configuration and CRM connections — while leads stay in one shared pool."
       />
       <div className="mb-6 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4 text-sm text-[color:var(--ink-soft)] animate-rise">
         Rotation order:{" "}

@@ -4,7 +4,27 @@ import {validatePrograms,programTemplateMatches,programDraft} from "../src/lib/p
 import {selectLeadsForSend} from "../src/lib/rotation-select";
 import {calendarSnapshot} from "../src/lib/marketing-calendar";
 import {matchesAudienceFilter,serializeAudienceFilter,audienceContactKey} from "../src/lib/audience-filters";
-import type {Lead,Campaign,MessageTemplate} from "../src/lib/types";
+import type {Lead,Campaign,MessageTemplate,Brand} from "../src/lib/types";
+import {mockDraftCopy} from "../src/lib/draft-copy-ai";
+
+test("new entities get service-specific starter and fallback copy without inheriting financing outreach",()=>{
+ for(const channel of ["email","sms"] as const){
+  const dental={id:"imagination-orthodontics"} as Brand;
+  const software={id:"bankable-credit"} as Brand;
+  for(const programs of [[],["Invisalign"]]){
+   for(const draft of [programDraft(programs,channel,dental),mockDraftCopy({brand:dental,programs,channel})]){
+    assert.match(draft.message,/consultation/);assert.doesNotMatch(draft.message,/working capital|third-party providers|foreclosure|underwriting/);
+    assert.match(draft.message,channel==="sms"?/STOP to opt out/:/Unsubscribe/);
+   }
+  }
+  for(const programs of [[],["UCC & Judgment Monitoring"]]){
+   for(const draft of [programDraft(programs,channel,software),mockDraftCopy({brand:software,programs,channel})]){
+    assert.match(draft.message,/preparing.*launch/);assert.match(draft.message,/waitlist/);assert.doesNotMatch(draft.message,/working capital|third-party providers|foreclosure/);
+   }
+  }
+  const abstract=programDraft(["HELOC"],channel,{id:"abstract"});assert.match(abstract.message,/foreclosure/);assert.match(abstract.message,/third-party providers/);
+ }
+});
 test("program choices belong to the company, deduplicate, and filter templates by channel and selected programs",()=>{
  const brand={programs:["HELOC","SBA 7(a)","Term Loans"]};
  assert.deepEqual(validatePrograms(brand,["HELOC","SBA 7(a)","HELOC"]),["HELOC","SBA 7(a)"]);
