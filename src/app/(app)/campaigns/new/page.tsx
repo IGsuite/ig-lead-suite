@@ -407,8 +407,7 @@ function CampaignBuilderInner() {
               </Button>
             </div>
             <p className="text-xs text-[color:var(--ink-muted)]">
-              Uses OpenAI when <code className="text-[0.7rem]">OPENAI_API_KEY</code>{" "}
-              is set; otherwise a financing-safe demo draft. Ads still use Gemini.
+              Creates a draft for this company’s programs or services. Review the wording before saving or sending.
             </p>
           </div>
 
@@ -604,8 +603,7 @@ function CampaignBuilderInner() {
               </strong>
             </div>
             <div className="rounded-xl bg-[color:var(--accent-soft)]/60 px-3 py-2">
-              Same lead can later get a different entity’s offer — Abstract,
-              Ahava, Take More, Venture, or TYH Marketing.
+              A lead may be eligible for another company’s campaign later, subject to that channel’s eligibility and permission requirements.
             </div>
           </div>
         </aside>
