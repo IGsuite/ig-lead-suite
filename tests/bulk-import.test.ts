@@ -8,8 +8,9 @@ import { getPrisma } from "../src/lib/db";
 import { commitImportChunk } from "../src/lib/bulk-import";
 import { listLeads } from "../src/lib/lead-list";
 import { attachLeadSummary } from "../src/lib/lead-summary";
-import { createSeedData } from "../src/lib/seed";
+import { createSeedData, STORE_VERSION } from "../src/lib/seed";
 import { entityPerformanceScores, poolSourceResults } from "../src/lib/analytics";
+import { verifyLeads } from "../src/lib/neon-store-ops";
 
 test("bulk imports checkpoint atomically, preserve source membership and suppressions, and paginate large pools",{timeout:600000},async()=>{
   process.env.DATABASE_URL="postgresql://postgres@127.0.0.1:55440/postgres";
@@ -43,6 +44,15 @@ test("bulk imports checkpoint atomically, preserve source membership and suppres
     assert.equal((await db.leadImportJob.findUniqueOrThrow({where:{id:second.id}})).duplicateCount,1);
     assert.equal(await db.leadImportMembership.count({where:{jobId:second.id}}),2);
     const junk=await listLeads({folder:'invalid'});assert.equal(junk.filteredCount,1);
+    await db.platformSettings.create({data:{id:'default',version:STORE_VERSION,entityOrder:[]}});
+    await db.lead.update({where:{id:'import-stress-1'},data:{emailStatus:'invalid',verifyNotes:'Mailbox not found',verifiedAt:new Date('2026-10-20T00:00:00Z')}});
+    assert.deepEqual(await verifyLeads({leadIds:[],onlyUnverified:false}),{verified:0,invalid:0,risky:0});
+    await verifyLeads({leadIds:['import-stress-1'],onlyUnverified:false});
+    const rejected=await db.lead.findUniqueOrThrow({where:{id:'import-stress-1'}});
+    assert.equal(rejected.emailStatus,'invalid','format recheck must preserve a real mailbox rejection');
+    assert.equal(rejected.phoneStatus,'invalid');
+    assert.match(rejected.verifyNotes!,/Mailbox not found/);
+    assert.equal(rejected.verifiedAt!.toISOString(),'2026-10-20T00:00:00.000Z');
     const web=await attachLeadSummary({...createSeedData(),leads:[],replies:[],campaigns:[],providerSpend:[]});
     assert.equal(web.leadSummary.total,total+1);
     assert.equal(web.leads.length,100,'platform must not download the full pool');

@@ -8,6 +8,7 @@ import {
   mapCostEntry,
   mapOptOut,
   mapReply,
+  mapLead,
 } from "@/lib/mappers";
 import type {
   Campaign,
@@ -180,7 +181,7 @@ export async function verifyLeads(input?: {
 }): Promise<{ verified: number; invalid: number; risky: number }> {
   await ensureSeeded();
   const prisma = getPrisma();
-  const { verifyContact } = await import("@/lib/verify");
+  const { applyVerification } = await import("@/lib/verify");
   const leads = await prisma.lead.findMany({where:{...(input?.leadIds!==undefined?{id:{in:input.leadIds}}:{}),...(input?.onlyUnverified!==false?{OR:[{emailStatus:"unverified"},{phoneStatus:"unverified"}]}:{})}});
   let verified = 0;
   let invalid = 0;
@@ -195,18 +196,18 @@ export async function verifyLeads(input?: {
     ) {
       continue;
     }
-    const result = verifyContact({
-      email: lead.email ?? undefined,
-      phone: lead.phone ?? undefined,
-    });
-    await prisma.lead.update({
-      where: { id: lead.id },
-      data: {
-        emailStatus: result.emailStatus,
-        phoneStatus: result.phoneStatus,
-        verifyNotes: result.verifyNotes,
-        verifiedAt: new Date(),
-      },
+    // Read and write under one row lock so a concurrent bounce webhook cannot
+    // be undone by a stale format-check result.
+    const result = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT "id" FROM "Lead" WHERE "id" = ${lead.id} FOR UPDATE`;
+      const current = await tx.lead.findUniqueOrThrow({ where: { id: lead.id } });
+      const next = applyVerification(mapLead(current));
+      await tx.lead.update({ where: { id: lead.id }, data: {
+        emailStatus: next.emailStatus, phoneStatus: next.phoneStatus,
+        verifyNotes: next.verifyNotes,
+        verifiedAt: next.verifiedAt ? new Date(next.verifiedAt) : null,
+      } });
+      return next;
     });
     verified += 1;
     if (result.emailStatus === "invalid" || result.phoneStatus === "invalid")
