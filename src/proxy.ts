@@ -10,6 +10,9 @@ const SESSION_COOKIE = "sd_session";
  * Webhooks (Telnyx / Smartlead) MUST stay here — providers cannot log in.
  */
 const PUBLIC_PATHS = [
+  // Approved campaign artwork must load in email clients without a CRM session.
+  // Keep this an exact file path; uploaded files and other CRM assets stay private.
+  "/email-assets/abstract/heloc-business-v3.png",
   "/login",
   "/api/auth/login",
   "/api/auth/logout",
