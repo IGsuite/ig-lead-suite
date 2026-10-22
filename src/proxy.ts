@@ -11,8 +11,17 @@ const SESSION_COOKIE = "sd_session";
  */
 const PUBLIC_PATHS = [
   // Approved campaign artwork must load in email clients without a CRM session.
-  // Keep this an exact file path; uploaded files and other CRM assets stay private.
+  // Keep exact file paths; uploaded files and other CRM assets stay private.
   "/email-assets/abstract/heloc-business-v3.png",
+  "/email-assets/abstract/sba-7a-v1.png",
+  "/email-assets/abstract/sba-504-v1.png",
+  "/email-assets/abstract/sba-express-v1.png",
+  "/email-assets/abstract/business-line-of-credit-v1.png",
+  "/email-assets/abstract/revenue-based-financing-v1.png",
+  "/email-assets/abstract/term-loans-v1.png",
+  "/email-assets/abstract/equipment-financing-v1.png",
+  "/email-assets/abstract/invoice-factoring-v1.png",
+  "/email-assets/abstract/small-business-loans-v1.png",
   "/login",
   "/api/auth/login",
   "/api/auth/logout",
