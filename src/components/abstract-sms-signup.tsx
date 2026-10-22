@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { SMS_DISCLOSURE, SMS_DISCLOSURE_VERSION } from "@/lib/sms-consent";
+import { ABSTRACT_PRIVACY_URL, SMS_DISCLOSURE, SMS_DISCLOSURE_VERSION } from "@/lib/sms-consent";
 import { Button } from "@/components/ui/button";
 
 export function AbstractSmsSignup() {
@@ -27,7 +27,7 @@ export function AbstractSmsSignup() {
     </label>
     <label className="flex items-start gap-3 text-sm leading-6">
       <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} className="mt-1" />
-      <span>{SMS_DISCLOSURE} <a className="underline" href="#sms-terms">SMS Terms</a> · <a className="underline" href="#sms-privacy">SMS Privacy</a></span>
+      <span>{SMS_DISCLOSURE} <a className="underline" href="#sms-terms">SMS Terms</a> · <a className="underline" href="#sms-privacy">SMS Privacy</a> · <a className="underline" href={ABSTRACT_PRIVACY_URL}>Abstract Capital Group Privacy Policy</a></span>
     </label>
     <label className="hidden" aria-hidden="true">Website<input tabIndex={-1} autoComplete="off" value={website} onChange={e => setWebsite(e.target.value)} /></label>
     <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Submit my choice"}</Button>
