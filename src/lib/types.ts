@@ -70,7 +70,7 @@ export interface LeadSendEvent {
 }
 
 /** Paid social platforms managed per entity portal. */
-export type SocialPlatform = "meta" | "tiktok";
+export type SocialPlatform = "meta" | "tiktok" | "google_ads" | "seo";
 export type SocialCampaignStatus =
   | "draft"
   | "active"

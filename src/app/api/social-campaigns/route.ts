@@ -2,6 +2,7 @@ import { requireApiSession } from "@/lib/api-auth";
 import { NextResponse } from "next/server";
 import { assertEntityAccess, canAccessEntity } from "@/lib/acl";
 import { getSession } from "@/lib/auth";
+import { isMarketingPlatform, isSearchPlatform, validateSearchPlan } from "@/lib/marketing-platforms";
 import {
   createSocialCampaign,
   deleteSocialCampaign,
@@ -78,7 +79,8 @@ export async function GET(request: Request) {
     campaigns = campaigns.filter((c) => c.entityId === entityId);
     connections = connections.filter((c) => c.entityId === entityId);
   }
-  if (platform === "meta" || platform === "tiktok") {
+  if (platform && !isMarketingPlatform(platform)) return NextResponse.json({ error: "Unknown marketing platform" }, { status: 400 });
+  if (platform) {
     campaigns = campaigns.filter((c) => c.platform === platform);
     connections = connections.filter((c) => c.platform === platform);
   }
@@ -102,6 +104,7 @@ export async function POST(request: Request) {
     dailyBudgetDollars?: number | string | null;
     spendDollars?: number | string | null;
   };
+  if (body.platform !== undefined && !isMarketingPlatform(body.platform)) return NextResponse.json({ error: "Unknown marketing platform" }, { status: 400 });
 
   if (body.action === "upsert_connection") {
     if (!body.entityId || !body.platform) {
@@ -117,7 +120,7 @@ export async function POST(request: Request) {
     const connection = await upsertSocialConnection({
       entityId: body.entityId,
       platform: body.platform,
-      status: body.connectionStatus || "not_connected",
+      status: isSearchPlatform(body.platform) ? "needs_setup" : body.connectionStatus || "not_connected",
       adAccountId: body.adAccountId,
       pixelOrEventsId: body.pixelOrEventsId,
       accessTokenNote: body.accessTokenNote,
@@ -161,6 +164,11 @@ export async function POST(request: Request) {
           { status: moveGate.status },
         );
       }
+    }
+
+    if (isSearchPlatform(body.platform || existing.platform)) {
+      const invalid = validateSearchPlan({ ...existing, ...body });
+      if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
     }
 
     const budgetCents =
@@ -214,6 +222,11 @@ export async function POST(request: Request) {
   const gate = assertEntityAccess(session, body.entityId);
   if (!gate.ok) {
     return NextResponse.json({ error: gate.error }, { status: gate.status });
+  }
+
+  if (isSearchPlatform(body.platform)) {
+    const invalid = validateSearchPlan(body);
+    if (invalid) return NextResponse.json({ error: invalid }, { status: 400 });
   }
 
   const budgetCents =
