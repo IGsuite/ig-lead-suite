@@ -3,13 +3,13 @@ import type {Lead} from "@/lib/types";
 import type { CalendarEntry } from "@/lib/marketing-calendar";
 import type { Brand, MessageTemplate, SocialCampaign } from "@/lib/types";
 
-export type MarketingKind = "email" | "sms" | "meta" | "tiktok";
+export type MarketingKind = "email" | "sms" | "meta" | "tiktok" | "google_ads" | "seo";
 export type MarketingPlanItem = {
   id:string; brandId:string; company:string; title:string; programs:string[];
   kind:MarketingKind; startDate:string; endDate:string; time:string;
   status:string; href:string; detail:string; planningOnly:boolean;
 };
-export const marketingKindLabel:Record<MarketingKind,string> = {email:"Email",sms:"Text",meta:"Meta social",tiktok:"TikTok social"};
+export const marketingKindLabel:Record<MarketingKind,string> = {email:"Email",sms:"Text",meta:"Meta social",tiktok:"TikTok social",google_ads:"Google Ads",seo:"SEO"};
 
 /** Dates in the social store are calendar dates, not local instants. */
 function dateOnly(value:string|null|undefined):string|null {
@@ -47,6 +47,6 @@ export function filterMarketingPlan(items:MarketingPlanItem[],filters:{month:str
   const monthEnd=filters.month+"-31";
   return items.filter(i=>i.startDate<=monthEnd && i.endDate>=filters.month+"-01" &&
     (filters.brandId==="all"||i.brandId===filters.brandId) &&
-    (filters.kind==="all"||(filters.kind==="social"?i.planningOnly:i.kind===filters.kind)) &&
+    (filters.kind==="all"||(filters.kind==="social"?i.kind==="meta"||i.kind==="tiktok":i.kind===filters.kind)) &&
     (filters.program==="all"||i.programs.includes(filters.program)));
 }
