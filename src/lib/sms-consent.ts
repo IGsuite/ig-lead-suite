@@ -1,8 +1,9 @@
 import type { Lead, SmsConsent } from "@/lib/types";
 
-export const SMS_DISCLOSURE_VERSION = "abstract-sms-2026-10-20-v1";
-export const SMS_DISCLOSURE = "I agree to receive marketing texts from Abstract Capital Group about business advisory services and financing assistance, including messages sent using automated technology. Consent is not a condition of purchasing services. Message frequency varies. Message and data rates may apply. Reply STOP to unsubscribe or HELP for help.";
-export const SMS_PRIVACY = "Mobile information, SMS opt-in data, and SMS consent will not be sold or shared with third parties for their own promotional or marketing purposes. Service providers may process this information only to operate our messaging program.";
+export const SMS_DISCLOSURE_VERSION = "abstract-sms-2026-10-21-v2";
+export const SMS_DISCLOSURE = "I agree to receive marketing texts from Abstract Capital Group about business advisory services and financing assistance, including messages sent using automated technology. This permission is only for Abstract Capital Group and is not shared with or transferred to third-party lending or financing partners. Consent is not a condition of purchasing services. Message frequency varies. Message and data rates may apply. Reply STOP to unsubscribe or HELP for help.";
+export const SMS_PRIVACY = "Mobile information will not be sold or shared with third parties for promotional or marketing purposes. SMS opt-in data and consent are only for Abstract Capital Group and will not be shared with or transferred to third-party lending or financing partners. Service providers may process information only on Abstract Capital Group’s behalf to operate its messaging program; this does not give them consent to send their own marketing texts.";
+export const ABSTRACT_PRIVACY_URL = "https://abstractcapitalgroup.com/acg-redesign-privacy-policy/";
 
 export function smsPhone(value?: string): string {
   const digits = (value || "").replace(/\D/g, "");

@@ -1,5 +1,5 @@
 import { AbstractSmsSignup } from "@/components/abstract-sms-signup";
-import { SMS_PRIVACY } from "@/lib/sms-consent";
+import { ABSTRACT_PRIVACY_URL, SMS_PRIVACY } from "@/lib/sms-consent";
 
 export const metadata = { title: "Text updates | Abstract Capital Group" };
 
@@ -22,7 +22,7 @@ export default function AbstractSmsPage() {
       <h2 className="text-xl font-medium">SMS privacy</h2>
       <p>{SMS_PRIVACY}</p>
       <p>This form records your phone number, choice, time, signup page, and the consent wording shown. We keep these records to manage your preferences and demonstrate permission. Importing a phone list does not establish SMS consent. General financing inquiries and applications are separate from this SMS choice.</p>
-      <p>See Abstract’s <a className="underline" href="https://abstractcapitalgroup.com/acg-redesign-privacy-policy/">general privacy policy</a>. Contact info@abstractcapitalgroup.com to request access to or correction of your information, or to withdraw permission.</p>
+      <p>See Abstract’s <a className="underline" href={ABSTRACT_PRIVACY_URL}>general privacy policy</a>. Contact info@abstractcapitalgroup.com to request access to or correction of your information, or to withdraw permission.</p>
     </section>
   </main>;
 }
