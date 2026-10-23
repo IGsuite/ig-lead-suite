@@ -154,6 +154,9 @@ function BrandWorkspaceInner() {
             >
               Social hub
             </Link>
+            <Link href={`/subscriptions?company=${brand.id}`} className={cn(buttonVariants({ variant: "outline" }))}>
+              Subscriptions & accounts
+            </Link>
             <Link
               href={`/campaigns/new?brandId=${brand.id}&channel=sms`}
               className={cn(buttonVariants())}

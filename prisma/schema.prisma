@@ -9,6 +9,27 @@ datasource db {
   provider = "postgresql"
 }
 
+/// Admin-only subscription inventory. Passwords stay in an external password manager.
+model ServiceSubscription {
+  id String @id
+  companyIds String[]
+  service String
+  purpose String
+  loginUrl String
+  username String @default("")
+  vaultUrl String @default("")
+  plan String @default("")
+  amountCents Int?
+  currency String @default("USD")
+  billingCycle String @default("monthly")
+  renewalDate String @default("")
+  status String @default("needs_review")
+  notes String @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([companyIds], type: Gin)
+}
+
 /// One company portal (Abstract, Ahava, Take More, Venture, TYH)
 model Entity {
   id               String   @id
