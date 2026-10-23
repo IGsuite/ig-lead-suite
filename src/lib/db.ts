@@ -18,6 +18,7 @@ const REQUIRED_DELEGATES = [
   "inboxSend",
   "emailCampaignSetup",
   "marketingCalendarEntry",
+  "serviceSubscription",
 ] as const;
 
 function clientHasRequiredDelegates(client: PrismaClient): boolean {
