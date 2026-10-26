@@ -47,9 +47,9 @@ export async function POST(request: Request) {
   }
   const temporaryPassword =
     body.password?.trim() || generateTemporaryPassword();
-  const role: UserRole = body.role === "admin" ? "admin" : "member";
+  const role: UserRole = body.role === "admin" ? "admin" : body.role === "setup" ? "setup" : "member";
   const allowedEntityIds = body.allowedEntityIds || [];
-  if (role === "member") {
+  if (role !== "admin") {
     for (const id of allowedEntityIds) {
       const gate = assertEntityAccess(session, id);
       // admins always pass; keep loop for future nested roles
@@ -114,6 +114,7 @@ export async function PATCH(request: Request) {
   if (!body.id) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
+  if(body.role!==undefined&&!["admin","member","setup"].includes(body.role))return NextResponse.json({error:"Choose a valid user role"},{status:400});
 
   const temporaryPassword = body.resetPassword
     ? body.password?.trim() || generateTemporaryPassword()

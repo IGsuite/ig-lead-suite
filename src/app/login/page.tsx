@@ -28,10 +28,10 @@ function LoginInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as { error?: string;user?:{role?:string} };
       if (!res.ok) throw new Error(json.error || "Login failed");
       const next = searchParams.get("next") || "/dashboard";
-      router.push(next);
+      router.push(json.user?.role==="setup"?"/company-setup":next);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");

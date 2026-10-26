@@ -40,7 +40,7 @@ export type SendWindowPreset =
   | "evening"
   | "custom"
   | "any";
-export type UserRole = "admin" | "member";
+export type UserRole = "admin" | "member" | "setup";
 
 /** Public social / brand page links for an entity hub. */
 export interface SocialLinks {

@@ -6,6 +6,8 @@ import {
   BarChart3,
   Building2,
   CalendarDays,
+  Bell,
+  ClipboardList,
   FerrisWheel,
   Inbox,
   LayoutDashboard,
@@ -26,6 +28,8 @@ import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/alerts", label: "Alerts & Tasks", icon: Bell },
+  { href: "/company-setup", label: "Company setup", icon: ClipboardList },
   { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/leads", label: "Leads", icon: Users },
   { href: "/reports", label: "Reports", icon: BarChart3 },
@@ -44,12 +48,14 @@ const nav = [
 export function AppSidebar() {
   const pathname = useClientPathname();
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
+  const [sessionRole, setSessionRole] = useState<string | null>(null);
 
   useEffect(() => {
     void fetch("/api/auth/session", { cache: "no-store" })
       .then((r) => r.json())
-      .then((json: { user?: { email?: string } | null }) => {
+      .then((json: { user?: { email?: string; role?:string } | null }) => {
         setSessionEmail(json.user?.email || null);
+        setSessionRole(json.user?.role || null);
       })
       .catch(() => undefined);
   }, [pathname]);
@@ -72,7 +78,7 @@ export function AppSidebar() {
         </Link>
       </div>
       <nav className="flex flex-1 flex-col gap-1 p-3">
-        {nav.map((item) => {
+        {nav.filter(item=>sessionRole!=="setup"||["/alerts","/company-setup"].includes(item.href)).map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
