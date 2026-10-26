@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const setupStatuses={not_started:"Not started",in_progress:"In progress",needs_owner:"Needs your help",ready_for_review:"Ready for review",tested:"Tested by owner",not_applicable:"Not needed"} as const;
 export type SetupStatus=keyof typeof setupStatuses;
-export const setupCatalog=[
+const allSetupItems=[
   {key:"website",title:"Website & hosting / WordPress",category:"Website",url:"",steps:["Confirm the company website and its actual hosting or WordPress/admin login link.","Invite the owner and the appropriate website editor through the hosting provider.","Record who manages the website and where changes are reviewed; do not create a replacement site."]},
   {key:"facebook",title:"Facebook & Meta Business Suite",category:"Social media",url:"https://business.facebook.com/",steps:["Find the existing company Page and business portfolio before creating another.","Use Meta team invitations to grant company-specific access.","Record the Page URL, business/account reference and the login used."]},
   {key:"instagram",title:"Instagram",category:"Social media",url:"https://www.instagram.com/",steps:["Find or create this company's professional profile.","Link it to the correct company Meta portfolio where appropriate.","Record the profile URL and account owner; have the owner verify the connection."]},
@@ -19,6 +19,9 @@ export const setupCatalog=[
   {key:"sms",title:"Telnyx & SMS registration",category:"Messaging",url:"https://portal.telnyx.com/",steps:["Identify the correct company account, business identity and dedicated phone number.","Prepare direct opt-in, privacy and messaging-policy links with the owner.","Record registration status. Do not submit paid reviews, enable sending or send texts without approval."]},
   {key:"igf",title:"IGF Ventures command-center handoff",category:"Operations",url:"",steps:["Wait for the IGF Ventures connection instructions from the owner.","Record the company mapping and authorized handoff destination.","Ask the owner to verify the connection; do not paste access tokens into notes."]},
 ] as const;
+// Keep dormant channel definitions and saved records available for a future reactivation.
+export const setupCatalog=allSetupItems.filter(item=>!["linkedin","youtube","x"].includes(item.key));
+export const activeSetupKeys=setupCatalog.map(item=>item.key);
 export const setupLink=z.string().trim().max(1000).refine(value=>{
   if(!value)return true;
   try{const u=new URL(value);return u.protocol==="https:"&&!u.username&&!u.password&&![...u.searchParams.keys()].some(k=>/^(token|api_?key|secret|password|access_token|code)$/i.test(k));}catch{return false;}

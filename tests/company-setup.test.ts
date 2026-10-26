@@ -23,7 +23,8 @@ test("setup role is explicit, signed, restricted by default, and cannot self-cer
 });
 test("checklist validates service identity and blocks unexpected password fields and credential URLs",()=>{
   const item={entityId:"abstract",key:"instagram",status:"in_progress",loginUrl:"https://www.instagram.com/"};
-  assert.equal(setupItemInput.safeParse(item).success,true);assert.equal(new Set(setupCatalog.map(i=>i.key)).size,15);
+  assert.equal(setupItemInput.safeParse(item).success,true);assert.equal(new Set(setupCatalog.map(i=>i.key)).size,12);
+  assert.deepEqual(setupCatalog.filter(i=>i.category==="Social media").map(i=>i.key),["facebook","instagram","tiktok"]);
   assert.equal(setupItemInput.safeParse({...item,password:"do-not-store"}).success,false);
   assert.equal(setupItemInput.safeParse({...item,loginUrl:"https://user:password@example.com/"}).success,false);
   assert.equal(setupItemInput.safeParse({...item,vaultUrl:"https://example.com/?api_key=secret"}).success,false);

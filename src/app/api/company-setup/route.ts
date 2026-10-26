@@ -4,7 +4,7 @@ import { requireApiSession } from "@/lib/api-auth";
 import { getSession } from "@/lib/auth";
 import { canAccessEntity, isAdminSession } from "@/lib/acl";
 import { getPrisma } from "@/lib/db";
-import { setupCatalog, setupItemInput, setupCanVerify, setupStatuses } from "@/lib/company-setup";
+import { setupCatalog, activeSetupKeys, setupItemInput, setupCanVerify, setupStatuses } from "@/lib/company-setup";
 import { z } from "zod";
 import { accountVaultConfigured } from "@/lib/account-vault";
 const headers={"Cache-Control":"no-store"};
@@ -14,10 +14,10 @@ export async function GET(request:Request){
   const companies=(await db.entity.findMany({select:{id:true,name:true,websiteUrl:true,socialLinks:true},orderBy:{name:"asc"}})).filter(c=>canAccessEntity(session,c.id));
   const entityId=new URL(request.url).searchParams.get("entityId");
   if(entityId&&!companies.some(c=>c.id===entityId))return NextResponse.json({error:"Company not accessible"},{status:403});
-  const scope={entityId:entityId||{in:companies.map(c=>c.id)}};
+  const scope={entityId:entityId||{in:companies.map(c=>c.id)},key:{in:activeSetupKeys}};
   const [metadata,credentials]=await Promise.all([db.companySetupItem.findMany({where:scope,orderBy:{key:"asc"}}),db.companyAccountCredential.findMany({where:scope,select:{entityId:true,key:true,revision:true}})]);
   const items=metadata.map(item=>({...item,hasPassword:credentials.some(c=>c.entityId===item.entityId&&c.key===item.key),credentialRevision:credentials.find(c=>c.entityId===item.entityId&&c.key===item.key)?.revision||0}));
-  const history=entityId?await db.companySetupEvent.findMany({where:{entityId},orderBy:{createdAt:"desc"},take:25}):[];
+  const history=entityId?await db.companySetupEvent.findMany({where:{entityId,itemKey:{in:activeSetupKeys}},orderBy:{createdAt:"desc"},take:25}):[];
   return NextResponse.json({companies,items,history,catalog:setupCatalog,isAdmin:isAdminSession(session),vaultConfigured:accountVaultConfigured()},{headers});
 }
 const updateInput=z.object({data:setupItemInput,revision:z.number().int().min(0)}).strict();
