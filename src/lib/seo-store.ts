@@ -17,6 +17,15 @@ export async function recordSeoReport(input:SeoReportInput, source:"manual_revie
     const report=await tx.seoReport.create({data:{...input,auditedAt,complete,source,id:randomUUID()}});
     if(!isNewerAudit(auditedAt,latest?.auditedAt))return {report,duplicate:false};
     const existing=await tx.seoTask.findMany({where:{entityId:input.entityId,providerProjectId:input.providerProjectId}});
+    // Migrate a uniquely named reviewed task to the provider's stable ID without losing IT work.
+    if(source==="ahrefs_api")for(const finding of input.findings){
+      if(existing.some(t=>t.issueKey===finding.key))continue;
+      const sameTitle=existing.filter(t=>t.title.toLowerCase()===finding.title.toLowerCase());
+      if(sameTitle.length===1&&input.findings.filter(f=>f.title.toLowerCase()===finding.title.toLowerCase()).length===1){
+        await tx.seoTask.update({where:{id:sameTitle[0].id},data:{issueKey:finding.key}});
+        sameTitle[0].issueKey=finding.key;
+      }
+    }
     let newlyOpen=0;
     for(const finding of input.findings.filter(f=>f.count>0)){
       const previous=existing.find(t=>t.issueKey===finding.key);
