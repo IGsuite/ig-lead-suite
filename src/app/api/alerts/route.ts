@@ -3,6 +3,7 @@ import { requireApiSession } from "@/lib/api-auth";
 import { getSession } from "@/lib/auth";
 import { canAccessEntity } from "@/lib/acl";
 import { getPrisma } from "@/lib/db";
+import { activeSetupKeys } from "@/lib/company-setup";
 const headers={"Cache-Control":"no-store"};
 export async function GET(){
   const denied=await requireApiSession({allowSetup:true});if(denied)return denied;
@@ -11,8 +12,8 @@ export async function GET(){
   const where={entityId:{in:companies.map(c=>c.id)}};
   const [seo,setup,needsOwner]=await Promise.all([
     db.seoAlert.findMany({where:{...where,acknowledgedAt:null},orderBy:{createdAt:"desc"},take:100}),
-    db.companySetupEvent.findMany({where:{...where,acknowledgedAt:null},orderBy:{createdAt:"desc"},take:100}),
-    db.companySetupItem.count({where:{...where,status:"needs_owner"}}),
+    db.companySetupEvent.findMany({where:{...where,itemKey:{in:activeSetupKeys},acknowledgedAt:null},orderBy:{createdAt:"desc"},take:100}),
+    db.companySetupItem.count({where:{...where,key:{in:activeSetupKeys},status:"needs_owner"}}),
   ]);
   const items=[...seo.map(a=>({...a,kind:"seo",href:session?.role==="setup"?`/company-setup?entity=${encodeURIComponent(a.entityId)}`:`/social?entity=${encodeURIComponent(a.entityId)}&platform=seo`})),
     ...setup.map(a=>({...a,kind:"setup",href:`/company-setup?entity=${encodeURIComponent(a.entityId)}#${a.itemKey}`}))].sort((a,b)=>b.createdAt.getTime()-a.createdAt.getTime());

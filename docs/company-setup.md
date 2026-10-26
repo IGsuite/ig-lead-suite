@@ -1,6 +1,6 @@
 # Company setup and assistant access
 
-`/company-setup` provides 15 checklist areas for each existing company: website/hosting, Facebook, Instagram, LinkedIn, TikTok, YouTube, X, Ahrefs, Search Console, Analytics, eligible Google Business Profiles, Google Ads, email/Smartlead, SMS/Telnyx and the future IGF Ventures handoff.
+`/company-setup` provides 12 active checklist areas for each existing company: website/hosting, Facebook, Instagram, TikTok, Ahrefs, Search Console, Analytics, eligible Google Business Profiles, Google Ads, email/Smartlead, SMS/Telnyx and the future IGF Ventures handoff. LinkedIn, YouTube and X are hidden at the owner's request to focus on the three social platforms currently used. Their saved metadata and credentials remain stored for possible reactivation; dormant items are excluded from progress, owner-help counts and setup alerts.
 
 The checklist records account names, login usernames, public profile links, provider login links, account references, optional password-manager entry links, assignees and work notes. The user selected encrypted password storage in Lead Suite. No new provider accounts or paid plans are created by saving a checklist.
 
