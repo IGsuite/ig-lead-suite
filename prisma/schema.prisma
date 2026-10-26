@@ -9,6 +9,69 @@ datasource db {
   provider = "postgresql"
 }
 
+model SeoProject {
+  entityId String @id
+  entity Entity @relation(fields:[entityId], references:[id], onDelete:NoAction, onUpdate:NoAction)
+  providerProjectId String
+  website String
+  automaticSync Boolean @default(false)
+  lastCheckedAt DateTime?
+  syncError String?
+  updatedAt DateTime @updatedAt
+}
+
+model SeoReport {
+  id String @id
+  entityId String
+  entity Entity @relation(fields:[entityId], references:[id], onDelete:NoAction, onUpdate:NoAction)
+  alert SeoAlert?
+  providerProjectId String
+  auditedAt DateTime
+  source String
+  healthScore Int
+  internalPages Int
+  errorUrls Int
+  complete Boolean @default(false)
+  findings Json
+  createdAt DateTime @default(now())
+  @@unique([entityId, providerProjectId, auditedAt])
+  @@index([entityId, auditedAt])
+}
+
+model SeoTask {
+  id String @id
+  entityId String
+  entity Entity @relation(fields:[entityId], references:[id], onDelete:NoAction, onUpdate:NoAction)
+  providerProjectId String
+  issueKey String
+  title String
+  priority String
+  affectedCount Int
+  recommendation String
+  urls String[]
+  status String @default("open")
+  assignee String @default("")
+  notes String @default("")
+  firstSeenAt DateTime
+  lastSeenAt DateTime
+  verifiedAt DateTime?
+  updatedAt DateTime @updatedAt
+  @@unique([entityId, providerProjectId, issueKey])
+  @@index([entityId, status])
+}
+
+model SeoAlert {
+  id String @id
+  entityId String
+  entity Entity @relation(fields:[entityId], references:[id], onDelete:NoAction, onUpdate:NoAction)
+  reportId String? @unique
+  report SeoReport? @relation(fields:[reportId], references:[id], onDelete:NoAction, onUpdate:NoAction)
+  message String
+  acknowledgedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([entityId, acknowledgedAt])
+}
+
 /// Admin-only subscription inventory. Passwords stay in an external password manager.
 model ServiceSubscription {
   id String @id
@@ -60,6 +123,10 @@ model Entity {
   socialCampaigns  SocialCampaign[]
   socialConnections SocialConnection[]
   sendEvents       LeadSendEvent[]
+  seoProject       SeoProject?
+  seoReports       SeoReport[]
+  seoTasks         SeoTask[]
+  seoAlerts        SeoAlert[]
 }
 
 model Lead {
