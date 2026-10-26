@@ -11,7 +11,7 @@ datasource db {
 
 model SeoProject {
   entityId String @id
-  entity Entity @relation(fields:[entityId], references:[id])
+  entity Entity @relation(fields:[entityId], references:[id], onDelete:NoAction, onUpdate:NoAction)
   providerProjectId String
   website String
   automaticSync Boolean @default(false)
@@ -23,7 +23,7 @@ model SeoProject {
 model SeoReport {
   id String @id
   entityId String
-  entity Entity @relation(fields:[entityId], references:[id])
+  entity Entity @relation(fields:[entityId], references:[id], onDelete:NoAction, onUpdate:NoAction)
   alert SeoAlert?
   providerProjectId String
   auditedAt DateTime
@@ -41,7 +41,7 @@ model SeoReport {
 model SeoTask {
   id String @id
   entityId String
-  entity Entity @relation(fields:[entityId], references:[id])
+  entity Entity @relation(fields:[entityId], references:[id], onDelete:NoAction, onUpdate:NoAction)
   providerProjectId String
   issueKey String
   title String
@@ -63,9 +63,9 @@ model SeoTask {
 model SeoAlert {
   id String @id
   entityId String
-  entity Entity @relation(fields:[entityId], references:[id])
+  entity Entity @relation(fields:[entityId], references:[id], onDelete:NoAction, onUpdate:NoAction)
   reportId String? @unique
-  report SeoReport? @relation(fields:[reportId], references:[id])
+  report SeoReport? @relation(fields:[reportId], references:[id], onDelete:NoAction, onUpdate:NoAction)
   message String
   acknowledgedAt DateTime?
   createdAt DateTime @default(now())
