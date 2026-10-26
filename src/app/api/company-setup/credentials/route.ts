@@ -35,11 +35,11 @@ export async function POST(request:Request){
     }
     const encryptedValue=encryptAccountPassword(data.password,data.entityId,data.key);
     const saved=await db.$transaction(async tx=>{
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`credential:${data.entityId}:${data.key}`}))::text`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`setup:${data.entityId}:${data.key}`}))::text`;
       const old=await tx.companyAccountCredential.findUnique({where,select:{revision:true}});
       if((old?.revision||0)!==data.revision)return false;
       await tx.companyAccountCredential.upsert({where,create:{id:randomUUID(),entityId:data.entityId,key:data.key,encryptedValue,updatedBy:session?.email||"Local admin"},update:{encryptedValue,revision:{increment:1},updatedBy:session?.email||"Local admin"}});
-      await tx.companySetupItem.updateMany({where:{entityId:data.entityId,key:data.key,status:"tested"},data:{status:"ready_for_review",revision:{increment:1}}});
+      await tx.companySetupItem.updateMany({where:{entityId:data.entityId,key:data.key},data:{status:"ready_for_review",revision:{increment:1},updatedBy:session?.email||"Local admin"}});
       await tx.companySetupEvent.create({data:{id:randomUUID(),entityId:data.entityId,itemKey:data.key,message:`${title}: account password ${old?"replaced":"saved"} by ${session?.email||"Local admin"}; value is hidden.`}});
       return true;
     });
