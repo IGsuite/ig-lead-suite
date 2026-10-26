@@ -29,19 +29,19 @@ import { cn } from "@/lib/utils";
 const nav = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/alerts", label: "Alerts & Tasks", icon: Bell },
-  { href: "/company-setup", label: "Company setup", icon: ClipboardList },
   { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/leads", label: "Leads", icon: Users },
-  { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/campaigns", label: "Campaigns", icon: Megaphone },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/social", label: "Social Media", icon: Share2 },
   { href: "/creatives", label: "Ads", icon: Images },
+  { href: "/calendar", label: "Calendar", icon: CalendarDays },
   { href: "/autopilot", label: "Autopilot", icon: FerrisWheel },
+  { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/brands", label: "Entities", icon: Building2 },
   { href: "/setup", label: "Go live", icon: ListChecks },
   { href: "/opt-outs", label: "Opt-outs", icon: ShieldOff },
   { href: "/users", label: "Users", icon: UserCog },
+  { href: "/company-setup", label: "Company setup", icon: ClipboardList },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
