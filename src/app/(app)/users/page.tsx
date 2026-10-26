@@ -455,11 +455,12 @@ export default function UsersPage() {
               <SelectContent>
                 <SelectItem value="admin">Admin (all entities)</SelectItem>
                 <SelectItem value="member">Member (selected entities)</SelectItem>
+                <SelectItem value="setup">Setup assistant (checklists only)</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
-        {role === "member" ? (
+        {role !== "admin" ? (
           <div className="space-y-2">
             <Label>Allowed entities</Label>
             <div className="flex flex-wrap gap-3">

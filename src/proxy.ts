@@ -61,6 +61,11 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  const session = decodeSession(request.cookies.get(SESSION_COOKIE)?.value);
+  if(session?.role==="setup"&&!pathname.startsWith("/api/")&&!pathname.startsWith("/_next/")&&!["/company-setup","/alerts"].includes(pathname)){
+    const url=request.nextUrl.clone();url.pathname="/company-setup";url.search="";return NextResponse.redirect(url);
+  }
+
   return NextResponse.next();
 }
 

@@ -91,7 +91,7 @@ export function decodeSession(token: string | undefined | null): SessionPayload 
       Buffer.from(payloadB64, "base64url").toString("utf8"),
     ) as SessionPayload;
     if (typeof json.exp !== "number" || !Number.isFinite(json.exp) || json.exp < Date.now()) return null;
-    if (!json.userId || !json.email || !["admin", "member"].includes(json.role)) return null;
+    if (!json.userId || !json.email || !["admin", "member", "setup"].includes(json.role)) return null;
     return {
       ...json,
       allowedEntityIds: Array.isArray(json.allowedEntityIds)

@@ -20,6 +20,51 @@ model SeoProject {
   updatedAt DateTime @updatedAt
 }
 
+model CompanySetupItem {
+  id String @id
+  entityId String
+  entity Entity @relation(fields:[entityId],references:[id],onDelete:NoAction,onUpdate:NoAction)
+  key String
+  status String @default("not_started")
+  accountName String @default("")
+  username String @default("")
+  loginUrl String @default("")
+  profileUrl String @default("")
+  vaultUrl String @default("")
+  accountReference String @default("")
+  assignee String @default("")
+  notes String @default("")
+  updatedBy String
+  revision Int @default(1)
+  updatedAt DateTime @updatedAt
+  @@unique([entityId,key])
+  @@index([entityId,status])
+}
+
+model CompanySetupEvent {
+  id String @id
+  entityId String
+  entity Entity @relation(fields:[entityId],references:[id],onDelete:NoAction,onUpdate:NoAction)
+  itemKey String
+  message String
+  acknowledgedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([entityId,createdAt])
+}
+
+/// Encrypted separately from checklist metadata. Never include encryptedValue in list responses.
+model CompanyAccountCredential {
+  id String @id
+  entityId String
+  entity Entity @relation(fields:[entityId],references:[id],onDelete:NoAction,onUpdate:NoAction)
+  key String
+  encryptedValue String
+  revision Int @default(1)
+  updatedBy String
+  updatedAt DateTime @updatedAt
+  @@unique([entityId,key])
+}
+
 model SeoReport {
   id String @id
   entityId String
@@ -127,6 +172,9 @@ model Entity {
   seoReports       SeoReport[]
   seoTasks         SeoTask[]
   seoAlerts        SeoAlert[]
+  setupItems       CompanySetupItem[]
+  setupEvents      CompanySetupEvent[]
+  accountCredentials CompanyAccountCredential[]
 }
 
 model Lead {

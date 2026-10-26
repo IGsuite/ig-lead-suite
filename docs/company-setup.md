@@ -1,0 +1,21 @@
+# Company setup and assistant access
+
+`/company-setup` provides 15 checklist areas for each existing company: website/hosting, Facebook, Instagram, LinkedIn, TikTok, YouTube, X, Ahrefs, Search Console, Analytics, eligible Google Business Profiles, Google Ads, email/Smartlead, SMS/Telnyx and the future IGF Ventures handoff.
+
+The checklist records account names, login usernames, public profile links, provider login links, account references, optional password-manager entry links, assignees and work notes. The user selected encrypted password storage in Lead Suite. No new provider accounts or paid plans are created by saving a checklist.
+
+Passwords use a separate table and authenticated AES-256-GCM encryption, random 12-byte nonces, 16-byte tags, and company/item-bound additional authenticated data. `ACCOUNT_VAULT_KEY` is a dedicated, base64-encoded random 32-byte server-only key. It must never be prefixed `NEXT_PUBLIC_`, committed, printed, shared with IGF Ventures, or replaced without re-encrypting existing records. Use separate preview/production keys, preserve a secure backup, and restrict hosting-admin access because hosting administrators with both database and environment access can decrypt stored passwords. This is application encryption, not zero-knowledge password management.
+
+Setup assistants can save or replace a password for an assigned company but cannot reveal one. Only administrators can reveal through a same-origin authenticated POST; responses disable caching. Metadata and alert APIs never select ciphertext or return passwords. Reads and changes are logged without values. Revealed values hide after 30 seconds or when the page becomes hidden; no clipboard copy occurs automatically. Revision checks prevent stale replacement. Do not put passwords, recovery codes or API keys in notes. Credentials do not flow to the pending IGF Ventures integration.
+
+Saved profile links and self-reported setup completion do not prove a working integration. An assistant can prepare an item and request owner review. Only an administrator can mark it tested or not needed. Assistant changes to tested items return them to owner review. Revision checks reject stale saves, preserving another user's updates. Activity identifies the person who saved a change without copying login details into alerts.
+
+## Setup assistant role
+
+Administrators can choose **Setup assistant (checklists only)** when inviting a user through `/users`, and select the companies that user may access. This is a new role, not a change to existing administrators or members. No real assistant account is created until the owner supplies the intended identity and company scope.
+
+Production API authorization denies setup users by default. Only the checklist and central alerts routes opt in; these filter company records and enforce ownership on every update. Campaigns, leads, inbox replies, provider configuration, uploads, subscription billing records and user administration remain unavailable. The sidebar and login redirect provide the corresponding restricted UI, but server authorization is the security boundary. Current database permissions are re-read even if a session cookie carries an older role.
+
+## Alerts
+
+`/alerts` combines existing SEO notifications and checklist activity. Records can be filtered by company. Acknowledgment is shared by the team and does not close an IT task or complete a checklist. Missing items remain visible in each checklist and items needing owner help are counted separately. This does not yet monitor every external provider for expired credentials. IGF Ventures routing is pending its future connection; deployment does not share account details with that destination.
