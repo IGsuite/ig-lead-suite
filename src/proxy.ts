@@ -28,6 +28,9 @@ const PUBLIC_PATHS = [
   "/api/auth/session",
   "/api/webhooks/",
   "/api/cron/dispatch",
+  // These exact handlers enforce dedicated scheduler / integration credentials themselves.
+  "/api/cron/seo",
+  "/api/integrations/seo/events",
   "/api/queues/dispatch",
   "/api/queues/lead-imports",
   "/sms/abstract",
