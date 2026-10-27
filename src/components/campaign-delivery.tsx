@@ -1,0 +1,11 @@
+"use client";
+import { useEffect, useState } from "react";
+import { deliveryTotals, type DeliveryCounts } from "@/lib/delivery-summary";
+import { Button } from "@/components/ui/button";
+type Detail={counts:DeliveryCounts;issues:Array<{id:string;status:string;error?:string|null;providerId?:string|null}>};
+export function CampaignDelivery({id,counts}:{id:string;counts?:DeliveryCounts}){
+  const [open,setOpen]=useState(false),[data,setData]=useState<Detail|null>(null),[error,setError]=useState("");
+  useEffect(()=>{if(!open)return;const abort=new AbortController();async function load(){try{const r=await fetch(`/api/campaigns/${encodeURIComponent(id)}/delivery`,{cache:"no-store",signal:abort.signal});if(!r.ok)throw Error("Delivery details are unavailable");const d=await r.json();if(!abort.signal.aborted){setData(d);setError("");}}catch(e){if(!abort.signal.aborted)setError(e instanceof Error?e.message:"Check failed");}}void load();const timer=setInterval(()=>void load(),15000);return()=>{abort.abort();clearInterval(timer);};},[open,id]);
+  const totals=deliveryTotals(data?.counts||counts||{}),known=Boolean(counts&&Object.keys(counts).length);
+  return <div className="mt-2 max-w-80 space-y-2 whitespace-normal text-xs text-[color:var(--ink-muted)]">{known?<><p>Queued {totals.queued} · Accepted {totals.accepted} · Sent {totals.sent}</p><p>Delivery confirmed {totals.delivered} · Failed {totals.failed} · Unknown {totals.uncertain} · Skipped {totals.skipped}</p></>:<p>No queued delivery records for this campaign.</p>}<Button type="button" size="sm" variant="outline" onClick={()=>setOpen(value=>!value)}>{open?"Hide delivery details":"Delivery details"}</Button>{open&&<section aria-label="Campaign delivery details" className="rounded-lg border border-[color:var(--ink-border)] p-3">{error?<p role="alert">{error}</p>:!data?<p>Loading delivery details…</p>:<><p>Processing finished does not mean every recipient received the message. Delivery confirmed is a provider receipt, not proof the person read it.</p>{data.issues.map(issue=><p key={issue.id} className="mt-3 break-words"><strong>{issue.status}</strong>: {issue.error||"No detailed reason was saved. Use the provider message ID for investigation."}{issue.providerId&&<span className="mt-1 block select-all break-all">Provider reference: {issue.providerId}</span>}</p>)}</>}</section>}</div>;
+}

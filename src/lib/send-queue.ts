@@ -13,6 +13,7 @@ import { selectLeadsForSend, messageFingerprint, buildSendEvents } from "@/lib/r
 import { isWithinSendWindow, sendWindowLabel, normalizeSendWindow } from "@/lib/send-window";
 import { entityOfferCopy, tomorrowIso, type AutopilotRunResult } from "@/lib/autopilot";
 import { deliverCampaignBatch } from "@/lib/send";
+import { recordDeliveryAlert } from "@/lib/delivery-alerts";
 import type { Brand, Campaign, Lead } from "@/lib/types";
 import type { LaunchResult } from "@/lib/neon-store-shared";
 import type { Prisma } from "@/generated/prisma/client";
@@ -233,10 +234,13 @@ export async function dispatchQueuedSends() {
                 ...(lead.optedOut || ["replied", "converted", "opted_out"].includes(lead.status) ? {} : { status: "contacted" }) } });
               await tx.campaign.update({ where: { id: job.campaignId }, data: { sentCount: { increment: 1 } } });
               const receipt = result.providerId && payload.campaign.channel === "sms" ? await tx.deliveryReceipt.findUnique({ where: { providerId: result.providerId } }) : null;
-              await tx.sendJob.update({ where: { id: job.id }, data: { status: receipt?.status || "accepted", providerId: result.providerId, finishedAt: new Date() } });
+              const earlyFailure=receipt?.status==="failed"?"Provider reported a delivery failure. Review the provider message reference before retrying.":null;
+              await tx.sendJob.update({ where: { id: job.id }, data: { status: receipt?.status || "accepted", providerId: result.providerId, finishedAt: new Date(),...(earlyFailure?{error:earlyFailure}:{}) } });
+              if(earlyFailure)await recordDeliveryAlert(tx,job,earlyFailure);
             });
           } else {
             await db.sendJob.update({ where: { id: job.id }, data: { status: result?.status === "skipped" ? "skipped" : result?.status === "uncertain" ? "uncertain" : "failed", error: result?.error || "Provider did not accept contact", finishedAt: new Date() } });
+            if(result?.status!=="skipped")await recordDeliveryAlert(db,job,result?.error||"Provider did not accept contact");
           }
         } catch {
           await db.sendJob.update({ where: { id: job.id }, data: { status: "uncertain", error: "Provider outcome or persistence uncertain; reconcile before retrying", finishedAt: new Date() } });

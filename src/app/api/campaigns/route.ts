@@ -17,8 +17,36 @@ import { normalizeSendWindow } from "@/lib/send-window";
 import { updateDraftAudience } from "@/lib/campaign-audience";
 import { validatePrograms } from "@/lib/programs";
 import { mapCampaign } from "@/lib/mappers";
+import { draftFields, draftFingerprint } from "@/lib/campaign-draft";
+import { getPrisma } from "@/lib/db";
 
 export const maxDuration = 300;
+
+/** Full edits preserve the same untouched draft; launched campaigns are immutable. */
+export async function PUT(request:Request) {
+  const denied=await requireApiSession();if(denied)return denied;
+  if(request.headers.get("origin")!==new URL(request.url).origin)return NextResponse.json({error:"Origin not allowed"},{status:403});
+  const raw=await request.text();if(raw.length>700000)return NextResponse.json({error:"Draft too large"},{status:413});
+  let body;try{body=JSON.parse(raw);}catch{return NextResponse.json({error:"Invalid draft"},{status:400});}
+  const parsed=draftFields.safeParse(body);if(!parsed.success||typeof body.id!=="string"||typeof body.expectedRevision!=="string")return NextResponse.json({error:"Check the campaign fields and reload the saved draft"},{status:400});
+  const session=await getSession(),data=await getData({leadLimit:0}),existing=data.campaigns.find(c=>c.id===body.id);
+  if(!existing)return NextResponse.json({error:"Campaign not found"},{status:404});
+  const gate=assertEntityAccess(session,existing.brandId);if(!gate.ok)return NextResponse.json({error:gate.error},{status:403});
+  if(parsed.data.brandId!==existing.brandId||parsed.data.channel!==existing.channel)return NextResponse.json({error:"Company and channel are locked after the first save. Create a new campaign to change them."},{status:409});
+  try {
+    const programs=validatePrograms(data.brands.find(b=>b.id===existing.brandId),parsed.data.programs),window=normalizeSendWindow(parsed.data);
+    if(parsed.data.imageUrl){const u=new URL(parsed.data.imageUrl);if(u.protocol!=="https:"||u.username||u.password)throw Error("Use a public HTTPS image link");}
+    const result=await getPrisma().$transaction(async tx=>{
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('ig-send-enqueue'))::text`;
+      const row=await tx.campaign.findUniqueOrThrow({where:{id:existing.id}});
+      if(row.status!=="draft"||row.sentCount||await tx.sendJob.count({where:{campaignId:row.id}})||await tx.emailCampaignSetup.count({where:{campaignId:row.id}})||await tx.marketingCalendarEntry.count({where:{campaignId:row.id}}))throw Error("Only untouched drafts can be edited here. Use Calendar for an existing plan, or create a new campaign.");
+      if(await draftFingerprint(mapCampaign(row))!==body.expectedRevision)throw Error("Someone else changed this draft. Reload it before saving.");
+      const d=parsed.data;
+      return mapCampaign(await tx.campaign.update({where:{id:row.id},data:{...d,programs,...window,htmlMessage:d.channel==="email"?d.htmlMessage:null,imageUrl:d.channel==="email"?d.imageUrl:null,imageAlt:d.channel==="email"?d.imageAlt:null,...(d.mode==="auto"?{preferVerified:true,preferUnoffered:false}:{})}}));
+    });
+    return NextResponse.json({...result,draftRevision:await draftFingerprint(result)});
+  }catch(error){return NextResponse.json({error:error instanceof Error?error.message:"Draft could not save"},{status:409});}
+}
 
 export async function PATCH(request: Request) {
   const unauthorized = await requireApiSession(); if (unauthorized) return unauthorized;
@@ -211,5 +239,5 @@ export async function POST(request: Request) {
     status: "draft",
   });
 
-  return NextResponse.json(campaign);
+  return NextResponse.json({...campaign,draftRevision:await draftFingerprint(campaign)});
 }

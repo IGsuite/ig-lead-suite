@@ -3,6 +3,7 @@ import { parseEmailReply } from "@/lib/inbound-events";
 import { mapEntity } from "@/lib/mappers";
 import { ingestReply } from "@/lib/neon-store-ops";
 import { validEmailWebhook, processWebhook } from "@/lib/webhook-security";
+import { recordDeliveryAlert } from "@/lib/delivery-alerts";
 import { getPrisma } from "@/lib/db";
 
 /**
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
         await tx.sendJob.updateMany({ where: { leadId: lead.id, status: "queued" }, data: { status: "skipped", error: "Contact unsubscribed", finishedAt: new Date() } });
       } else if (event === "EMAIL_BOUNCE") {
         await tx.lead.update({ where: { id: lead.id }, data: { emailStatus: "invalid" } });
-        if (job) await tx.sendJob.update({ where: { id: job.id }, data: { status: "bounced", error: "Provider reported email bounce", finishedAt: new Date() } });
+        if (job) { await tx.sendJob.update({ where: { id: job.id }, data: { status: "bounced", error: "Provider reported email bounce", finishedAt: new Date() } }); await recordDeliveryAlert(tx,job,"Provider reported email bounce"); }
         await tx.sendJob.updateMany({ where: { leadId: lead.id, channel: "email", status: "queued" }, data: { status: "skipped", error: "Email bounced", finishedAt: new Date() } });
       } else if (job) {
         await tx.sendJob.updateMany({ where: { id: job.id, status: "accepted" }, data: { status: "sent", finishedAt: new Date() } });
