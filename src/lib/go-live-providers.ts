@@ -36,8 +36,9 @@ export async function companySmsReadiness(brand: Brand, allBrands: Brand[]): Pro
     const result = await read(`https://api.telnyx.com/v2/10dlc/campaign/${encodeURIComponent(id)}`, key);
     const campaign = (result.data || result) as { status?: string; campaignStatus?: string; tcrCampaignId?: string };
     sender.state = smsRegistrationState(campaign, assignment);
-    const mappings = [assignment.attNumberMappingStatus && `AT&T: ${assignment.attNumberMappingStatus}`, assignment.tmobileNumberMappingStatus && `T-Mobile: ${assignment.tmobileNumberMappingStatus}`, assignment.nonTmobileNumberMappingStatus && `Other carriers: ${assignment.nonTmobileNumberMappingStatus}`].filter(Boolean).join(" · ");
-    sender.detail = `${number} · Registration ${campaign.tcrCampaignId || ""}: ${campaign.campaignStatus || "unverified"} · Number: ${assignment.assignmentStatus || "unverified"}${mappings ? ` · ${mappings}` : ""}.`;
+    const mappingLabel = (value: string) => /FAIL|REJECT/i.test(value) ? "needs attention" : /PENDING/i.test(value) ? "pending" : value === "ADDED" || value === "ASSIGNED" ? "ready" : "not confirmed";
+    const mappings = [assignment.attNumberMappingStatus && `AT&T: ${mappingLabel(assignment.attNumberMappingStatus)}`, assignment.tmobileNumberMappingStatus && `T-Mobile: ${mappingLabel(assignment.tmobileNumberMappingStatus)}`, assignment.nonTmobileNumberMappingStatus && `Other carriers: ${mappingLabel(assignment.nonTmobileNumberMappingStatus)}`].filter(Boolean).join(" · ");
+    sender.detail = `${number} · Registration ${campaign.tcrCampaignId || ""}: ${campaign.campaignStatus === "MNO_PROVISIONED" ? "carrier approved" : "approval not confirmed"} · Number assignment: ${assignment.assignmentStatus === "ASSIGNED" ? "complete" : "not complete"}${mappings ? ` · ${mappings}` : ""}.`;
   } catch (error) {
     sender.state = error instanceof Error && error.message === "not_found" ? "not_connected" : "needs_attention";
     sender.detail = sender.state === "not_connected" ? `${number} has no confirmed assignment to an approved registration. A shared messaging profile alone is insufficient.` : `${number}: the live carrier check could not be completed. Refresh or review the provider account.`;
