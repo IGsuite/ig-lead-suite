@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/page-header";
 import { ErrorPanel, LoadingPanel } from "@/components/state-panels";
 import { Button } from "@/components/ui/button";
 import { SeoCommandCenter } from "@/components/seo-command-center";
+import { GoogleAdsReportingWorkspace } from "@/components/google-ads-reporting-workspace";
 import { marketingPlatformLabels, readSearchSetup, writeSearchSetup, type SearchSetup } from "@/lib/marketing-platforms";
 import type { Brand, SocialCampaign, SocialConnection } from "@/lib/types";
 
@@ -55,9 +56,10 @@ function SearchCompanyWorkspace({ brand, platform, connection, campaigns, refres
   }
   return <>
     {platform === "seo" ? <SeoCommandCenter entityId={brand.id} website={brand.websiteUrl} /> : null}
+    {platform === "google_ads" ? <GoogleAdsReportingWorkspace key={brand.id} entityId={brand.id} /> : null}
     <section className={panel}>
       <h2 className="font-[family-name:var(--font-display)] text-xl">{brand.shortName} · {label} connections</h2>
-      <p className="mt-2 text-sm text-[color:var(--ink-muted)]">Live reporting is not connected in Lead Suite. Saving these details prepares this company’s setup. Results below are manually recorded; saving a plan does not publish ads, change a website, or spend money.</p>
+      <p className="mt-2 text-sm text-[color:var(--ink-muted)]">These fields are setup references. Check the report connection above for automatic reporting status. Results in plans below are manually recorded; saving a plan does not publish ads, change a website, or spend money.</p>
       <div className="mt-3 flex flex-wrap gap-4 text-sm underline">
         {platform === "seo" ? <><a href="https://search.google.com/search-console" target="_blank" rel="noreferrer">Open Search Console</a><a href="https://app.ahrefs.com/dashboard" target="_blank" rel="noreferrer">Open Ahrefs projects</a><a href="https://www.semrush.com/projects/" target="_blank" rel="noreferrer">Open Semrush projects</a><a href="https://business.google.com/" target="_blank" rel="noreferrer">Open Google Business Profile</a></> : <a href="https://ads.google.com/" target="_blank" rel="noreferrer">Open Google Ads</a>}
         <a href="https://analytics.google.com/" target="_blank" rel="noreferrer">Open Google Analytics</a>
