@@ -1,285 +1,68 @@
 "use client";
-
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
-import { StatusPill } from "@/components/status-pill";
-import { buttonVariants } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { CompanyGoLive, ReadinessCheck, ReadinessState } from "@/lib/go-live";
 
-type ProviderStatus = {
-  neon: string;
-  telnyx: string;
-  email: string;
-  publicAppUrl?: string | null;
-  webhooks?: { telnyx: string; email: string } | null;
-  checklist?: {
-    coldEmailCampaign?: boolean;
-    publicUrl?: boolean;
-  };
-};
-
-type TenDlcStatus = {
-  summary?: string;
-  pending?: string | null;
-  brands?: Array<{
-    displayName: string;
-    status: string;
-    tcrBrandId: string | null;
-    campaigns: string[];
-  }>;
-};
-
-type LiveStatusKey = "neon" | "telnyx" | "email";
+const labels: Record<ReadinessState, string> = { active: "Active", inactive: "Inactive", pending: "Pending review", needs_attention: "Needs attention", not_connected: "Not connected" };
+const tones: Record<ReadinessState, string> = { active: "bg-emerald-100 text-emerald-900", inactive: "bg-slate-100 text-slate-700", pending: "bg-amber-100 text-amber-950", needs_attention: "bg-rose-100 text-rose-900", not_connected: "bg-slate-100 text-slate-700" };
+function CheckCard({ check }: { check: ReadinessCheck }) {
+  return <li className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5">
+    <div className="flex flex-wrap items-start justify-between gap-3"><h3 className="font-[family-name:var(--font-display)] text-xl">{check.title}</h3><Badge variant="outline" className={tones[check.state]}>{labels[check.state]}</Badge></div>
+    <p className="mt-3 text-sm leading-relaxed text-[color:var(--ink-soft)]">{check.detail}</p>
+    {check.href && <Link href={check.href} className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-4")}>{check.linkLabel || "Review setup"}</Link>}
+  </li>;
+}
+function SetupWorkspace() {
+  const searchParams = useSearchParams();
+  const [selectedEntityId, setEntityId] = useState<string | null>(null);
+  const entityId = selectedEntityId ?? searchParams.get("entity") ?? searchParams.get("brandId") ?? "";
+  const [data, setData] = useState<CompanyGoLive | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [refresh, setRefresh] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch(`/api/providers/company-readiness${entityId ? `?entityId=${encodeURIComponent(entityId)}` : ""}`, { cache: "no-store", signal: controller.signal })
+      .then(async response => { const body = await response.json(); if (!response.ok) throw new Error(body.error || "Unable to check this company"); return body as CompanyGoLive; })
+      .then(body => { if (!controller.signal.aborted) setData(body); })
+      .catch(err => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Unable to check this company"); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [entityId, refresh]);
+  function chooseCompany(id: string) {
+    setLoading(true); setError(""); setEntityId(id);
+    const url = new URL(window.location.href); url.searchParams.set("entity", id); url.searchParams.delete("brandId"); window.history.replaceState(null, "", url);
+  }
+  return <div>
+    <PageHeader title="Go live" description="Check connections and launch readiness for one company at a time. Shared services do not automatically activate other companies." actions={<Link href={`/company-setup${data ? `?entity=${encodeURIComponent(data.company.id)}` : ""}`} className={cn(buttonVariants({ variant: "outline" }))}>Company setup</Link>} />
+    <div className="mb-6 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
+      <div className="flex flex-wrap items-end gap-4">
+        <label className="grid min-w-64 gap-2 text-sm font-medium">Company
+          <select aria-label="Go live company" className="rounded-lg border border-[color:var(--ink-border)] bg-[color:var(--panel)] px-3 py-2" value={entityId || data?.company.id || ""} onChange={event => chooseCompany(event.target.value)} disabled={loading}>
+            {(data?.companies || []).map(company => <option key={company.id} value={company.id}>{company.name}</option>)}
+          </select>
+        </label>
+        <Button type="button" variant="outline" disabled={loading} onClick={() => { setLoading(true); setError(""); setRefresh(value => value + 1); }}>{loading ? "Checking connections…" : "Refresh status"}</Button>
+      </div>
+      <p className="mt-3 text-sm text-[color:var(--ink-muted)]">This page checks status only. It does not turn sending on, launch a campaign, or change any provider account.</p>
+    </div>
+    {loading ? <p role="status">Checking this company’s connections…</p> : error ? <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-900">{error}</p> : data && <>
+      <div className="mb-6"><h2 className="font-[family-name:var(--font-display)] text-2xl">{data.company.name}</h2><p className="text-sm text-[color:var(--ink-muted)]">{data.company.domain || "Company domain not added"} · Last checked {new Date(data.checkedAt).toLocaleString("en-US", { timeZone: "America/New_York" })} New York time</p></div>
+      <h2 className="mb-3 font-[family-name:var(--font-display)] text-xl">Email & text readiness</h2>
+      <ul className="mb-7 grid gap-3 lg:grid-cols-2">{data.messaging.map(check => <CheckCard key={check.id} check={check} />)}</ul>
+      <h2 className="mb-2 font-[family-name:var(--font-display)] text-xl">Website, social media & other connections</h2>
+      <p className="mb-4 text-sm text-[color:var(--ink-muted)]">Company setup progress is shown separately from live messaging checks. Saved login details do not establish a live connection.</p>
+      <ul className="mb-7 grid gap-3 lg:grid-cols-2">{data.connections.map(check => <CheckCard key={check.id} check={check} />)}</ul>
+      <details className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5"><summary className="cursor-pointer font-medium">Shared platform services</summary><ul className="mt-4 grid gap-3 lg:grid-cols-2">{data.infrastructure.map(check => <CheckCard key={check.id} check={check} />)}</ul></details>
+    </>}
+  </div>;
+}
 
 export default function SetupPage() {
-  const [status, setStatus] = useState<ProviderStatus | null>(null);
-  const [tenDlc, setTenDlc] = useState<TenDlcStatus | null>(null);
-
-  useEffect(() => {
-    void fetch("/api/providers/status")
-      .then((r) => r.json())
-      .then((json: ProviderStatus) => setStatus(json))
-      .catch(() => undefined);
-    void fetch("/api/providers/ten-dlc")
-      .then((r) => r.json())
-      .then((json: TenDlcStatus) => setTenDlc(json))
-      .catch(() => undefined);
-  }, []);
-
-  function pill(key?: LiveStatusKey) {
-    if (!key || !status) return "setup";
-    const v = status[key];
-    if (key === "neon") return v === "live" ? "verified" : "partial";
-    if (v === "live" || (key === "email" && v !== "mock")) return "verified";
-    return "partial";
-  }
-
-  function label(key?: LiveStatusKey) {
-    if (!key || !status) return "pending";
-    if (key === "neon") return status.neon === "live" ? "live" : "local";
-    if (key === "email") return status.email;
-    return status.telnyx;
-  }
-
-  const brandOk = tenDlc?.brands?.some((b) => b.status === "OK");
-  const hasCampaign = tenDlc?.brands?.some((b) => (b.campaigns || []).length > 0);
-
-  const steps: Array<{
-    id: string;
-    title: string;
-    youDo: string;
-    statusKey?: LiveStatusKey;
-    done?: boolean;
-    pending?: boolean;
-    href?: string;
-    hrefLabel?: string;
-  }> = [
-    {
-      id: "neon",
-      title: "1. Neon database",
-      youDo: "Connected when DATABASE_URL is set.",
-      statusKey: "neon",
-      done: status?.neon === "live",
-    },
-    {
-      id: "telnyx",
-      title: "2. Telnyx SMS keys",
-      youDo:
-        "API key + from-number are live. Assign a Telnyx number on each entity portal.",
-      statusKey: "telnyx",
-      done: status?.telnyx === "live",
-      href: "https://portal.telnyx.com",
-      hrefLabel: "Open Telnyx",
-    },
-    {
-      id: "email",
-      title: "3. Smartlead cold email",
-      youDo:
-        "API key + campaign ID keyed. Launch pushes CRM subject/body onto the Smartlead sequence automatically — keep the campaign Active with a connected mailbox. Point EMAIL_REPLY webhook to /api/webhooks/email.",
-      statusKey: "email",
-      done: Boolean(status && status.email !== "mock"),
-      href: "https://app.smartlead.ai",
-      hrefLabel: "Open Smartlead",
-    },
-    {
-      id: "host",
-      title: "4. Public URL for webhooks",
-      youDo: status?.publicAppUrl
-        ? `Set to ${status.publicAppUrl}. Tunnel URLs change when restarted — prefer Vercel for production.`
-        : "Set PUBLIC_APP_URL (Cloudflare Tunnel or Vercel) and point Telnyx + Smartlead webhooks.",
-      done: Boolean(status?.publicAppUrl),
-    },
-    {
-      id: "tendlc",
-      title: brandOk
-        ? "5. 10DLC Campaign (next)"
-        : "5. 10DLC Brand (waiting)",
-      youDo: tenDlc?.summary
-        ? tenDlc.summary
-        : "Checking Telnyx… Brand registration can take up to ~48h.",
-      done: Boolean(brandOk && hasCampaign),
-      pending: Boolean(brandOk && !hasCampaign) || !brandOk,
-      href: "https://portal.telnyx.com",
-      hrefLabel: "Telnyx Mission Control",
-    },
-    {
-      id: "numbers",
-      title: "6. Numbers on each entity",
-      youDo:
-        "Entities → portal → paste Telnyx number(s). Autopilot SMS uses that entity’s first number.",
-      href: "/brands",
-      hrefLabel: "Open entities",
-    },
-    {
-      id: "users",
-      title: "7. Users & entity access",
-      youDo:
-        "Add teammates under Users. Members only see entities you assign. Vercel locks the site behind login by default (set AUTH_ADMIN_PASSWORD + AUTH_SECRET).",
-      href: "/users",
-      hrefLabel: "Manage users",
-    },
-    {
-      id: "smoke",
-      title: "8. Smoke test, then blast",
-      youDo:
-        "Upload leads → Campaigns → Build (Own, SMS) → {{firstName}} + STOP → volume → Launch inside the send window. Cancel pauses. Live cap defaults to 2000 SMS/Launch (SMS_LIVE_CAP, hard max 10000). Finish Telnyx 10DLC Campaign first.",
-      href: "/campaigns/new",
-      hrefLabel: "Build campaign",
-    },
-  ];
-
-  return (
-    <div>
-      <PageHeader
-        title="Go live"
-        description="Neon, Telnyx, and Smartlead keys are live. What’s still pending: finish the Telnyx 10DLC Campaign (Brand is already OK), then scale SMS. Use send windows on campaigns for morning vs afternoon."
-        actions={
-          <Link
-            href="/settings"
-            className={cn(buttonVariants({ variant: "outline" }))}
-          >
-            Settings
-          </Link>
-        }
-      />
-
-      <div className="mb-4 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4 animate-rise">
-        <div className="text-xs uppercase tracking-wide text-[color:var(--ink-muted)]">
-          What’s pending right now
-        </div>
-        <p className="mt-2 font-[family-name:var(--font-display)] text-xl">
-          {tenDlc?.pending === "10dlc_campaign"
-            ? "10DLC Campaign registration (Brand already approved)"
-            : tenDlc?.pending === "10dlc_brand"
-              ? "10DLC Brand still awaiting Telnyx/TCR approval"
-              : tenDlc?.summary || "Checking providers…"}
-        </p>
-        {tenDlc?.brands?.length ? (
-          <ul className="mt-2 space-y-1 text-sm text-[color:var(--ink-soft)]">
-            {tenDlc.brands.map((b) => (
-              <li key={b.displayName}>
-                {b.displayName}: Brand <strong>{b.status}</strong>
-                {b.tcrBrandId ? ` · TCR ${b.tcrBrandId}` : ""} · campaigns:{" "}
-                {b.campaigns.length ? b.campaigns.join(", ") : "none yet"}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-
-      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 animate-rise">
-        <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
-          <div className="text-xs text-[color:var(--ink-muted)]">Neon</div>
-          <div className="mt-1 font-[family-name:var(--font-display)] text-xl">
-            {status?.neon || "…"}
-          </div>
-        </div>
-        <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
-          <div className="text-xs text-[color:var(--ink-muted)]">Telnyx SMS</div>
-          <div className="mt-1 font-[family-name:var(--font-display)] text-xl">
-            {status?.telnyx || "…"}
-          </div>
-        </div>
-        <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
-          <div className="text-xs text-[color:var(--ink-muted)]">Cold email</div>
-          <div className="mt-1 font-[family-name:var(--font-display)] text-xl">
-            {status?.email || "…"}
-          </div>
-        </div>
-        <div className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-4">
-          <div className="text-xs text-[color:var(--ink-muted)]">Public URL</div>
-          <div className="mt-1 font-[family-name:var(--font-display)] text-xl">
-            {status?.publicAppUrl ? "set" : "needed"}
-          </div>
-          {status?.webhooks ? (
-            <p className="mt-2 break-all text-[10px] leading-snug text-[color:var(--ink-muted)]">
-              SMS: {status.webhooks.telnyx}
-              <br />
-              Email: {status.webhooks.email}
-            </p>
-          ) : (
-            <p className="mt-2 text-[10px] text-[color:var(--ink-muted)]">
-              Set PUBLIC_APP_URL after tunnel/deploy
-            </p>
-          )}
-        </div>
-      </div>
-
-      <ol className="space-y-3 animate-rise-delay-1">
-        {steps.map((step) => (
-          <li
-            key={step.id}
-            className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5"
-          >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-[family-name:var(--font-display)] text-xl">
-                    {step.title}
-                  </h2>
-                  <StatusPill
-                    status={
-                      step.done
-                        ? "verified"
-                        : step.pending
-                          ? "pending"
-                          : pill(step.statusKey)
-                    }
-                  />
-                  {step.statusKey ? (
-                    <span className="text-xs text-[color:var(--ink-muted)]">
-                      {label(step.statusKey)}
-                    </span>
-                  ) : null}
-                </div>
-                <p className="mt-2 text-sm text-[color:var(--ink-soft)]">
-                  {step.youDo}
-                </p>
-              </div>
-              {step.href ? (
-                <a
-                  href={step.href}
-                  target={step.href.startsWith("http") ? "_blank" : undefined}
-                  rel="noreferrer"
-                  className={cn(
-                    buttonVariants({ variant: "outline", size: "sm" }),
-                    "shrink-0",
-                  )}
-                >
-                  {step.hrefLabel || "Open"}
-                </a>
-              ) : null}
-            </div>
-          </li>
-        ))}
-      </ol>
-
-      <p className="mt-6 text-sm text-[color:var(--ink-muted)]">
-        Full write-up: <code>SETUP.md</code>. Campaigns always launch from
-        IG Lead Suite — for email, Launch writes CRM copy into the Smartlead
-        sequence, then adds leads (Telnyx / Smartlead stay delivery backends).
-      </p>
-    </div>
-  );
+  return <Suspense fallback={<p>Loading company readiness…</p>}><SetupWorkspace /></Suspense>;
 }
