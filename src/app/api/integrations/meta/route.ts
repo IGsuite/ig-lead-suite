@@ -73,7 +73,7 @@ export async function POST(request: Request) {
         if (error instanceof MetaReportingError) return json({ error: error.message }, 422);
         throw error;
       }
-      await save(body.entityId, body.revision, { entityId: body.entityId, accessToken: input.accessToken, appSecret: input.appSecret, adAccountId: input.adAccountId, snapshot, revoked: false }, actor, `Meta reporting ${body.action === "connect" ? "connected" : "refreshed"}: expected company Page confirmed${snapshot.adAccount ? "; business ad-account ownership and report read confirmed" : "; no ad account connected"}. Publishing and message sending remain disabled.`);
+      await save(body.entityId, body.revision, { entityId: body.entityId, accessToken: input.accessToken, appSecret: input.appSecret, adAccountId: input.adAccountId, snapshot, revoked: false }, actor, `Meta reporting ${body.action === "connect" ? "connected" : "refreshed"}: expected company Page confirmed${snapshot.adAccount ? "; expected company ad account and report read confirmed" : "; no ad account connected"}. Publishing and message sending remain disabled.`);
     }
     const current = await record(body.entityId);
     return json(publicMetaState(current.stored, current.row?.revision ?? 0));
