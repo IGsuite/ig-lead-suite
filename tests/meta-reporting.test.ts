@@ -4,8 +4,8 @@ import { createHmac } from "node:crypto";
 import { META_BINDINGS, metaConnectInput, publicMetaState, verifyMetaReporting, type MetaStored } from "../src/lib/meta-reporting";
 
 const now = new Date("2026-10-27T12:00:00Z"), binding = META_BINDINGS.abstract;
-const input = { entityId: "abstract" as const, accessToken: "test-only-token-".repeat(4), appSecret: "a".repeat(32), adAccountId: "12345678901234" };
-function fixture(options: { appId?: string; pageId?: string; businessId?: string; expiry?: number; scopes?: string[]; instagramId?: string; emptyReport?: boolean } = {}) {
+const input = { entityId: "abstract" as const, accessToken: "test-only-token-".repeat(4), appSecret: "a".repeat(32), adAccountId: binding.adAccountId };
+function fixture(options: { appId?: string; pageId?: string; returnedAdAccountId?: string; expiry?: number; scopes?: string[]; instagramId?: string; emptyReport?: boolean } = {}) {
   const calls: { url: URL; init: RequestInit }[] = [];
   const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
     const u = new URL(String(url)); calls.push({ url: u, init: init! });
@@ -19,7 +19,10 @@ function fixture(options: { appId?: string; pageId?: string; businessId?: string
     assert.equal(new Headers(init?.headers).get("Authorization"), `Bearer ${input.accessToken}`);
     assert.equal(u.searchParams.get("appsecret_proof"), proof);
     if (u.pathname.endsWith(`/act_${input.adAccountId}/insights`)) return Response.json({ data: options.emptyReport ? [] : [{ date_start: "2026-09-27", date_stop: "2026-10-26", impressions: "1250", clicks: "25", reach: "1100", spend: "12.34" }] });
-    if (u.pathname.endsWith(`/act_${input.adAccountId}`)) return Response.json({ id: `act_${input.adAccountId}`, name: "Abstract test account", business: { id: options.businessId ?? binding.businessId }, currency: "USD", account_status: 1 });
+    if (u.pathname.endsWith(`/act_${input.adAccountId}`)) {
+      assert.equal(u.searchParams.get("fields"), "id,name,currency,account_status");
+      return Response.json({ id: options.returnedAdAccountId ?? `act_${input.adAccountId}`, name: "Abstract test account", currency: "USD", account_status: 1 });
+    }
     if (u.searchParams.get("fields")?.includes("instagram_business_account")) return Response.json({ instagram_business_account: { id: options.instagramId ?? binding.instagramId, username: "abstractcapitalgroup" } });
     assert.equal(u.pathname, `/v26.0/${binding.pageId}`);
     return Response.json({ id: options.pageId ?? binding.pageId, name: "Abstract Capital Group" });
@@ -27,7 +30,7 @@ function fixture(options: { appId?: string; pageId?: string; businessId?: string
   return { calls, fetcher };
 }
 
-test("Meta reporting confirms exact company ownership and reads correctly typed metrics without publishing", async () => {
+test("Meta reporting confirms exact company bindings and reads metrics with ads_read only", async () => {
   const { calls, fetcher } = fixture(); const snapshot = await verifyMetaReporting(input, fetcher, now);
   assert.equal(snapshot.page.id, binding.pageId); assert.equal(snapshot.adAccount?.id, input.adAccountId);
   assert.equal(snapshot.report?.spend, 12.34); assert.equal(snapshot.report?.clicks, 25);
@@ -41,8 +44,14 @@ test("wrong issuing app or company Page fails before reading ad data", async () 
   }
 });
 test("another business's ad account cannot be stored or have its report fetched", async () => {
-  const f = fixture({ businessId: "999999999999" });
-  await assert.rejects(verifyMetaReporting(input, f.fetcher, now), /not owned by Abstract/);
+  const f = fixture();
+  await assert.rejects(verifyMetaReporting({ ...input, adAccountId: "999999999999" }, f.fetcher, now), /does not match Abstract/);
+  assert.equal(f.calls.length, 0);
+});
+
+test("a mismatched ad-account response is rejected before reading its report", async () => {
+  const f = fixture({ returnedAdAccountId: "act_999999999999" });
+  await assert.rejects(verifyMetaReporting(input, f.fetcher, now), /expected business ad account/);
   assert.equal(f.calls.some(c => c.url.pathname.endsWith("/insights")), false);
 });
 test("expired, indefinite and unexpectedly long-lived tokens fail closed", async () => {

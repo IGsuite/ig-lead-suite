@@ -6,6 +6,9 @@ export const META_BINDINGS = {
   abstract: {
     appId: "1644892387181144", businessId: "971365496886205",
     pageId: "102579522502024", instagramId: "17841451098883230",
+    // Ownership verified in the owner's Meta portfolio. Pin the account rather than
+    // requesting business_management solely to read the AdAccount.business field.
+    adAccountId: "1111545258258675",
   },
 } as const;
 export const META_CREDENTIAL_KEY = "internal_meta_reporting_v1";
@@ -56,7 +59,7 @@ async function graph(path: string, token: string, parameters: Record<string, str
   catch (error) { if (error instanceof MetaReportingError) throw error; fail("Meta returned an unreadable response."); }
 }
 
-/** Verify the issuing app, expiry, exact company Page and ad-account ownership before storing anything. */
+/** Verify the issuing app, expiry and exact preverified company asset IDs before storing anything. */
 export async function verifyMetaReporting(
   input: Pick<z.infer<typeof metaConnectInput>, "entityId" | "accessToken" | "appSecret" | "adAccountId">,
   fetcher: typeof fetch = fetch, now = new Date(),
@@ -64,6 +67,7 @@ export async function verifyMetaReporting(
   const binding = META_BINDINGS[input.entityId];
   if (!binding) fail("This company has no verified Meta asset mapping yet.");
   if (input.adAccountId && !metaAssetId.safeParse(input.adAccountId).success) fail("Choose a valid business ad account ID.");
+  if (input.adAccountId && input.adAccountId !== binding.adAccountId) fail("This ad account does not match Abstract's verified business account.");
   // Meta documents input_token on debug_token. Never log the request URL or response.
   const debug = await graph("debug_token", `${binding.appId}|${input.appSecret}`, { input_token: input.accessToken }, fetcher);
   const parsed = z.object({ data: z.object({ is_valid: z.literal(true), app_id: z.string(), expires_at: z.number().int().positive(), data_access_expires_at: z.number().int().nonnegative().optional(), scopes: z.array(z.string()).max(100) }) }).safeParse(debug);
@@ -87,8 +91,8 @@ export async function verifyMetaReporting(
   }
   let adAccount: MetaSnapshot["adAccount"] = null, report: MetaSnapshot["report"] = null;
   if (input.adAccountId) {
-    const account = z.object({ id: z.string(), name: z.string().max(300), business: z.object({ id: z.string() }), currency: z.string().regex(/^[A-Z]{3}$/), account_status: z.number().int() }).safeParse(await read(`act_${input.adAccountId}`, "id,name,business,currency,account_status"));
-    if (!account.success || account.data.id !== `act_${input.adAccountId}` || account.data.business.id !== binding.businessId) fail("This ad account is not owned by Abstract's verified business portfolio.");
+    const account = z.object({ id: z.string(), name: z.string().max(300), currency: z.string().regex(/^[A-Z]{3}$/), account_status: z.number().int() }).safeParse(await read(`act_${input.adAccountId}`, "id,name,currency,account_status"));
+    if (!account.success || account.data.id !== `act_${binding.adAccountId}`) fail("Meta did not confirm Abstract's expected business ad account.");
     adAccount = { id: input.adAccountId, name: account.data.name, currency: account.data.currency, accountStatus: account.data.account_status };
     const metrics = await graph(`act_${input.adAccountId}/insights`, input.accessToken, { fields: "date_start,date_stop,impressions,clicks,reach,spend", date_preset: "last_30d", level: "account", appsecret_proof: proof }, fetcher);
     const rows = z.object({ data: z.array(z.object({ date_start: z.string(), date_stop: z.string(), impressions: amount, clicks: amount, reach: amount, spend: amount })).max(1), paging: z.object({ next: z.string().optional() }).optional() }).safeParse(metrics);
