@@ -21,7 +21,7 @@ const allSetupItems=[
   {key:"igf",title:"IGF Ventures command-center handoff",category:"Operations",url:"",steps:["Wait for the IGF Ventures connection instructions from the owner.","Record the company mapping and authorized handoff destination.","Ask the owner to verify the connection; do not paste access tokens into notes."]},
 ] as const;
 // Keep dormant channel definitions and saved records available for a future reactivation.
-export const setupCatalog=allSetupItems.filter(item=>!["linkedin","youtube","x"].includes(item.key));
+export const setupCatalog=allSetupItems.filter(item=>!["youtube","x"].includes(item.key));
 export const activeSetupKeys=setupCatalog.map(item=>item.key);
 export const setupLink=z.string().trim().max(1000).refine(value=>{
   if(!value)return true;
