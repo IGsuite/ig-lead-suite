@@ -3,6 +3,8 @@ import { parseSmsReply } from "@/lib/inbound-events";
 import { mapEntity } from "@/lib/mappers";
 import { validTelnyxWebhook, processWebhook } from "@/lib/webhook-security";
 import { ingestReply } from "@/lib/neon-store-ops";
+import { providerFailureReason } from "@/lib/delivery-summary";
+import { recordDeliveryAlert } from "@/lib/delivery-alerts";
 
 export async function POST(request: Request) {
   const raw = await request.text();
@@ -19,9 +21,11 @@ export async function POST(request: Request) {
       if (payload.id) {
         const prior = await tx.deliveryReceipt.findUnique({ where: { providerId: payload.id } });
         const finalStatus = prior && ["delivered", "failed"].includes(prior.status) ? prior.status : status;
+        const failure=finalStatus==="failed"?providerFailureReason(payload.errors):null;
         await tx.deliveryReceipt.upsert({ where: { providerId: payload.id }, create: { providerId: payload.id, status: finalStatus }, update: { status: finalStatus } });
-        if (["delivered", "failed"].includes(finalStatus)) await tx.inboxSend.updateMany({ where: { providerId: payload.id, channel: "sms", status: { in: ["accepted", "sending", "unknown"] } }, data: { status: finalStatus } });
-        await tx.sendJob.updateMany({ where: { providerId: payload.id, channel: "sms", status: { in: ["accepted", "processing", "uncertain"] } }, data: { status: finalStatus, finishedAt: new Date() } });
+        if (["delivered", "failed"].includes(finalStatus)) await tx.inboxSend.updateMany({ where: { providerId: payload.id, channel: "sms", status: { in: ["accepted", "sending", "unknown"] } }, data: { status: finalStatus, ...(failure?{error:failure}:{}) } });
+        await tx.sendJob.updateMany({ where: { providerId: payload.id, channel: "sms", status: { in: ["accepted", "processing", "uncertain", "failed"] } }, data: { status: finalStatus, finishedAt: new Date(),...(failure?{error:failure}:{}) } });
+        if(failure){const job=await tx.sendJob.findFirst({where:{providerId:payload.id,channel:"sms"}});if(job)await recordDeliveryAlert(tx,job,failure);}
       }
       return { receipt: true };
     }

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/sheet";
 import { PRODUCT_NAME } from "@/lib/brand";
 import { SeoAlertBanner } from "@/components/seo-alert-banner";
+import { ThemePreference } from "@/components/theme-preferences";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -50,7 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </SheetContent>
           </Sheet>
         </header>
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8"><SeoAlertBanner />{children}</main>
+        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8"><div className="mb-4 flex items-center justify-end gap-3"><ThemePreference /><SeoAlertBanner /></div>{children}</main>
       </div>
     </div>
   );

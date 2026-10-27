@@ -89,7 +89,7 @@ export function AppSidebar() {
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
                 active
-                  ? "bg-[color:var(--ink)] text-white"
+                  ? "bg-[color:var(--primary)] text-[color:var(--primary-foreground)]"
                   : "text-[color:var(--ink-soft)] hover:bg-[color:var(--panel-hover)] hover:text-[color:var(--ink)]",
               )}
             >

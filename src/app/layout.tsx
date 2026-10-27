@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/brand";
 import "./globals.css";
+import { ThemePreferencesProvider } from "@/components/theme-preferences";
 
 const sans = Figtree({
   variable: "--font-sans",
@@ -23,14 +24,15 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
+      suppressHydrationWarning
       lang="en"
       className={`${sans.variable} ${display.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans">
-        <TooltipProvider>
+        <ThemePreferencesProvider><TooltipProvider>
           {children}
           <Toaster />
-        </TooltipProvider>
+        </TooltipProvider></ThemePreferencesProvider>
       </body>
     </html>
   );

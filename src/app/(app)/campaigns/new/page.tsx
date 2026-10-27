@@ -5,7 +5,7 @@ import { platformSourceOptions, platformAudienceCatalog } from "@/lib/manual-pac
 import { CampaignAudienceControls } from "@/components/campaign-audience-controls";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState, useEffect } from "react";
+import { Suspense, useMemo, useState, useEffect, useRef } from "react";
 import { ProgramSelect } from "@/components/program-select";
 import { programTemplateMatches, programDraft } from "@/lib/programs";
 import { Sparkles } from "lucide-react";
@@ -14,34 +14,34 @@ import { PageHeader } from "@/components/page-header";
 import { ErrorPanel, LoadingPanel } from "@/components/state-panels";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { usePlatform } from "@/hooks/use-platform";
 import {
   serializeAudienceFilter,
   AUDIENCE_NOT_SELECTED,
 } from "@/lib/audience-filters";
-import { compactNumber } from "@/lib/client-format";
 import type {
   CampaignChannel,
   CampaignPoolMode,
   SendWindowPreset,
 } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { draftFingerprint, smsSegmentCount, approvedProgramArtwork } from "@/lib/campaign-draft";
+import { buildEmailBodies } from "@/lib/email-html";
 
 type DraftTone = "soft" | "growth";
 
 function CampaignBuilderInner() {
-  const { data, loading, error, refresh } = usePlatform();
+  const { data, loading, error, refresh } = usePlatform({ omitLeads: true });
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [step, setStep] = useState(0);
+  const [savedId, setSavedId] = useState(searchParams.get("campaignId") || "");
+  const [savedRevision, setSavedRevision] = useState("");
+  const [savedAt, setSavedAt] = useState("");
+  const [reviewedKey, setReviewedKey] = useState("");
+  const [formError, setFormError] = useState("");
+  const [aiMode, setAiMode] = useState("checking");
+  const hydrated = useRef("");
   const [brandId, setBrandId] = useState(
     searchParams.get("brandId") || "abstract",
   );
@@ -64,7 +64,7 @@ function CampaignBuilderInner() {
   const [groupFilter, setGroupFilter] = useState("all");
   const [preferUnoffered, setPreferUnoffered] = useState(true);
   const [preferVerified, setPreferVerified] = useState(true);
-  const [volume, setVolume] = useState(1500);
+  const [volume, setVolume] = useState(100);
   const [throttlePerHour, setThrottlePerHour] = useState(120);
   const [sendWindowPreset, setSendWindowPreset] =
     useState<SendWindowPreset>("custom");
@@ -155,12 +155,15 @@ function CampaignBuilderInner() {
   }
 
   async function create(status: "draft" | "scheduled") {
+    if (!validateStep(status === "scheduled" ? 6 : Math.min(step, 2))) return;
+    if (status === "scheduled" && mode === "own" && reviewedKey !== reviewKey) { setFormError("Review the company, message and audience before launching."); return; }
     setSaving(true);
     try {
       const res = await fetch("/api/campaigns", {
-        method: "POST",
+        method: savedId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          ...(savedId ? { id:savedId, expectedRevision:savedRevision } : {}),
           brandId,
           programs,
           name,
@@ -187,8 +190,9 @@ function CampaignBuilderInner() {
         }),
       });
       if (!res.ok) { const failed=await res.json(); throw new Error(failed.error || "Could not create campaign"); }
-      const campaign = (await res.json()) as { id: string };
-      if (mode === "auto") {
+      const campaign = (await res.json()) as { id: string; draftRevision:string };
+      hydrated.current = campaign.id; setSavedId(campaign.id); setSavedRevision(campaign.draftRevision); setSavedAt(new Date().toLocaleTimeString());
+      if (mode === "auto" && status === "scheduled") {
         toast.success("Automatic campaign saved as a draft. Plan and approve its calendar dates when ready.");
         await refresh();
         router.push(`/campaigns/calendar?brandId=${brandId}&campaignId=${campaign.id}&volume=${volume}&throttle=${throttlePerHour}`);
@@ -231,10 +235,10 @@ function CampaignBuilderInner() {
       } else {
         toast.success("Draft campaign saved");
       }
-      await refresh();
-      router.push(`/campaigns?brandId=${brandId}&channel=${channel}`);
+      if (status === "scheduled") { await refresh(); router.push(`/campaigns?brandId=${brandId}&channel=${channel}`); }
+      else router.replace(`/campaigns/new?brandId=${brandId}&channel=${channel}&campaignId=${campaign.id}`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Create failed");
+      const detail=err instanceof Error ? err.message : "Save failed"; setFormError(detail); toast.error(detail);
     } finally {
       setSaving(false);
     }
@@ -246,376 +250,56 @@ function CampaignBuilderInner() {
     setName(`${data?.brands.find(b=>b.id===nextBrandId)?.shortName || "Company"} — ${next.join(" + ") || "General"} — ${nextChannel}`);
   }
 
-  if (loading) return <LoadingPanel />;
-  if (error || !data)
-    return <ErrorPanel message={error || "Unknown error"} onRetry={refresh} />;
-
-  const channelLabel = channel === "sms" ? "SMS" : "Email";
-
-  return (
-    <div>
-      <PageHeader
-        title={`${channelLabel} campaign builder`}
-        description={`Building an ${channelLabel} campaign for one entity only. Audience comes from the shared pool, but the offer, domain, and tracking stay locked to that portal — never mixed with the other channel.`}
-        actions={
-          <Link
-            href={`/campaigns?brandId=${brandId}&channel=${channel}`}
-            className={cn(buttonVariants({ variant: "outline" }))}
-          >
-            Back to {data?.brands.find((b) => b.id === brandId)?.shortName || "campaigns"} {channelLabel}
-          </Link>
-        }
-      />
-
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <form
-          className="space-y-4 rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void create("draft");
-          }}
-        >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Entity portal</Label>
-              <Select
-                value={brandId}
-                onValueChange={(value) => {
-                  if (value) {setBrandId(value);changePrograms([],channel,value);}
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {data.brands.map((brand) => (
-                    <SelectItem key={brand.id} value={brand.id}>
-                      {brand.shortName} — {brand.focus}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Channel</Label>
-              <Select
-                value={channel}
-                onValueChange={(value) => {
-                  if (!value) return;
-                  const next = value as CampaignChannel;
-                  setChannel(next);
-                  changePrograms(programs,next);
-                  setTemplateId("");
-
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="sms">SMS (Telnyx)</SelectItem>
-                  <SelectItem value="email">Email (Smartlead / Instantly)</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-[color:var(--ink-muted)]">
-                Channel is locked for this campaign after save — SMS and email lists stay separate.
-              </p>
-            </div>
-          </div>
-
-          <ProgramSelect brand={data.brands.find(b=>b.id===brandId)} value={programs} onChange={changePrograms} />
-          <div className="space-y-2">
-            <Label>Campaign name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} required />
-          </div>
-
-          <CampaignAudienceControls source={sourceFilter} group={groupFilter} mode={mode} sources={sources} groups={groups} leads={platformAudienceCatalog(data)} brandId={brandId} disabled={saving} onSource={setSourceFilter} onGroup={setGroupFilter} onMode={setMode} />
-
-          <div className="space-y-2">
-            <p className="text-xs text-[color:var(--ink-muted)]">Verification checks contact format. It does not prove mailbox ownership or guarantee delivery. Texts also require direct permission for this company.</p>
-            <Label>Use template</Label>
-            <Select
-              value={templateId || "__none__"}
-              onValueChange={(value) => {
-                if (!value || value === "__none__") {
-                  setTemplateId("");
-                  return;
-                }
-                const tpl = usableTemplates.find((t) => t.id === value);
-                if (!tpl) return;
-                setTemplateId(tpl.id);
-                setMessage(tpl.body);setImageUrl("");setImageAlt("");
-                if (tpl.channel === "email" && tpl.subject) {
-                  setSubject(tpl.subject);
-                }
-                toast.message(`Loaded “${tpl.name}” from Ads`);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Pick from Ads library" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">Write from scratch</SelectItem>
-                {usableTemplates.map((tpl) => (
-                  <SelectItem key={tpl.id} value={tpl.id}>
-                    {tpl.name}
-                    {tpl.brandId ? "" : " · shared"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-[color:var(--ink-muted)]">
-              {usableTemplates.length
-                ? "Templates tagged to your selected programs and channel."
-                : "No matching templates — create some under Ads."}{" "}
-              <Link href={`/creatives?brandId=${brandId}${programs.map(p=>`&program=${encodeURIComponent(p)}`).join("")}`} className="underline underline-offset-2">
-                Open Ads
-              </Link>
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div className="space-y-2 min-w-[10rem]">
-                <Label>AI tone</Label>
-                <Select
-                  value={draftTone}
-                  onValueChange={(value) =>
-                    setDraftTone(value === "growth" ? "growth" : "soft")
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="soft">Soft (consultative)</SelectItem>
-                    <SelectItem value="growth">
-                      Growth / benefits
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={drafting || saving}
-                onClick={() => void draftWithAi()}
-              >
-                <Sparkles className="size-3.5" />
-                {drafting ? "Drafting…" : "Draft with AI"}
-              </Button>
-            </div>
-            <p className="text-xs text-[color:var(--ink-muted)]">
-              Creates a draft for this company’s programs or services. Review the wording before saving or sending.
-            </p>
-          </div>
-
-          {channel === "email" ? (
-            <div className="space-y-2">
-              <Label>Subject</Label>
-              <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
-            </div>
-          ) : null}
-
-          <div className="space-y-2">
-            <Label>Message</Label>
-            <Textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              className="min-h-36"
-              required
-            />
-            <p className="text-xs text-[color:var(--ink-muted)]">
-              Tokens: {"{{firstName}}"}, {"{{brand}}"}. STOP / unsubscribe handled
-              globally.
-              {channel === "email"
-                ? " Plain text is the fallback; HTML is generated for richer inboxes."
-                : ""}
-            </p>
-          </div>
-
-          {channel === "email" ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Image URL (optional)</Label>
-                <Input
-                  type="url"
-                  placeholder="https://…/hero.png"
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                />
-                <p className="text-xs text-[color:var(--ink-muted)]">
-                  Public https URL embedded in the HTML email only — not in the
-                  plain-text fallback. Later, Ads library creatives can supply
-                  this URL; for now paste any hosted image.
-                </p>
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Image alt text</Label>
-                <Input
-                  placeholder="Offer graphic"
-                  value={imageAlt}
-                  onChange={(e) => setImageAlt(e.target.value)}
-                  disabled={!imageUrl.trim()}
-                />
-              </div>
-            </div>
-          ) : null}
-
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={preferUnoffered}
-              onChange={(e) => setPreferUnoffered(e.target.checked)}
-              disabled={mode === "auto"}
-            />
-            Prefer leads not yet offered this company (one-time batches)
-          </label>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={mode === "auto" || preferVerified}
-              disabled={mode === "auto"}
-              onChange={(e) => setPreferVerified(e.target.checked)}
-            />
-            Only queue contacts with a saved valid check for this channel (skip risky, invalid and unverified)
-          </label>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>{mode === "auto" ? "Default contacts per scheduled day" : "Batch volume"}</Label>
-              <Input
-                type="number"
-                min={1}
-                value={volume}
-                onChange={(e) => setVolume(Number(e.target.value) || 1)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Throttle (per hour)</Label>
-              <Input
-                type="number"
-                min={1}
-                value={throttlePerHour}
-                onChange={(e) => setThrottlePerHour(Number(e.target.value) || 1)}
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Send window (America/New_York)</Label>
-              <Select
-                value={sendWindowPreset}
-                onValueChange={(value) => {
-                  if (value) setSendWindowPreset(value as SendWindowPreset);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="morning">Morning (9am–12pm)</SelectItem>
-                  <SelectItem value="afternoon">Afternoon (1pm–5pm)</SelectItem>
-                  <SelectItem value="evening">Evening (5pm–8pm)</SelectItem>
-                  <SelectItem value="custom">Custom hours</SelectItem>
-                  <SelectItem value="any">Any time</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-[color:var(--ink-muted)]">
-                Sends only fire inside this window (email + SMS). Different
-                campaigns can use different windows.
-              </p>
-            </div>
-            {sendWindowPreset === "custom" ? (
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>Start</Label>
-                  <Input
-                    type="time"
-                    value={sendWindowStart}
-                    onChange={(e) => setSendWindowStart(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>End</Label>
-                  <Input
-                    type="time"
-                    value={sendWindowEnd}
-                    onChange={(e) => setSendWindowEnd(e.target.value)}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2 text-sm text-[color:var(--ink-soft)] self-end">
-                Outside the window, a launched campaign stays <strong>scheduled</strong> and
-                starts automatically during its sending window. Saved drafts do not send.
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button type="submit" variant="outline" disabled={saving || sourceFilter === AUDIENCE_NOT_SELECTED}>
-              Save draft
-            </Button>
-            <Button
-              type="button"
-              disabled={saving || sourceFilter === AUDIENCE_NOT_SELECTED || (mode === "own" && audienceCount === 0)}
-              onClick={() => void create("scheduled")}
-              title={
-                audienceCount === 0
-                  ? "No eligible leads — widen source/group filters or uncheck Prefer unoffered"
-                  : undefined
-              }
-            >
-              {mode === "auto" ? "Save & plan dates" : "Launch one-time batch"}
-            </Button>
-          </div>
-          {audienceCount === 0 ? (
-            <p className="text-sm text-[color:var(--danger,#b91c1c)]">
-              Audience is empty with current filters. Common cause for a retest:
-              the lead was already offered this entity — uncheck “Prefer leads not
-              yet offered this entity”.
-            </p>
-          ) : null}
-        </form>
-
-        <aside className="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5 animate-rise-delay-1">
-          <h2 className="font-[family-name:var(--font-display)] text-2xl">
-            Audience preview
-          </h2>
-          <p className="mt-3 text-4xl font-[family-name:var(--font-display)] tracking-tight">
-            {audienceCount===null?"Checking…":compactNumber(Math.min(volume, audienceCount))}
-          </p>
-          <p className="mt-1 text-sm text-[color:var(--ink-muted)]">
-            contacts selected from {audienceCount===null?"Checking…":compactNumber(audienceCount)} eligible shared-pool
-            leads
-            {mode === "own" && preferUnoffered ? " · fresh for this entity" : ""}
-            {mode === "auto" || preferVerified ? " · saved valid checks only" : ""}.
-          </p>
-          <div className="mt-6 space-y-3 text-sm text-[color:var(--ink-soft)]">
-            <div className="rounded-xl bg-[color:var(--panel-hover)] px-3 py-2">
-              Estimated hours at throttle:{" "}
-              <strong>
-                {audienceCount===null?"Checking…":Math.max(1, Math.ceil(Math.min(volume, audienceCount) / throttlePerHour))}
-              </strong>
-            </div>
-            <div className="rounded-xl bg-[color:var(--accent-soft)]/60 px-3 py-2">
-              A lead may be eligible for another company’s campaign later, subject to that channel’s eligibility and permission requirements.
-            </div>
-          </div>
-        </aside>
-      </div>
+  const reviewKey=JSON.stringify([brandId,programs,channel,name,subject,message,imageUrl,imageAlt,sourceFilter,groupFilter,mode,volume,throttlePerHour,sendWindowPreset,sendWindowStart,sendWindowEnd,preferVerified,preferUnoffered]);
+  const steps=["Company","Program & channel","Message","Image","Audience","Schedule","Review & launch"];
+  useEffect(()=>{let active=true;void fetch('/api/creatives/generate').then(r=>r.json()).then(d=>{if(active)setAiMode(d.mode||"demo");}).catch(()=>{if(active)setAiMode("unavailable");});return()=>{active=false;};},[]);
+  useEffect(()=>{
+    const original=data?.campaigns.find(c=>c.id===savedId);
+    if(!savedId||!original||hydrated.current===savedId)return;
+    let active=true;
+    void draftFingerprint(original).then(version=>{
+      if(!active)return;
+      if(original.status!=="draft"){setFormError("This campaign already started. Its saved content is preserved; create a new draft for changes.");return;}
+      hydrated.current=savedId;setSavedRevision(version);setBrandId(original.brandId);setPrograms(original.programs||[]);setChannel(original.channel);setName(original.name);setSubject(original.subject||"");setMessage(original.htmlMessage||original.message);setImageUrl(original.imageUrl||"");setImageAlt(original.imageAlt||"");setSourceFilter(original.sourceFilter);setGroupFilter(original.groupFilter);setPreferUnoffered(original.preferUnoffered);setPreferVerified(original.preferVerified);setMode(original.mode);setVolume(original.volume);setThrottlePerHour(original.throttlePerHour);setSendWindowPreset(original.sendWindowPreset||"any");setSendWindowStart(original.sendWindowStart||"09:00");setSendWindowEnd(original.sendWindowEnd||"20:00");
+    });return()=>{active=false;};
+  },[data,savedId]);
+  function validateStep(through:number) {
+    let problem="";
+    if(!data?.brands.some(b=>b.id===brandId))problem="Choose your company.";
+    else if(through>=2&&(!name.trim()||!message.trim()||(channel==="email"&&!subject.trim())))problem="Enter a campaign name, message and email subject where applicable.";
+    else if(through>=3&&imageUrl){try{const u=new URL(imageUrl);if(u.protocol!=="https:"||u.username||u.password)problem="Use a public HTTPS image link.";}catch{problem="Enter a valid image URL or leave the image blank.";}}
+    if(!problem&&through>=4&&(sourceFilter===AUDIENCE_NOT_SELECTED||groupFilter===AUDIENCE_NOT_SELECTED))problem="Choose a pool or at least one lead list and group.";
+    if(!problem&&through>=5&&(!Number.isInteger(volume)||volume<1||!Number.isInteger(throttlePerHour)||throttlePerHour<1))problem="Enter positive whole numbers for the quantity and sending speed.";
+    if(!problem&&through>=5&&sendWindowPreset==="custom"&&sendWindowStart>=sendWindowEnd)problem="Choose an end time later than the start time.";
+    setFormError(problem);return !problem;
+  }
+  const preview=useMemo(()=>buildEmailBodies({message,htmlMessage:channel==="email"&&/<(?:html|table|div|p)\b/i.test(message)?message:null,imageUrl,imageAlt,vars:{firstName:"Alex",brand:data?.brands.find(b=>b.id===brandId)?.shortName||"Your company"}}),[message,imageUrl,imageAlt,channel,data,brandId]);
+  if(loading)return <LoadingPanel/>;
+  if(error||!data)return <ErrorPanel message={error||"Could not load the campaign builder"} onRetry={refresh}/>;
+  const company=data.brands.find(b=>b.id===brandId);
+  const field="grid gap-2 text-sm";
+  const control="w-full rounded-lg border border-[color:var(--ink-border)] bg-[color:var(--panel)] px-3 py-2 text-[color:var(--ink)]";
+  const pane="rounded-2xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-5";
+  const availableArtwork=brandId==="abstract"?Object.entries(approvedProgramArtwork).filter(([program])=>!programs.length||programs.includes(program)):[];
+  return <div>
+    <PageHeader title={savedId?"Edit campaign draft":"Create a campaign"} description="Build one company’s campaign step by step. Saving a draft never sends messages." actions={<Link href={`/campaigns?brandId=${brandId}&channel=${channel}`} className={buttonVariants({variant:"outline"})}>Campaign library</Link>}/>
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[color:var(--panel)] p-4 text-sm"><strong>{company?.name} · {programs.join(" + ")||"General / unassigned"} · {channel==="sms"?"Text":"Email"}</strong><span role="status" className="text-[color:var(--ink-muted)]">{saving?"Saving…":savedAt?`Draft saved at ${savedAt}`:savedId?"Saved draft — review changes before saving":"Unsaved draft"}</span></div>
+    <nav aria-label="Campaign steps" className="mb-5 flex flex-wrap gap-2">{steps.map((label,index)=><Button key={label} type="button" size="sm" variant={step===index?"default":"outline"} aria-current={step===index?"step":undefined} disabled={saving||index>step} onClick={()=>{setStep(index);setFormError("");}}>{index+1}. {label}</Button>)}</nav>
+    <div className="grid items-start gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+      <form className={`${pane} space-y-5`} onSubmit={e=>{e.preventDefault();void create("draft");}}>
+        <h2 className="font-[family-name:var(--font-display)] text-2xl">Step {step+1}: {steps[step]}</h2>
+        {step===0&&<><label className={field}>Company<select aria-label="Campaign company" className={control} value={brandId} disabled={Boolean(savedId)} onChange={e=>{setBrandId(e.target.value);changePrograms([],channel,e.target.value);}}>{data.brands.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select></label><p className="text-sm text-[color:var(--ink-muted)]">Templates, artwork, audience rules and replies stay with this company. Company and channel are locked after the first save.</p></>}
+        {step===1&&<><ProgramSelect brand={company} value={programs} onChange={changePrograms}/><label className={field}>Delivery channel<select aria-label="Delivery channel" className={control} value={channel} disabled={Boolean(savedId)} onChange={e=>{const next=e.target.value as CampaignChannel;setChannel(next);changePrograms(programs,next);}}><option value="email">Email</option><option value="sms">Text message (SMS)</option></select></label><p className="text-sm text-[color:var(--ink-muted)]">Choose multiple programs when needed. For social posts and ads, use <Link href={`/social?entity=${brandId}`} className="underline">this company’s social workspace</Link>.</p></>}
+        {step===2&&<><label className={field}>Campaign name<Input aria-label="Campaign name" value={name} onChange={e=>setName(e.target.value)}/></label><label className={field}>Saved template<select aria-label="Saved template" className={control} value={templateId} onChange={e=>{setTemplateId(e.target.value);const t=usableTemplates.find(t=>t.id===e.target.value);if(t){setMessage(t.body);setSubject(t.subject||"");setImageUrl("");setImageAlt("");}}}><option value="">Write your own / keep current wording</option>{usableTemplates.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></label>{channel==="email"&&<label className={field}>Email subject<Input aria-label="Email subject" value={subject} onChange={e=>setSubject(e.target.value)}/></label>}<label className={field}>Message<Textarea aria-label="Campaign message" rows={10} value={message} onChange={e=>setMessage(e.target.value)}/></label><p className="text-xs text-[color:var(--ink-muted)]">Personalization: {"{{firstName}}"} and {"{{brand}}"}. Use your approved wording and unsubscribe instructions.</p><div className="rounded-xl bg-[color:var(--panel-hover)] p-4"><label className={field}>Writing style<select aria-label="Writing style" className={control} value={draftTone} onChange={e=>setDraftTone(e.target.value as DraftTone)}><option value="soft">Consultative</option><option value="growth">Benefits and growth</option></select></label><Button className="mt-3" type="button" variant="outline" disabled={drafting||saving} onClick={()=>void draftWithAi()}><Sparkles className="size-4"/>{drafting?"Preparing…":aiMode==="live"?"Draft with AI":"Suggest starter wording"}</Button><p className="mt-2 text-xs text-[color:var(--ink-muted)]">{aiMode==="live"?"AI writing is connected. Review the result before using it.":"Live AI writing is not connected. Starter wording and saved templates remain available; no paid AI request is made in demo mode."}</p></div><Link className="text-sm underline" href={`/creatives?brandId=${brandId}${programs.map(p=>`&program=${encodeURIComponent(p)}`).join("")}`}>Open this company’s template library</Link></>}
+        {step===3&&(channel==="sms"?<div className="space-y-3 text-sm"><p>Ordinary SMS is text only. Your website/application link belongs in the message.</p><p className="text-[color:var(--ink-muted)]">You can continue without an image. Image messages (MMS) need a separate sending feature.</p></div>:<>{availableArtwork.length>0&&<label className={field}>Approved program artwork<select aria-label="Approved artwork" className={control} value="" onChange={e=>{if(e.target.value){setImageUrl(`${window.location.origin}/email-assets/abstract/${e.target.value}`);setImageAlt(`${programs.join(" / ")||"Abstract"} program artwork`);}}}><option value="">Choose existing artwork</option>{availableArtwork.map(([program,file])=><option key={file} value={file}>{program}</option>)}</select></label>}<label className={field}>Public image URL (optional)<Input aria-label="Public image URL" type="url" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} placeholder="https://your-website.com/campaign-image.png"/></label><label className={field}>Image description<Input aria-label="Image description" value={imageAlt} onChange={e=>setImageAlt(e.target.value)} disabled={!imageUrl}/></label><Button type="button" variant="outline" onClick={()=>{setImageUrl("");setImageAlt("");}}>Use no additional image</Button><p className="text-sm text-[color:var(--ink-muted)]">Your existing email template may already contain its artwork. Uploaded private documents are not published by this step. New AI image generation needs a connected image service and usage budget.</p></>)}
+        {step===4&&<><CampaignAudienceControls source={sourceFilter} group={groupFilter} mode={mode} sources={sources} groups={groups} leads={platformAudienceCatalog(data)} brandId={brandId} disabled={saving} onSource={setSourceFilter} onGroup={setGroupFilter} onMode={setMode}/><label className="flex gap-2 text-sm"><input type="checkbox" checked={preferUnoffered} disabled={mode==="auto"} onChange={e=>setPreferUnoffered(e.target.checked)}/>Only contacts not previously offered this company (one-time campaigns)</label><label className="flex gap-2 text-sm"><input type="checkbox" checked={mode==="auto"||preferVerified} disabled={mode==="auto"} onChange={e=>setPreferVerified(e.target.checked)}/>Require a saved valid contact check</label><p className="text-sm text-[color:var(--ink-muted)]">A saved valid check may only confirm format. It does not guarantee a working mailbox or phone. SMS marketing also needs recorded permission for this company.</p></>}
+        {step===5&&<><div className="grid gap-4 sm:grid-cols-2"><label className={field}>{mode==="auto"?"Contacts per scheduled day":"Requested recipients"}<Input aria-label="Requested recipients" type="number" min={1} max={20000} value={volume} onChange={e=>setVolume(Number(e.target.value))}/></label><label className={field}>Maximum sends per hour<Input aria-label="Maximum sends per hour" type="number" min={1} max={20000} value={throttlePerHour} onChange={e=>setThrottlePerHour(Number(e.target.value))}/></label></div><label className={field}>Sending window — New York time<select aria-label="Sending window" className={control} value={sendWindowPreset} onChange={e=>setSendWindowPreset(e.target.value as SendWindowPreset)}><option value="morning">Morning: 9 a.m.–noon</option><option value="afternoon">Afternoon: 1–5 p.m.</option><option value="evening">Evening: 5–8 p.m.</option><option value="custom">Custom hours</option><option value="any">Any time (use carefully for manual tests)</option></select></label>{sendWindowPreset==="custom"&&<div className="grid grid-cols-2 gap-4"><label className={field}>Start<Input aria-label="Sending start" type="time" value={sendWindowStart} onChange={e=>setSendWindowStart(e.target.value)}/></label><label className={field}>End<Input aria-label="Sending end" type="time" value={sendWindowEnd} onChange={e=>setSendWindowEnd(e.target.value)}/></label></div>}<p className="text-sm text-[color:var(--ink-muted)]">{mode==="auto"?"The final step saves this draft and opens Calendar. You must choose and approve the dates there before it can run.":"Launch queues one batch. Sending is paced inside the chosen window; provider limits may reduce capacity."}</p></>}
+        {step===6&&<><dl className="grid grid-cols-2 gap-3 text-sm"><dt>Company</dt><dd>{company?.name}</dd><dt>Program</dt><dd>{programs.join(" + ")||"General"}</dd><dt>Channel</dt><dd>{channel==="sms"?"Text message":"Email"}</dd><dt>Requested</dt><dd>{volume}</dd><dt>Matching now</dt><dd>{audienceCount===null?"Checking…":audienceCount}</dd><dt>Run</dt><dd>{mode==="auto"?"Calendar dates (not approved yet)":"One-time batch"}</dd><dt>Pacing</dt><dd>Up to {throttlePerHour}/hour</dd></dl><div className="rounded-xl bg-[color:var(--panel-hover)] p-4 text-sm">Review the recipient preview and application links. For a test, go Back to Audience and choose a small manual package. This step does not add test recipients automatically.</div>{audienceCount!==null&&audienceCount<volume&&<p role="status" className="text-sm">Only {audienceCount} contacts match the current filters. The campaign cannot fill the requested {volume} automatically with ineligible contacts.</p>}<label className="flex items-start gap-3 text-sm"><input type="checkbox" aria-label="I reviewed this campaign" checked={reviewedKey===reviewKey} onChange={e=>setReviewedKey(e.target.checked?reviewKey:"")}/>I reviewed the company, message, audience and sending schedule.</label><Button type="button" disabled={saving||reviewedKey!==reviewKey||(mode==="own"&&(audienceCount===null||audienceCount===0))} onClick={()=>void create("scheduled")}>{mode==="auto"?"Save draft & plan calendar dates":"Launch this one-time campaign"}</Button></>}
+        {formError&&<p role="alert" className="rounded-lg border border-rose-300 p-3 text-sm text-[color:var(--ink)]">{formError}</p>}
+        <div className="flex flex-wrap justify-between gap-3 border-t border-[color:var(--ink-border)] pt-4"><div className="flex gap-2"><Button type="button" variant="outline" disabled={step===0||saving} onClick={()=>{setStep(n=>n-1);setFormError("");}}>Back</Button><Button type="submit" variant="outline" disabled={saving||step===0}>{saving?"Saving…":"Save draft"}</Button></div>{step<6&&<Button type="button" disabled={saving} onClick={()=>{if(validateStep(step))setStep(n=>n+1);}}>Next</Button>}</div>
+      </form>
+      <aside className={`${pane} space-y-4 xl:sticky xl:top-4`}><h2 className="font-[family-name:var(--font-display)] text-xl">Recipient preview</h2><p className="text-xs text-[color:var(--ink-muted)]">Sample name: Alex. The message is personalized for each actual recipient.</p>{channel==="email"?<><p className="break-words text-sm"><strong>Subject:</strong> {subject||"Add a subject"}</p><iframe title="Email recipient preview" sandbox="" srcDoc={preview.html} className="h-[28rem] w-full rounded-lg border border-[color:var(--ink-border)] bg-white"/></>:<><div className="whitespace-pre-wrap break-words rounded-xl bg-[color:var(--panel-hover)] p-4 text-sm">{preview.text}</div><p className="text-xs text-[color:var(--ink-muted)]">{smsSegmentCount(preview.text)} estimated SMS segment(s). Personalization can change the final length.</p></>}<div className="border-t border-[color:var(--ink-border)] pt-3"><p className="text-sm"><strong>{audienceCount===null?"Checking audience…":`${Math.min(volume||0,audienceCount)} matching contacts, up to the requested quantity`}</strong></p><p className="mt-2 text-xs text-[color:var(--ink-muted)]">This is a filter preview. Launch also applies duplicate-message cooldowns, reservations, opt-outs and provider limits.</p></div><Link href={`/setup?entity=${brandId}`} className="text-sm underline">Check this company’s connections</Link></aside>
     </div>
-  );
+  </div>;
 }
-
-export default function NewCampaignPage() {
-  return (
-    <Suspense fallback={<LoadingPanel />}>
-      <CampaignBuilderInner />
-    </Suspense>
-  );
-}
+export default function NewCampaignPage(){return <Suspense fallback={<LoadingPanel/>}><CampaignBuilderInner/></Suspense>;}

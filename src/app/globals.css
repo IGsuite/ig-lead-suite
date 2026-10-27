@@ -49,7 +49,7 @@
 }
 
 :root {
-  --canvas: #eef3f2;
+  --canvas: #faf9f6;
   --panel: #ffffff;
   --panel-hover: #e7efee;
   --ink: #0f2a2e;
@@ -58,7 +58,7 @@
   --ink-border: #d5e0de;
   --brand-accent: #c9842a;
   --accent-soft: #f3e2c5;
-  --background: #eef3f2;
+  --background: #faf9f6;
   --foreground: #0f2a2e;
   --card: #ffffff;
   --card-foreground: #0f2a2e;
@@ -98,11 +98,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    background-image:
-      radial-gradient(circle at 12% 8%, rgba(201, 132, 42, 0.12), transparent 28%),
-      radial-gradient(circle at 88% 0%, rgba(47, 111, 106, 0.14), transparent 32%),
-      linear-gradient(180deg, #f5f8f7 0%, #eef3f2 45%, #e8efed 100%);
-    background-attachment: fixed;
+    background-image: none;
   }
   html {
     @apply font-sans;
@@ -144,4 +140,16 @@
 .bar-fill {
   transform-origin: left;
   animation: bar-fill 0.7s ease-out both;
+}
+
+.dark {
+  color-scheme: dark;
+  --canvas: #101b1e; --background: #101b1e; --panel: #18272b; --panel-hover: #22373c;
+  --ink: #edf3f2; --ink-soft: #c0d2d1; --ink-muted: #a0b6b7; --ink-border: #344b50;
+  --accent-soft: #49391f; --foreground: #edf3f2; --card: #18272b; --card-foreground: #edf3f2;
+  --popover: #18272b; --popover-foreground: #edf3f2; --primary: #b9dcda; --primary-foreground: #10282d;
+  --secondary: #22373c; --secondary-foreground: #edf3f2; --muted: #22373c; --muted-foreground: #a0b6b7;
+  --accent: #22373c; --accent-foreground: #edf3f2; --border: #344b50; --input: #344b50; --ring: #b9dcda;
+  --sidebar: #142226; --sidebar-foreground: #edf3f2; --sidebar-primary: #b9dcda; --sidebar-primary-foreground: #10282d;
+  --sidebar-accent: #22373c; --sidebar-accent-foreground: #edf3f2; --sidebar-border: #344b50; --sidebar-ring: #b9dcda;
 }

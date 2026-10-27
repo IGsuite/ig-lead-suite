@@ -8,6 +8,8 @@ import { campaignStatusFilters, type CampaignStatusFilter, type CampaignListStat
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
+import { CampaignDelivery } from "@/components/campaign-delivery";
+import type { DeliveryCounts } from "@/lib/delivery-summary";
 import { DraftAudience } from "@/components/draft-audience";
 import { calendarOnly } from "@/lib/calendar-audience-client";
 import { AUDIENCE_NOT_SELECTED } from "@/lib/audience-filters";
@@ -47,6 +49,7 @@ function CampaignsInner() {
 
   const [programs,setPrograms] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<CampaignStatusFilter>("all");
+  const [delivery, setDelivery] = useState<Record<string,DeliveryCounts>>({});
   const [statuses, setStatuses] = useState<Record<string, CampaignListStatus> | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   useEffect(() => {
@@ -59,8 +62,8 @@ function CampaignsInner() {
       try {
         const res = await fetch("/api/campaigns/overview", { cache: "no-store", signal: controller.signal });
         if (!res.ok) throw new Error("Campaign statuses could not be refreshed");
-        const result = await res.json() as { statuses: Record<string, CampaignListStatus> };
-        if (!controller.signal.aborted) { setStatuses(result.statuses); setStatusError(null); }
+        const result = await res.json() as { statuses: Record<string, CampaignListStatus>; delivery?:Record<string,DeliveryCounts> };
+        if (!controller.signal.aborted) { setStatuses(result.statuses); setDelivery(result.delivery||{}); setStatusError(null); }
       } catch (err) {
         if (!controller.signal.aborted) setStatusError(err instanceof Error ? err.message : "Status refresh failed");
       } finally { inFlight = false; }
@@ -171,7 +174,7 @@ function CampaignsInner() {
         }
       />
 
-      <div className="mb-4 max-w-xl"><ProgramSelect brand={brand} value={programs} onChange={setPrograms} label="Filter by funding programs" /><p className="text-xs text-[color:var(--ink-muted)]">No selection shows all programs.</p></div>
+      <div className="mb-4 max-w-xl"><ProgramSelect brand={brand} value={programs} onChange={setPrograms} label="Program folders — select one or more" /><p className="text-xs text-[color:var(--ink-muted)]">No selection shows all programs.</p></div>
       <div className="mb-4 flex flex-wrap gap-3 text-sm animate-rise">
         <div className="rounded-xl border border-[color:var(--ink-border)] bg-[color:var(--panel)] px-3 py-2">
           <span className="font-medium">Automatic — calendar</span>
@@ -310,19 +313,22 @@ function CampaignsInner() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    {compactNumber(campaign.sentCount)} /{" "}
+                    Provider accepted {compactNumber(campaign.sentCount)} /{" "}
                     {compactNumber(campaign.volume)}
                     <div className="text-xs text-[color:var(--ink-muted)]">
                       {compactNumber(campaign.replyCount)} replies ·{" "}
                       {compactNumber(campaign.optOutCount)} opt-outs
                     </div>
+                    <CampaignDelivery id={campaign.id} counts={delivery[campaign.id]}/>
                   </TableCell>
                   <TableCell>
                     <StatusPill status={statuses[campaign.id]?.status || campaign.status} />
+                    {campaign.status==="completed"?<p className="mt-1 text-xs text-[color:var(--ink-muted)]">Processing finished — review delivery results</p>:null}
                     {statuses[campaign.id]?.detail ? <p className="mt-1 max-w-56 text-xs text-[color:var(--ink-muted)]">{statuses[campaign.id].detail}</p> : null}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex flex-wrap items-center justify-end gap-2">
+                      {campaign.status==="draft"&&!calendarOnly(campaign)&&<Link href={`/campaigns/new?brandId=${campaign.brandId}&channel=${campaign.channel}&campaignId=${campaign.id}`} className={buttonVariants({size:"sm",variant:"outline"})}>Edit draft</Link>}
                       {calendarOnly(campaign) ? <Link href={`/campaigns/calendar?brandId=${campaign.brandId}&campaignId=${campaign.id}`} className={buttonVariants({size:"sm",variant:"outline"})}>View calendar</Link> : campaign.status === "draft" ||
                       campaign.status === "scheduled" ? (
                         <Button size="sm" disabled={campaign.sourceFilter === AUDIENCE_NOT_SELECTED} onClick={() => launch(campaign.id)}>
@@ -342,7 +348,7 @@ function CampaignsInner() {
                       {campaign.status !== "draft" &&
                       campaign.status !== "scheduled" ? (
                         <Link
-                          href="/inbox"
+                          href={`/inbox?entity=${campaign.brandId}&channel=${campaign.channel}`}
                           className={cn(
                             buttonVariants({ size: "sm", variant: "ghost" }),
                           )}
