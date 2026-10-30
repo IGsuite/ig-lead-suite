@@ -18,7 +18,7 @@ export async function GET(){
   ]);
   const items=[...seo.map(a=>({...a,kind:"seo",href:session?.role==="setup"?`/company-setup?entity=${encodeURIComponent(a.entityId)}`:`/social?entity=${encodeURIComponent(a.entityId)}&platform=seo`})),
     ...setup.map(a=>({...a,kind:a.id.startsWith("connection:")?"connection":a.id.startsWith("delivery:")?"delivery":"setup",href:a.id.startsWith("delivery:")?`/campaigns?brandId=${encodeURIComponent(a.entityId)}&channel=${a.itemKey}&inspect=${encodeURIComponent(a.id.slice(9))}`:`/company-setup?entity=${encodeURIComponent(a.entityId)}#${a.itemKey}`})),
-    ...monitorRuns.filter(r=>Date.now()-r.createdAt.getTime()>2*3600_000).map(r=>({id:`monitor-stale:${r.entityId}`,entityId:r.entityId,kind:"connection",message:"Connection monitoring has not completed for over two hours. Ask the owner to check the scheduler; current connection health is unknown.",href:`/company-setup?entity=${encodeURIComponent(r.entityId)}`,createdAt:r.createdAt,canAcknowledge:false}))
+    ...monitorRuns.filter(r=>Date.now()-r.createdAt.getTime()>48*3600_000).map(r=>({id:`monitor-stale:${r.entityId}`,entityId:r.entityId,kind:"connection",message:"Connection monitoring has not completed for over 48 hours. Ask the owner to check the scheduler; current connection health is unknown.",href:`/company-setup?entity=${encodeURIComponent(r.entityId)}`,createdAt:r.createdAt,canAcknowledge:false}))
   ].sort((a,b)=>b.createdAt.getTime()-a.createdAt.getTime());
   const monitoring=companies.map(c=>({entityId:c.id,lastCheckedAt:monitorRuns.find(r=>r.entityId===c.id)?.createdAt??null}));
   return NextResponse.json({companies,items,needsOwner,monitoring},{headers});
