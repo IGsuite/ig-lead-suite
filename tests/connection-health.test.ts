@@ -27,11 +27,13 @@ test("unchanged faults remain acknowledged; recovery and a new fault reopen one 
   assert.equal(connectionEventChange(good,null,now)?.acknowledgedAt,now);
 });
 test("connection cron rejects missing, short and incorrect scheduler credentials before accessing data",async()=>{
-  const previous=process.env.CRON_SECRET;
+  const previous=process.env.CRON_SECRET, previousAuth=process.env.AUTH_REQUIRED;
   try{
+    process.env.AUTH_REQUIRED="true";
     assert.equal(proxy(new NextRequest("https://suite.invalid/api/cron/connections")).headers.get("x-middleware-next"),"1","scheduler reaches its own credential check without a user session");
+    assert.equal(proxy(new NextRequest("https://suite.invalid/api/cron/connections/other")).status,401,"only the exact scheduler path skips session authentication");
     delete process.env.CRON_SECRET;assert.equal((await GET(new Request("https://suite.invalid/api/cron/connections"))).status,503);
     process.env.CRON_SECRET="x".repeat(40);assert.equal((await GET(new Request("https://suite.invalid/api/cron/connections"))).status,401);
     assert.equal((await GET(new Request("https://suite.invalid/api/cron/connections",{headers:{authorization:`Bearer ${"y".repeat(40)}`}}))).status,401);
-  }finally{if(previous===undefined)delete process.env.CRON_SECRET;else process.env.CRON_SECRET=previous;}
+  }finally{if(previous===undefined)delete process.env.CRON_SECRET;else process.env.CRON_SECRET=previous;if(previousAuth===undefined)delete process.env.AUTH_REQUIRED;else process.env.AUTH_REQUIRED=previousAuth;}
 });

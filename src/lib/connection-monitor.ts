@@ -36,7 +36,11 @@ export async function monitorConnections(now = new Date()) {
               const saved = await db.companyAccountCredential.updateMany({where:{id:row.id,revision:row.revision},data:{encryptedValue:encryptAccountPassword(JSON.stringify({...retained,snapshot}),entityId,row.key),revision:{increment:1},updatedBy:"connection-monitor"}});
               if (!saved.count) continue;
               if (health.state === "healthy") health = {state:"healthy",detail:"The expected company Page and configured reporting assets passed a live read check."};
-            } catch { health = {state:"action_needed",detail:"Meta could not verify reporting access. Review the selected company assets, permissions and credential; a temporary provider outage is also possible."}; }
+            } catch {
+              const saved=await db.companyAccountCredential.updateMany({where:{id:row.id,revision:row.revision},data:{encryptedValue:encryptAccountPassword(JSON.stringify({...config,lastFailureAt:now.toISOString()}),entityId,row.key),revision:{increment:1},updatedBy:"connection-monitor"}});
+              if(!saved.count)continue;
+              health = {state:"action_needed",detail:"Meta could not verify reporting access. Review the selected company assets, permissions and credential; a temporary provider outage is also possible."};
+            }
           }
           add(kind,item,title,health);
         } else if (kind === "google") {
