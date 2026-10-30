@@ -1,0 +1,50 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFile,readdir} from "node:fs/promises";
+import {randomBytes} from "node:crypto";
+import {PGlite} from "@electric-sql/pglite";
+import {PGLiteSocketServer} from "@electric-sql/pglite-socket";
+import {Pool} from "pg";
+import {getPrisma} from "../src/lib/db";
+import {ensureSeeded} from "../src/lib/neon-store-seed";
+import {encryptAccountPassword} from "../src/lib/account-vault";
+import {newGoogleReportAccess,GOOGLE_REPORT_KEY} from "../src/lib/google-ads-reporting";
+import {newN8nAccess,N8N_CREDENTIAL_KEY} from "../src/lib/n8n-connection";
+import {monitorConnections} from "../src/lib/connection-monitor";
+
+test("real database monitoring isolates companies, preserves acknowledgements, detects removed access, and never changes campaigns",{timeout:60000},async()=>{
+  process.env.DATABASE_URL="postgresql://postgres@127.0.0.1:55448/postgres";
+  process.env.ACCOUNT_VAULT_KEY=randomBytes(32).toString("base64");
+  delete process.env.VERCEL;delete process.env.VERCEL_ENV;
+  const pg=await PGlite.create();
+  for(const migration of (await readdir("prisma/migrations")).filter(n=>/^\d/.test(n)).sort())await pg.exec(await readFile(`prisma/migrations/${migration}/migration.sql`,"utf8"));
+  const server=new PGLiteSocketServer({db:pg,host:"127.0.0.1",port:55448});await server.start();
+  const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:false,max:1});
+  (globalThis as unknown as {pgPool:Pool}).pgPool=pool;
+  const db=getPrisma(),originalFetch=globalThis.fetch,now=new Date("2026-10-30T12:00:00Z");
+  try {
+    await ensureSeeded();
+    globalThis.fetch=async()=>{throw Error("This fixture must not call a provider or send anything");};
+    const before=await db.campaign.findMany({orderBy:{id:"asc"}});
+    const google=newGoogleReportAccess(now).config,n8n=newN8nAccess("ahava",now).config;
+    for(const [entityId,key,config] of [["abstract",GOOGLE_REPORT_KEY,google],["ahava",N8N_CREDENTIAL_KEY,n8n]] as const)await db.companyAccountCredential.create({data:{id:`fixture-${entityId}`,entityId,key,encryptedValue:encryptAccountPassword(JSON.stringify(config),entityId,key),updatedBy:"fixture"}});
+    await monitorConnections(now);
+    const first=await db.companySetupEvent.findUniqueOrThrow({where:{id:"connection:abstract:google"}});
+    assert.match(first.message,/No report has reached/);assert.equal(first.acknowledgedAt,null);
+    assert.equal(await db.companySetupEvent.count({where:{id:"connection:ahava:google"}}),0);
+    assert.match((await db.companySetupEvent.findUniqueOrThrow({where:{id:"connection:ahava:n8n"}})).message,/test has not reached/);
+    await db.companySetupEvent.update({where:{id:first.id},data:{acknowledgedAt:now}});
+    await monitorConnections(new Date(now.getTime()+60000));
+    assert.ok((await db.companySetupEvent.findUniqueOrThrow({where:{id:first.id}})).acknowledgedAt);
+    assert.equal(await db.companySetupEvent.count({where:{id:{startsWith:"connection:abstract:google"}}}),1);
+    await db.companyAccountCredential.update({where:{id:"fixture-abstract"},data:{encryptedValue:encryptAccountPassword(JSON.stringify({...google,receivedAt:now.toISOString()}),"abstract",GOOGLE_REPORT_KEY)}});
+    await monitorConnections(now);
+    const recovery=await db.companySetupEvent.findUniqueOrThrow({where:{id:first.id}});
+    assert.match(recovery.message,/healthy/);assert.equal(recovery.acknowledgedAt,null);
+    await db.companyAccountCredential.delete({where:{id:"fixture-abstract"}});
+    await monitorConnections(now);
+    assert.match((await db.companySetupEvent.findUniqueOrThrow({where:{id:first.id}})).message,/record is missing/);
+    assert.equal(await db.companySetupEvent.count({where:{id:{startsWith:"connection-monitor:"}}}),await db.entity.count());
+    assert.deepEqual(await db.campaign.findMany({orderBy:{id:"asc"}}),before);
+  } finally {globalThis.fetch=originalFetch;await db.$disconnect();await pool.end();await server.stop();await pg.close();}
+});

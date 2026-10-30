@@ -30,6 +30,7 @@ const PUBLIC_PATHS = [
   "/api/cron/dispatch",
   // These exact handlers enforce dedicated scheduler / integration credentials themselves.
   "/api/cron/seo",
+  "/api/cron/connections",
   "/api/integrations/seo/events",
   "/api/queues/dispatch",
   "/api/queues/lead-imports",
