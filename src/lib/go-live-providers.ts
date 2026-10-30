@@ -5,21 +5,22 @@ import { inboxSendingDisabledReason } from "@/lib/inbox-service";
 import type { Brand, Reply } from "@/lib/types";
 
 type JsonRow = Record<string, unknown>;
+type SenderCompany = Pick<Brand, "id" | "domain" | "phoneNumbers">;
 async function read(url: string, key?: string): Promise<JsonRow> {
   const response = await fetch(url, { headers: key ? { Authorization: `Bearer ${key}` } : undefined, cache: "no-store", signal: AbortSignal.timeout(10000) });
   if (!response.ok) throw new Error(response.status === 404 ? "not_found" : "provider_unavailable");
   return response.json();
 }
-function gate(brand: Brand, channel: "email" | "sms"): ReadinessCheck {
+function gate(brand: SenderCompany, channel: "email" | "sms"): ReadinessCheck {
   const enabled = sendingEnabled() && sendingEntityEnabled(brand.id) && sendingChannelEnabled(channel);
   return { id: `${channel}-switch`, title: `${channel === "sms" ? "Text" : "Email"} campaign sending`, state: enabled ? "active" : "inactive", detail: enabled ? "Enabled for this company. Campaigns still require your Launch or an approved calendar date." : "Sending is switched off for this company or channel. Saved campaigns do not activate this switch." };
 }
-function replyGate(brand: Brand, channel: "email" | "sms"): ReadinessCheck {
+function replyGate(brand: SenderCompany, channel: "email" | "sms"): ReadinessCheck {
   const disabled = inboxSendingDisabledReason({ brandId: brand.id, channel, from: "" } as Reply);
   return { id: `${channel}-replies`, title: `${channel === "sms" ? "Text" : "Email"} inbox replies`, state: disabled ? "inactive" : "active", detail: disabled || "Reply controls are enabled. Each conversation still requires a valid receiving identity and no opt-out.", href: `/inbox?entity=${encodeURIComponent(brand.id)}&channel=${channel}`, linkLabel: "Open inbox" };
 }
 
-export async function companySmsReadiness(brand: Brand, allBrands: Brand[]): Promise<ReadinessCheck[]> {
+export async function companySmsReadiness(brand: SenderCompany, allBrands: SenderCompany[]): Promise<ReadinessCheck[]> {
   const number = brand.phoneNumbers[0];
   const checks: ReadinessCheck[] = [gate(brand, "sms"), replyGate(brand, "sms")];
   const key = process.env.TELNYX_API_KEY?.trim();
@@ -46,7 +47,7 @@ export async function companySmsReadiness(brand: Brand, allBrands: Brand[]): Pro
   return [sender, ...checks];
 }
 
-export async function companyEmailReadiness(brand: Brand): Promise<ReadinessCheck[]> {
+export async function companyEmailReadiness(brand: SenderCompany): Promise<ReadinessCheck[]> {
   const checks = [gate(brand, "email"), replyGate(brand, "email")];
   const sender: ReadinessCheck = { id: "email-sender", title: "Company email sender", state: "not_connected", detail: "No separate provider campaign is mapped for this company. Another company's connected mailbox does not activate this one.", href: `/company-setup?entity=${encodeURIComponent(brand.id)}#email`, linkLabel: "Review email setup" };
   const provider = emailProviderName();
