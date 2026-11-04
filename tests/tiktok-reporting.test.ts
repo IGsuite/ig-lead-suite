@@ -10,7 +10,9 @@ test("TikTok request is read-only and fixed to Abstract; total followers are not
     calls++;
     const url = new URL(String(input));
     assert.equal(url.origin,"https://connectors.windsor.ai");assert.equal(url.pathname,"/tiktok_organic");
-    assert.equal(url.searchParams.get("select_accounts"),TIKTOK_ACCOUNT);assert.equal(url.searchParams.get("date_preset"),"today");
+    assert.equal(url.searchParams.get("select_accounts"),TIKTOK_ACCOUNT);
+    assert.equal(url.searchParams.get("date_from"),"2026-11-03");assert.equal(url.searchParams.get("date_to"),"2026-11-03");
+    assert.equal(url.searchParams.has("date_preset"),false,"The REST API does not accept the MCP tool's today preset");
     assert.match(url.searchParams.get("fields")!,/total_followers_count/);assert.equal(options?.method,"GET");assert.equal(options?.redirect,"error");
     return response([row])();
   };

@@ -36,7 +36,11 @@ export async function fetchTiktokReport(apiKey: string, fetcher: typeof fetch = 
     const url = new URL("https://connectors.windsor.ai/tiktok_organic");
     url.searchParams.set("api_key", apiKey);
     url.searchParams.set("select_accounts", TIKTOK_ACCOUNT);
-    url.searchParams.set("date_preset", "today");
+    // Current-day profile rows may still be empty. Read one completed UTC day,
+    // avoiding both partial rows and summing account totals across a date range.
+    const reportDate = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
+    url.searchParams.set("date_from", reportDate);
+    url.searchParams.set("date_to", reportDate);
     url.searchParams.set("fields", "account_id,username,is_business_account,total_followers_count,following_count,total_likes,videos_count,data_fetched_at");
     const response = await fetcher(url, { method: "GET", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(25000), headers: { Accept: "application/json", "User-Agent": "Windsor/1.0" } });
     if (!response.ok || !response.body) throw new TiktokReportError();

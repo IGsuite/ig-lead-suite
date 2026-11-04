@@ -55,7 +55,7 @@ export function TiktokReportingWorkspace({ entityId }: { entityId: string }) {
           <p className="text-sm">Use the Windsor workspace where only Abstract’s TikTok account is selected for this connection. A workspace key may also grant access to its other sources; use a dedicated workspace when separation is required. Lead Suite encrypts the key and makes fixed TikTok read requests only.</p>
           <label className="block">Windsor API key<input type="password" autoComplete="off" required minLength={8} maxLength={512} value={apiKey} onChange={e => setApiKey(e.target.value)} className="mt-1 block w-full rounded-md border border-[color:var(--ink-border)] bg-[color:var(--panel)] p-2" /></label>
           <label className="flex items-start gap-2"><input type="checkbox" checked={approved} onChange={e => setApproved(e.target.checked)} />I approve storing this key for Abstract’s daily TikTok reporting and connection checks. No posting or advertising is enabled.</label>
-          <Button disabled={busy || !approved || !data.vaultConfigured}>Verify and save reporting connection</Button>
+          <Button type="submit" disabled={busy || !approved || !data.vaultConfigured}>Verify and save reporting connection</Button>
         </form></details>}
       </>}
     </section>}
