@@ -7,7 +7,9 @@ import {PGLiteSocketServer} from "@electric-sql/pglite-socket";
 import {Pool} from "pg";
 import {getPrisma} from "../src/lib/db";
 import {ensureSeeded} from "../src/lib/neon-store-seed";
-import {encryptAccountPassword} from "../src/lib/account-vault";
+import {encryptAccountPassword,decryptAccountPassword} from "../src/lib/account-vault";
+import {TIKTOK_REPORT_KEY,TIKTOK_ACCOUNT,fetchTiktokReport,tiktokStoredSchema} from "../src/lib/tiktok-reporting";
+import {saveTiktokReport,TiktokRecordChanged} from "../src/lib/tiktok-report-store";
 import {newGoogleReportAccess,GOOGLE_REPORT_KEY} from "../src/lib/google-ads-reporting";
 import {newN8nAccess,N8N_CREDENTIAL_KEY} from "../src/lib/n8n-connection";
 import {monitorConnections} from "../src/lib/connection-monitor";
@@ -45,6 +47,46 @@ test("real database monitoring isolates companies, preserves acknowledgements, d
     await monitorConnections(now);
     assert.match((await db.companySetupEvent.findUniqueOrThrow({where:{id:first.id}})).message,/record is missing/);
     assert.equal(await db.companySetupEvent.count({where:{id:{startsWith:"connection-monitor:"}}}),await db.entity.count());
+    assert.deepEqual(await db.campaign.findMany({orderBy:{id:"asc"}}),before);
+
+    const payload={data:[{account_id:TIKTOK_ACCOUNT,username:"abstractcapitalgroup",is_business_account:"False",total_followers_count:55,following_count:68,total_likes:533,videos_count:253,data_fetched_at:now.toISOString()}]};
+    let providerReads=0;
+    globalThis.fetch=async()=>{providerReads++;return new Response(JSON.stringify(payload));};
+    const snapshot=await fetchTiktokReport("fixture-windsor-key",fetch,now);
+    const config={entityId:"abstract" as const,apiKey:"fixture-windsor-key",revoked:false,snapshot};
+    await saveTiktokReport(config,0,"fixture","Fixture TikTok connection");
+    await assert.rejects(saveTiktokReport({...config,apiKey:"stale-key"},0,"fixture","Stale replacement"),TiktokRecordChanged);
+    await monitorConnections(now);
+    const where={entityId_key:{entityId:"abstract",key:TIKTOK_REPORT_KEY}};
+    let tiktokRow=await db.companyAccountCredential.findUniqueOrThrow({where});
+    assert.ok(!tiktokRow.encryptedValue.includes("fixture-windsor-key"));
+    assert.ok((await db.companySetupEvent.findUniqueOrThrow({where:{id:"connection:abstract:tiktok"}})).acknowledgedAt,"First healthy connection is quiet");
+    globalThis.fetch=async()=>{providerReads++;throw Error("Upstream with secret fixture-windsor-key");};
+    await monitorConnections(now);
+    const failure=await db.companySetupEvent.findUniqueOrThrow({where:{id:"connection:abstract:tiktok"}});
+    assert.match(failure.message,/could not refresh/);assert.doesNotMatch(failure.message,/fixture-windsor-key/);
+    tiktokRow=await db.companyAccountCredential.findUniqueOrThrow({where});
+    const failed=tiktokStoredSchema.parse(JSON.parse(decryptAccountPassword(tiktokRow.encryptedValue,"abstract",TIKTOK_REPORT_KEY)));
+    assert.deepEqual(failed.snapshot,snapshot);assert.equal(failed.lastFailureAt,now.toISOString());
+    // Simulate an owner disconnect during the provider request. The old snapshot must not re-enable it.
+    globalThis.fetch=async()=>{
+      providerReads++;
+      const current=await db.companyAccountCredential.findUniqueOrThrow({where});
+      await saveTiktokReport({...config,apiKey:"",revoked:true},current.revision,"fixture","Owner disconnected");
+      return new Response(JSON.stringify(payload));
+    };
+    await monitorConnections(now);
+    tiktokRow=await db.companyAccountCredential.findUniqueOrThrow({where});
+    assert.equal(tiktokStoredSchema.parse(JSON.parse(decryptAccountPassword(tiktokRow.encryptedValue,"abstract",TIKTOK_REPORT_KEY))).revoked,true);
+    const readsBefore=providerReads;
+    await monitorConnections(now);
+    assert.equal(providerReads,readsBefore,"Revoked access never calls the provider");
+    await db.companyAccountCredential.create({data:{id:"fixture-wrong-tiktok-company",entityId:"ahava",key:TIKTOK_REPORT_KEY,encryptedValue:encryptAccountPassword(JSON.stringify(config),"ahava",TIKTOK_REPORT_KEY),updatedBy:"fixture"}});
+    await monitorConnections(now);
+    assert.equal(providerReads,readsBefore,"An unmapped entity never borrows Abstract's provider account");
+    assert.match((await db.companySetupEvent.findUniqueOrThrow({where:{id:"connection:ahava:tiktok"}})).message,/unsupported company/);
+    await db.companyAccountCredential.delete({where});await monitorConnections(now);
+    assert.match((await db.companySetupEvent.findUniqueOrThrow({where:{id:"connection:abstract:tiktok"}})).message,/record is missing/);
     assert.deepEqual(await db.campaign.findMany({orderBy:{id:"asc"}}),before);
   } finally {globalThis.fetch=originalFetch;await db.$disconnect();await pool.end();await server.stop();await pg.close();}
 });

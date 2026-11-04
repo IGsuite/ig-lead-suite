@@ -3,6 +3,7 @@ import { decryptAccountPassword, encryptAccountPassword } from "@/lib/account-va
 import { META_CREDENTIAL_KEY, metaStoredSchema, verifyMetaReporting } from "@/lib/meta-reporting";
 import { GOOGLE_REPORT_KEY, googleReportConfigSchema } from "@/lib/google-ads-reporting";
 import { N8N_CREDENTIAL_KEY, n8nConfigSchema } from "@/lib/n8n-connection";
+import { TIKTOK_REPORT_KEY, tiktokStoredSchema, fetchTiktokReport } from "@/lib/tiktok-reporting";
 import { companyEmailReadiness, companySmsReadiness } from "@/lib/go-live-providers";
 import { credentialHealth, reportHealth, connectionEventChange, DAY, type ConnectionFinding } from "@/lib/connection-health";
 
@@ -15,8 +16,31 @@ export async function monitorConnections(now = new Date()) {
   for (const company of companies) {
     const entityId = company.id;
     const add = (key:string,itemKey:string,title:string,health:Pick<ConnectionFinding,"state"|"detail">) => findings.push({entityId,key,itemKey,title,...health});
-    const rows = await db.companyAccountCredential.findMany({where:{entityId,key:{in:[META_CREDENTIAL_KEY,GOOGLE_REPORT_KEY,N8N_CREDENTIAL_KEY]}},select:{id:true,key:true,encryptedValue:true,revision:true}});
+    const rows = await db.companyAccountCredential.findMany({where:{entityId,key:{in:[META_CREDENTIAL_KEY,GOOGLE_REPORT_KEY,N8N_CREDENTIAL_KEY,TIKTOK_REPORT_KEY]}},select:{id:true,key:true,encryptedValue:true,revision:true}});
     for (const row of rows) {
+      if (row.key === TIKTOK_REPORT_KEY) {
+        try {
+          if (entityId !== "abstract") throw Error("Unmapped company");
+          const config = tiktokStoredSchema.parse(JSON.parse(decryptAccountPassword(row.encryptedValue,entityId,row.key)));
+          let next = config;
+          let health: Pick<ConnectionFinding,"state"|"detail">;
+          if (config.revoked) health = {state:"action_needed",detail:"TikTok reporting is disconnected locally. Reconnect in Social media → TikTok reporting when ready."};
+          else {
+            try {
+              const snapshot = await fetchTiktokReport(config.apiKey,fetch,now);
+              next = {entityId:"abstract",apiKey:config.apiKey,revoked:false,snapshot};
+              health = {state:"healthy",detail:"Abstract's TikTok account passed a live read check. Recent account totals were saved; advertising remains disabled."};
+            } catch {
+              next = {...config,lastFailureAt:now.toISOString()};
+              health = {state:"action_needed",detail:"TikTok reporting could not refresh through Windsor. Check access, the selected account and plan limits. The last dated report is retained."};
+            }
+            const saved = await db.companyAccountCredential.updateMany({where:{id:row.id,revision:row.revision},data:{encryptedValue:encryptAccountPassword(JSON.stringify(next),entityId,row.key),revision:{increment:1},updatedBy:"connection-monitor"}});
+            if (!saved.count) continue;
+          }
+          add("tiktok","tiktok","TikTok reporting",health);
+        } catch { add("tiktok","tiktok","TikTok reporting",{state:"action_needed",detail:"The protected TikTok record cannot be read or belongs to an unsupported company."}); }
+        continue;
+      }
       const kind = row.key === META_CREDENTIAL_KEY ? "meta" : row.key === GOOGLE_REPORT_KEY ? "google" : "n8n";
       const item = kind === "meta" ? "facebook" : kind === "google" ? "google_ads" : "n8n";
       const title = kind === "meta" ? "Meta reporting" : kind === "google" ? "Google Ads reports" : "n8n notice access";
@@ -56,10 +80,10 @@ export async function monitorConnections(now = new Date()) {
       } catch { add(kind,item,title,{state:"action_needed",detail:"The protected connection record cannot be read or does not match a supported company. Ask the owner to repair the connection."}); }
     }
     // Removing a credential must not silently remove a previously monitored connection.
-    const oldConnections = await db.companySetupEvent.findMany({where:{entityId,id:{in:[`connection:${entityId}:meta`,`connection:${entityId}:google`,`connection:${entityId}:n8n`]}},select:{id:true}});
+    const oldConnections = await db.companySetupEvent.findMany({where:{entityId,id:{in:[`connection:${entityId}:meta`,`connection:${entityId}:google`,`connection:${entityId}:n8n`,`connection:${entityId}:tiktok`]}},select:{id:true}});
     for (const old of oldConnections) {
       const key=old.id.split(":").at(-1)!;
-      if (!findings.some(f=>f.entityId===entityId&&f.key===key)) add(key,key==="meta"?"facebook":key==="google"?"google_ads":"n8n","Stored connection",{state:"action_needed",detail:"A previously monitored connection record is missing. Reconnect this company."});
+      if (!findings.some(f=>f.entityId===entityId&&f.key===key)) add(key,key==="meta"?"facebook":key==="google"?"google_ads":key==="tiktok"?"tiktok":"n8n","Stored connection",{state:"action_needed",detail:"A previously monitored connection record is missing. Reconnect this company."});
     }
     const setup = await db.companySetupItem.findMany({where:{entityId,key:{in:["email","sms"]}},select:{key:true,status:true}});
     for (const channel of ["email","sms"] as const) {
